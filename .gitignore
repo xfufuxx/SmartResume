@@ -1,0 +1,43 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+*.egg
+
+# Environment
+.env
+backend/.env
+
+# Uploads
+uploads/
+
+# Node
+node_modules/
+.next/
+frontend/.next/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Test output
+test_*.pdf
+test_*.png
+错误简历*.pdf
+简历.pdf
+
+# AI logs
+.deep-copilot/
+.claude/
+
+# Alembic
+backend/alembic/versions/*.pyc
