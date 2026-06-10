@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Read(//c/Windows/Fonts/**)",
+      "Bash(dir \"C:\\\\\\\\Windows\\\\\\\\Fonts\\\\\\\\*yh*\")",
+      "Bash(dir \"C:\\\\\\\\Windows\\\\\\\\Fonts\\\\\\\\*hei*\")"
+    ]
+  }
+}

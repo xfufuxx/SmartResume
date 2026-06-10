@@ -1,0 +1,6 @@
+[2026-06-06T09:12:18.929Z] [INIT] Deep Copilot debug log started. file=d:\下载\智能简历\.deep-copilot\logs\session-2026-06-06T09-12-18-928Z.log
+[2026-06-06T09:12:18.929Z] [ACTIVATE] {"version":"0.43.1"}
+[2026-06-06T09:12:18.930Z] [PROVIDERS_LOADED] {"count":4,"ids":["anthropic","custom","deepseek","openai"]}
+[2026-06-06T09:12:18.930Z] [TERMINAL_MONITOR_STARTED] {}
+[2026-06-06T09:12:18.930Z] [STATUSBAR_REGISTERED] {"id":"deepseekAgent.statusBar"}
+[2026-06-06T09:12:18.934Z] [INLINE_COMPLETION_REGISTERED]
