@@ -22,6 +22,10 @@ export interface UserProfile {
     salary_range: string
     cities: string[]
   } | null
+  saved_texts?: {
+    resume_text?: string
+    job_text?: string
+  } | null
   privacy_agreed: boolean
   status: string
   created_at?: string

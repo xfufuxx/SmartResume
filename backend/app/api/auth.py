@@ -10,7 +10,7 @@ from app.core.security import (
     create_access_token, create_refresh_token, decode_refresh_token,
 )
 from app.core.audit import write_audit_log, hash_token
-from app.core.deps import get_current_user, get_client_info
+from app.core.deps import get_current_user, get_client_info, RateLimiter
 from app.models.user import User, UserDevice
 from app.schemas.user import (
     UserRegister, UserLogin, TokenResponse, UserResponse,
@@ -26,7 +26,7 @@ TZ_UTC8 = timezone(timedelta(hours=8))
 
 
 @router.post("/send-code")
-async def send_code(body: SendCodeRequest, db: AsyncSession = Depends(get_db)):
+async def send_code(body: SendCodeRequest, _: None = Depends(RateLimiter(max_requests=3, window_seconds=60)), db: AsyncSession = Depends(get_db)):
     code = VerificationCode.generate_code()
     expires_at = VerificationCode.expiry()
 
@@ -66,8 +66,8 @@ async def register(
     if existing.scalar_one_or_none():
         raise HTTPException(status_code=400, detail="该邮箱已注册")
 
-    if len(body.password) < 6:
-        raise HTTPException(status_code=400, detail="密码至少需要 6 位")
+    if len(body.password) < 8:
+        raise HTTPException(status_code=400, detail="密码至少需要 8 位，且必须包含字母和数字")
 
     vc.is_used = True
     user = User(
@@ -108,6 +108,7 @@ async def login(
     body: UserLogin,
     request: Request,
     db: AsyncSession = Depends(get_db),
+    _: None = Depends(RateLimiter(max_requests=5, window_seconds=60)),
 ):
     email = body.email.lower()
     result = await db.execute(select(User).where(User.email == email))
@@ -222,7 +223,7 @@ async def logout(
 
 
 @router.post("/forgot-password/send-code")
-async def forgot_password_send_code(body: ForgotPasswordRequest, db: AsyncSession = Depends(get_db)):
+async def forgot_password_send_code(body: ForgotPasswordRequest, _: None = Depends(RateLimiter(max_requests=3, window_seconds=60)), db: AsyncSession = Depends(get_db)):
     email = body.email.lower()
     result = await db.execute(select(User).where(User.email == email))
     if not result.scalar_one_or_none():
@@ -262,8 +263,8 @@ async def reset_password(body: ResetPasswordRequest, db: AsyncSession = Depends(
     if not vc:
         raise HTTPException(status_code=400, detail="验证码无效或已过期")
 
-    if len(body.new_password) < 6:
-        raise HTTPException(status_code=400, detail="密码至少需要 6 位")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="新密码至少需要 8 位，且必须包含字母和数字")
 
     vc.is_used = True
     user.password_hash = hash_password(body.new_password)
@@ -280,8 +281,8 @@ async def change_password(
 ):
     if not verify_password(body.old_password, user.password_hash):
         raise HTTPException(status_code=400, detail="旧密码错误")
-    if len(body.new_password) < 6:
-        raise HTTPException(status_code=400, detail="新密码至少需要 6 位")
+    if len(body.new_password) < 8:
+        raise HTTPException(status_code=400, detail="新密码至少需要 8 位，且必须包含字母和数字")
 
     user.password_hash = hash_password(body.new_password)
     await db.commit()

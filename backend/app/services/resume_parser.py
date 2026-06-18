@@ -1,5 +1,6 @@
 import json
 import base64
+import asyncio
 import logging
 from openai import AsyncOpenAI
 
@@ -17,17 +18,25 @@ def _get_client() -> AsyncOpenAI:
 
 
 async def _safe_chat_completion(client: AsyncOpenAI, **kwargs):
-    """调用 chat completion，自动处理 response_format 不兼容的情况"""
-    try:
-        return await client.chat.completions.create(**kwargs)
-    except Exception as e:
-        error_msg = str(e).lower()
-        if "response_format" in error_msg or "json_object" in error_msg:
-            # 某些 API 不支持 response_format，去掉该参数重试
-            kwargs.pop("response_format", None)
-            logger.warning("API 不支持 response_format，已去掉该参数重试")
+    """调用 chat completion，带重试和 response_format 自动降级"""
+    kwargs.setdefault("timeout", 60.0)
+    last_error = None
+    for attempt in range(3):
+        try:
             return await client.chat.completions.create(**kwargs)
-        raise
+        except Exception as e:
+            last_error = e
+            error_msg = str(e).lower()
+            if "response_format" in error_msg or "json_object" in error_msg:
+                kwargs.pop("response_format", None)
+                logger.warning("API 不支持 response_format，已去掉该参数重试")
+                try:
+                    return await client.chat.completions.create(**kwargs)
+                except Exception as e2:
+                    last_error = e2
+            if attempt < 2:
+                await asyncio.sleep(1 * (attempt + 1))
+    raise last_error
 
 
 async def extract_text_from_pdf(file_bytes: bytes) -> str:
@@ -168,12 +177,12 @@ async def _ocr_fallback(image_bytes: bytes) -> str:
         return "[本地OCR未启用]"
     try:
         from paddleocr import PaddleOCR
-        ocr = PaddleOCR(use_angle_cls=True, lang="ch", show_log=False)
+        ocr = await asyncio.to_thread(PaddleOCR, use_angle_cls=True, lang="ch", show_log=False)
         import tempfile, os
         with tempfile.NamedTemporaryFile(suffix=".png", delete=False) as tmp:
             tmp.write(image_bytes)
             tmp_path = tmp.name
-        result = ocr.ocr(tmp_path, cls=True)
+        result = await asyncio.to_thread(ocr.ocr, tmp_path, cls=True)
         os.unlink(tmp_path)
         lines = []
         if result and result[0]:
@@ -248,6 +257,28 @@ _MOCK_RESUME_JSON = {
         {"name": "智能简历优化平台", "description": "AI 驱动的简历与岗位匹配优化系统，支持 PDF 生成", "tech": ["FastAPI", "OpenAI", "React", "WeasyPrint"]},
     ],
 }
+
+
+async def parse_resume_text(text: str) -> dict:
+    """直接解析简历文本（无需文件），返回 parsed_json"""
+    if not has_valid_api_key():
+        return _MOCK_RESUME_JSON
+
+    if not text or not text.strip():
+        raise ValueError("简历文本为空，无法解析")
+
+    client = _get_client()
+    resp = await _safe_chat_completion(
+        client,
+        model=settings.LLM_MODEL_TEXT,
+        messages=[
+            {"role": "system", "content": RESUME_PARSE_SYSTEM_PROMPT},
+            {"role": "user", "content": RESUME_PARSE_USER_PROMPT.format(raw_text=text)},
+        ],
+        response_format={"type": "json_object"},
+        max_tokens=4096,
+    )
+    return json.loads(resp.choices[0].message.content or "{}")
 
 
 def _mock_resume_parse() -> dict:

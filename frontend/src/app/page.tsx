@@ -1,24 +1,35 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Layout, Button, Upload, Card, Typography, Spin, Row, Col, message,
   Descriptions, Tag, Divider, Space, Alert, Progress, List, Input,
-  Modal, Empty,
+  Modal, Empty, Dropdown,
 } from 'antd'
 import {
   UploadOutlined, FileTextOutlined, PictureOutlined,
   ThunderboltOutlined, DownloadOutlined, LogoutOutlined,
   HistoryOutlined, HomeOutlined, BulbOutlined,
   DashboardOutlined, UserOutlined, SettingOutlined, FolderOpenOutlined,
+  BankOutlined, StarFilled, CodeOutlined, ToolOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
-import { resumes, jobs, optimize, toBackendUrl } from '@/lib/api'
+import { resumes, jobs, optimize, user, toBackendUrl } from '@/lib/api'
 import { getToken, clearAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/utils'
 import type { ResumeParseResult, JobParseResult, OptimizeResult, ResumeRecord } from '@/types'
 
 const { Header, Content } = Layout
+
+const TEMPLATE_OPTIONS = [
+  { key: 'professional', label: '专业分栏 (Jinja2)', icon: <FileTextOutlined /> },
+  { key: 'simple', label: '简约单栏 (Jinja2)', icon: <BulbOutlined /> },
+  { key: 'latex', label: 'LaTeX 专业排版', icon: <CodeOutlined /> },
+  { key: 'preserve', label: '保留原样式 (PyMuPDF)', icon: <ToolOutlined /> },
+]
+
+const POLL_INTERVAL = 2000     // 轮询间隔 2 秒
+const POLL_TIMEOUT = 5 * 60 * 1000  // 最大轮询时间 5 分钟
 
 export default function Home() {
   const router = useRouter()
@@ -36,10 +47,21 @@ export default function Home() {
   const [jobId, setJobId] = useState<string | null>(null)
   const [jobData, setJobData] = useState<JobParseResult | null>(null)
   const [jobLoading, setJobLoading] = useState(false)
+  const [jobSelectModalOpen, setJobSelectModalOpen] = useState(false)
+  const [jobListLoading, setJobListLoading] = useState(false)
+  const [jobList, setJobList] = useState<Record<string, unknown>[]>([])
 
   const [optimizing, setOptimizing] = useState(false)
+  const [optimizeProgress, setOptimizeProgress] = useState('')
   const [customInstructions, setCustomInstructions] = useState('')
+  const [selectedTemplate, setSelectedTemplate] = useState('professional')
   const [result, setResult] = useState<OptimizeResult | null>(null)
+  const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  const [savedTexts, setSavedTexts] = useState<{
+    resumeText: string; jobText: string;
+  }>({ resumeText: '', jobText: '' })
 
   useEffect(() => {
     const t = getToken()
@@ -54,6 +76,24 @@ export default function Home() {
     router.prefetch('/history')
     router.prefetch('/profile')
   }, [router])
+
+  // 加载「我的信息」中的简历文本和岗位文本
+  useEffect(() => {
+    const t = getToken()
+    if (!t) return
+    user.getProfile().then((res: any) => {
+      const data = res.data || res
+      const texts = data.saved_texts || {}
+      if (texts.resume_text || texts.job_text) {
+        setSavedTexts({
+          resumeText: texts.resume_text || '',
+          jobText: texts.job_text || '',
+        })
+      }
+    }).catch((err) => {
+      console.warn('[profile] 获取个人资料失败:', err?.response?.status, err?.message)
+    })
+  }, [])
 
   const handleLogout = useCallback(() => {
     clearAuth()
@@ -116,6 +156,35 @@ export default function Home() {
     }
   }, [])
 
+  const handleOpenJobLibrary = useCallback(async () => {
+    setJobSelectModalOpen(true)
+    setJobListLoading(true)
+    try {
+      const res = await jobs.list()
+      setJobList(res.data || [])
+    } catch {
+      message.error('加载岗位库失败')
+      setJobSelectModalOpen(false)
+    } finally {
+      setJobListLoading(false)
+    }
+  }, [])
+
+  const handleSelectJob = useCallback(async (record: Record<string, unknown>) => {
+    setJobSelectModalOpen(false)
+    setJobLoading(true)
+    try {
+      const res = await jobs.get(record.id as string)
+      setJobId(res.data.id)
+      setJobData(res.data.parsed_job_json)
+      message.success({ content: `已选择岗位：${(record.title as string) || '未命名'}`, key: 'job-upload' })
+    } catch {
+      message.error('获取岗位详情失败')
+    } finally {
+      setJobLoading(false)
+    }
+  }, [])
+
   const handleJobUpload = useCallback(async (file: File) => {
     setJobLoading(true)
     try {
@@ -139,23 +208,137 @@ export default function Home() {
     }
   }, [])
 
+  const clearTimers = useCallback(() => {
+    if (pollingRef.current) {
+      clearInterval(pollingRef.current)
+      pollingRef.current = null
+    }
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current)
+      timeoutRef.current = null
+    }
+  }, [])
+
   const handleOptimize = useCallback(async () => {
     if (!resumeId || !jobId) {
       message.warning('请先上传简历和岗位需求')
       return
     }
     setOptimizing(true)
+    setOptimizeProgress('正在提交优化任务...')
+    setResult(null)
+
+    // 清理之前的轮询
+    clearTimers()
+
     try {
-      const res = await optimize.run(resumeId, jobId, customInstructions.trim() || undefined)
-      setResult(res.data)
-      message.success('简历优化完成')
+      // 使用异步模式提交任务
+      const taskRes = await optimize.runAsync(resumeId, jobId, customInstructions.trim() || undefined, selectedTemplate)
+      const taskId = taskRes.data.task_id as string
+
+      // 超时定时器：5 分钟后自动停止轮询
+      timeoutRef.current = setTimeout(() => {
+        clearTimers()
+        setOptimizing(false)
+        setOptimizeProgress('')
+        message.error('优化超时，请稍后重试')
+      }, POLL_TIMEOUT)
+
+      // 轮询任务状态
+      pollingRef.current = setInterval(async () => {
+        try {
+          const statusRes = await optimize.getTaskStatus(taskId)
+          const { status: taskStatus, progress, result: taskResult } = statusRes.data
+
+          setOptimizeProgress(progress || '')
+
+          if (taskStatus === 'completed' && taskResult) {
+            // 任务完成
+            clearTimers()
+            setResult(taskResult as OptimizeResult)
+            setOptimizing(false)
+            message.success('简历优化完成')
+          } else if (taskStatus === 'failed') {
+            clearTimers()
+            setOptimizing(false)
+            setOptimizeProgress('')
+            message.error(`优化失败: ${progress || '未知错误'}`)
+          }
+        } catch {
+          // 轮询失败不中断，继续尝试
+        }
+      }, POLL_INTERVAL)
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '优化失败'
-      message.error(`优化失败: ${msg}`)
-    } finally {
       setOptimizing(false)
+      setOptimizeProgress('')
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '提交优化任务失败'
+      message.error(`优化失败: ${msg}`)
     }
-  }, [resumeId, jobId, customInstructions])
+  }, [resumeId, jobId, customInstructions, selectedTemplate, clearTimers])
+
+  const handleQuickOptimize = useCallback(async () => {
+    if (!savedTexts.resumeText.trim() || !savedTexts.jobText.trim()) {
+      message.warning('请先在「个人中心」中填写简历信息和岗位信息')
+      return
+    }
+    setOptimizing(true)
+    setOptimizeProgress('正在提交优化任务...')
+    setResult(null)
+    clearTimers()
+
+    try {
+      const taskRes = await optimize.quick(
+        savedTexts.resumeText,
+        savedTexts.jobText,
+        customInstructions.trim() || undefined,
+        selectedTemplate
+      )
+      const taskId = taskRes.data.task_id as string
+
+      timeoutRef.current = setTimeout(() => {
+        clearTimers()
+        setOptimizing(false)
+        setOptimizeProgress('')
+        message.error('优化超时，请稍后重试')
+      }, POLL_TIMEOUT)
+
+      pollingRef.current = setInterval(async () => {
+        try {
+          const statusRes = await optimize.getTaskStatus(taskId)
+          const { status: taskStatus, progress, result: taskResult } = statusRes.data
+          setOptimizeProgress(progress || '')
+          if (taskStatus === 'completed' && taskResult) {
+            clearTimers()
+            setResult(taskResult as OptimizeResult)
+            setOptimizing(false)
+            message.success('简历优化完成')
+          } else if (taskStatus === 'failed') {
+            clearTimers()
+            setOptimizing(false)
+            setOptimizeProgress('')
+            message.error(`优化失败: ${progress || '未知错误'}`)
+          }
+        } catch { /* ignore */ }
+      }, POLL_INTERVAL)
+    } catch (err: unknown) {
+      setOptimizing(false)
+      setOptimizeProgress('')
+      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '提交优化任务失败'
+      message.error(`优化失败: ${msg}`)
+    }
+  }, [savedTexts, customInstructions, selectedTemplate, clearTimers])
+
+  // 组件卸载时清理轮询
+  useEffect(() => {
+    return () => {
+      if (pollingRef.current) {
+        clearInterval(pollingRef.current)
+      }
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current)
+      }
+    }
+  }, [])
 
   const handleDownload = useCallback(() => {
     if (result?.pdf_url) {
@@ -191,6 +374,14 @@ export default function Home() {
             简历库
           </Button>
           <Button
+            icon={<BankOutlined />}
+            onClick={() => router.push('/jobs')}
+            type="text"
+            style={{ color: '#fff' }}
+          >
+            岗位库
+          </Button>
+          <Button
             icon={<HistoryOutlined />}
             onClick={() => router.push('/history')}
             type="text"
@@ -221,6 +412,68 @@ export default function Home() {
       </Header>
 
       <Content style={{ padding: 24, maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+        {/* 一键优化：使用个人中心保存的简历/岗位文本 */}
+        <Card
+          size="small"
+          title={<span><ThunderboltOutlined /> 我的信息 — 一键优化</span>}
+          style={{ marginBottom: 16, borderColor: '#1677ff' }}
+          extra={
+            <Dropdown.Button
+              type="primary"
+              size="small"
+              loading={optimizing}
+              disabled={!savedTexts.resumeText.trim() || !savedTexts.jobText.trim()}
+              onClick={() => handleQuickOptimize()}
+              menu={{
+                items: TEMPLATE_OPTIONS,
+                selectedKeys: [selectedTemplate],
+                onClick: ({ key }) => setSelectedTemplate(key),
+              }}
+            >
+              优化我的简历
+            </Dropdown.Button>
+          }
+        >
+          {(!savedTexts.resumeText && !savedTexts.jobText) ? (
+            <Alert
+              type="info"
+              showIcon
+              message="尚未填写简历/岗位信息"
+              description={
+                <span>
+                  请先前往
+                  <Button type="link" size="small" onClick={() => router.push('/profile')} style={{ padding: '0 4px' }}>
+                    个人中心
+                  </Button>
+                  填写「我的信息」中的简历文本和岗位文本，即可在此一键优化。
+                </span>
+              }
+            />
+          ) : (
+            <Row gutter={16}>
+                <Col span={12}>
+                  <Typography.Text type="secondary">简历文本：</Typography.Text>
+                  <Input.TextArea
+                    value={savedTexts.resumeText}
+                    onChange={(e) => setSavedTexts({ ...savedTexts, resumeText: e.target.value })}
+                    placeholder="从个人中心同步的简历文本"
+                    autoSize={{ minRows: 3, maxRows: 8 }}
+                    style={{ marginTop: 4 }}
+                  />
+                </Col>
+                <Col span={12}>
+                  <Typography.Text type="secondary">岗位文本：</Typography.Text>
+                  <Input.TextArea
+                    value={savedTexts.jobText}
+                    onChange={(e) => setSavedTexts({ ...savedTexts, jobText: e.target.value })}
+                    placeholder="从个人中心同步的岗位文本"
+                    autoSize={{ minRows: 3, maxRows: 8 }}
+                    style={{ marginTop: 4 }}
+                  />
+                </Col>
+              </Row>
+          )}
+        </Card>
         <Row gutter={[24, 24]}>
           <Col xs={24} md={12}>
             <Card title={<><FileTextOutlined /> 上传简历</>}>
@@ -291,6 +544,15 @@ export default function Home() {
                   </>
                 )}
               </Upload.Dragger>
+              <div style={{ textAlign: 'center', marginTop: 12 }}>
+                <Button
+                  icon={<FolderOpenOutlined />}
+                  onClick={handleOpenJobLibrary}
+                  disabled={jobLoading}
+                >
+                  从岗位库选择
+                </Button>
+              </div>
               {jobData && (
                 <div style={{ marginTop: 16 }}>
                   <Alert type="success" message="岗位需求已解析" showIcon />
@@ -329,17 +591,23 @@ export default function Home() {
               />
             </Card>
           )}
-          <Button
-            type="primary"
-            size="large"
-            icon={<ThunderboltOutlined />}
-            onClick={handleOptimize}
-            loading={optimizing}
-            disabled={!resumeId || !jobId}
-            style={{ height: 48, paddingInline: 48 }}
-          >
-            优化我的简历
-          </Button>
+          <div style={{ display: 'flex', justifyContent: 'center' }}>
+            <Dropdown.Button
+              type="primary"
+              size="large"
+              icon={<ThunderboltOutlined />}
+              onClick={handleOptimize}
+              loading={optimizing}
+              disabled={!resumeId || !jobId}
+              menu={{
+                items: TEMPLATE_OPTIONS,
+                selectedKeys: [selectedTemplate],
+                onClick: ({ key }) => setSelectedTemplate(key),
+              }}
+            >
+              优化我的简历
+            </Dropdown.Button>
+          </div>
         </div>
 
         {optimizing && (
@@ -347,7 +615,7 @@ export default function Home() {
             <Spin tip="AI 正在优化简历...">
               <div style={{ padding: 40, textAlign: 'center' }}>
                 <Progress type="circle" percent={100} status="active" />
-                <p style={{ marginTop: 16, color: '#999' }}>正在分析匹配度、优化内容、生成 PDF...</p>
+                <p style={{ marginTop: 16, color: '#999' }}>{optimizeProgress || '正在分析匹配度、优化内容、生成 PDF...'}</p>
               </div>
             </Spin>
           </Card>
@@ -455,6 +723,66 @@ export default function Home() {
                     />
                   </List.Item>
                 )}
+              />
+            )}
+          </Spin>
+        </Modal>
+
+        {/* 岗位库选择弹窗 */}
+        <Modal
+          title="从岗位库选择"
+          open={jobSelectModalOpen}
+          onCancel={() => setJobSelectModalOpen(false)}
+          footer={null}
+          width={700}
+        >
+          <Spin spinning={jobListLoading}>
+            {jobList.length === 0 ? (
+              <Empty description="岗位库为空，请先上传一份岗位" />
+            ) : (
+              <List
+                dataSource={jobList}
+                renderItem={(item: Record<string, unknown>) => {
+                  const isPrimary = item.is_primary as boolean
+                  const isFavorite = item.is_favorite as boolean
+                  const company = item.company as string | null
+                  const category = item.category as string | null
+                  const createdAt = item.created_at as string | null
+                  return (
+                    <List.Item
+                      actions={[
+                        <Button
+                          type="link"
+                          size="small"
+                          onClick={() => handleSelectJob(item)}
+                        >
+                          选择
+                        </Button>,
+                      ]}
+                    >
+                      <List.Item.Meta
+                        title={
+                          <Space>
+                            {(item.title as string) || '未命名岗位'}
+                            {isPrimary && <Tag color="gold">默认</Tag>}
+                            {isFavorite && <StarFilled style={{ color: '#faad14', fontSize: 12 }} />}
+                          </Space>
+                        }
+                        description={
+                          <Space>
+                            {company && <span><BankOutlined /> {company}</span>}
+                            {category && <Tag color="blue">{category}</Tag>}
+                            {createdAt && (
+                              <span style={{ color: '#999', fontSize: 12 }}>
+                                {formatDate(createdAt)}
+                              </span>
+                            )}
+                          </Space>
+                        }
+                      />
+                    </List.Item>
+                  )
+                }}
               />
             )}
           </Spin>

@@ -32,6 +32,24 @@ class JobImageResponse(BaseModel):
     user_id: str
     image_url: str
     parsed_job_json: Optional[dict] = None
+    title: Optional[str] = None
+    company: Optional[str] = None
+    category: Optional[str] = None
+    is_primary: bool = False
+    is_favorite: bool = False
+    user_remark: Optional[str] = None
+    deleted_at: Optional[datetime] = None
     created_at: datetime
 
     model_config = {"from_attributes": True}
+
+
+class JobUpdateRequest(BaseModel):
+    title: Optional[str] = None
+    company: Optional[str] = None
+    category: Optional[str] = None
+    user_remark: Optional[str] = None
+
+
+class JobBatchActionRequest(BaseModel):
+    ids: list[str]

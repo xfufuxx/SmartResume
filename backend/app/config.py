@@ -31,9 +31,11 @@ class Settings(BaseSettings):
     MAX_UPLOAD_SIZE: int = 20 * 1024 * 1024
 
     BACKEND_URL: str = "http://localhost:8000"
+    CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"
 
     USE_LOCAL_OCR: bool = False
-    USE_WEASYPRINT: bool = False
+    USE_WEASYPRINT: bool = True
+    USE_TEMPLATE_PDF: bool = True  # 使用统一模板渲染简历（替代像素级复原）
 
     SMTP_HOST: str = "smtp.qq.com"
     SMTP_PORT: int = 587

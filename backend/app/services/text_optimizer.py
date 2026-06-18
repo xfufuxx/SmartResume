@@ -12,6 +12,7 @@
 - 保持上下文：将同一字段类型的多个块合并发送，保留上下文连贯性
 """
 
+import asyncio
 import json
 import logging
 from typing import Optional
@@ -23,6 +24,8 @@ from app.services import has_valid_api_key
 from app.services.pdf_layout_editor import TextBlock, PROTECTED_FIELDS, OPTIMIZABLE_FIELDS
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
 
 # ─── 优化提示词 ──────────────────────────────────────────────────
 
@@ -151,7 +154,7 @@ async def _call_mimo_optimize(
     custom_instructions: Optional[str] = None,
 ) -> dict[str, str]:
     """
-    调用 MiMo 模型优化文本。
+    调用 MiMo 模型优化文本（带指数退避重试）。
 
     Args:
         input_text: 格式化的输入文本（包含 BLOCK_N 标记）
@@ -173,24 +176,54 @@ async def _call_mimo_optimize(
     ) + extra
 
     client = _get_client()
-    resp = await client.chat.completions.create(
-        model=settings.LLM_MODEL_TEXT,
-        messages=[
-            {"role": "user", "content": prompt},
-        ],
-        response_format={"type": "json_object"},
-        max_tokens=4096,
-    )
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = await client.chat.completions.create(
+                model=settings.LLM_MODEL_TEXT,
+                messages=[
+                    {"role": "user", "content": prompt},
+                ],
+                response_format={"type": "json_object"},
+                max_tokens=4096,
+                timeout=60.0,
+            )
 
-    content = resp.choices[0].message.content or "{}"
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        import re
-        match = re.search(r'\{[\s\S]*\}', content)
-        if match:
-            return json.loads(match.group())
-        raise ValueError(f"MiMo 返回的不是有效 JSON: {content[:200]}")
+            content = resp.choices[0].message.content or "{}"
+            try:
+                return json.loads(content)
+            except json.JSONDecodeError:
+                import re
+                match = re.search(r'\{[\s\S]*\}', content)
+                if match:
+                    return json.loads(match.group())
+                raise ValueError(f"MiMo 返回的不是有效 JSON: {content[:200]}")
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "response_format" in error_msg or "json_object" in error_msg:
+                # 去掉 response_format 重试
+                try:
+                    resp = await client.chat.completions.create(
+                        model=settings.LLM_MODEL_TEXT,
+                        messages=[{"role": "user", "content": prompt}],
+                        max_tokens=4096,
+                        timeout=60.0,
+                    )
+                    content = resp.choices[0].message.content or "{}"
+                    import re
+                    match = re.search(r'\{[\s\S]*\}', content)
+                    if match:
+                        return json.loads(match.group())
+                    return json.loads(content)
+                except json.JSONDecodeError:
+                    if attempt < MAX_RETRIES - 1:
+                        await asyncio.sleep(1 * (attempt + 1))
+                        continue
+                    raise
+            if attempt < MAX_RETRIES - 1:
+                logger.warning(f"MiMo 调用失败 (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+                await asyncio.sleep(1 * (attempt + 1))
+            else:
+                raise
 
 
 async def optimize_image_blocks(

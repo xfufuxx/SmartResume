@@ -18,6 +18,7 @@ class User(Base):
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)
     career_state: Mapped[str] = mapped_column(String(32), nullable=True)
     expectation: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    saved_texts: Mapped[dict] = mapped_column(JSONB, nullable=True, comment="保存的简历和岗位文字信息")
     privacy_agreed: Mapped[bool] = mapped_column(Boolean, default=False)
     status: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
     deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True)

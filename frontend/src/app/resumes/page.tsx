@@ -3,13 +3,13 @@
 import React, { useEffect, useState, useCallback } from 'react'
 import {
   Layout, Button, Card, Typography, Spin, Row, Col, message,
-  Tag, Space, Divider, Modal, Input, Empty, Tooltip, Popconfirm, Alert, Descriptions,
+  Tag, Space, Divider, Modal, Input, Empty, Tooltip, Popconfirm, Alert, Descriptions, Checkbox,
 } from 'antd'
 import {
   LogoutOutlined, HistoryOutlined, HomeOutlined,
   FileTextOutlined, PlusOutlined, CrownOutlined,
   CopyOutlined, DeleteOutlined, EditOutlined,
-  DashboardOutlined, EyeOutlined,
+  DashboardOutlined, EyeOutlined, BankOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { resumes, scoring, jobs, toBackendUrl } from '@/lib/api'
@@ -33,6 +33,9 @@ export default function ResumeLibrary() {
   const [editTitle, setEditTitle] = useState('')
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [previewResume, setPreviewResume] = useState<ResumeRecord | null>(null)
+  const [selectMode, setSelectMode] = useState(false)
+  const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [batchDeleting, setBatchDeleting] = useState(false)
 
   useEffect(() => {
     const t = getToken()
@@ -147,6 +150,41 @@ export default function ResumeLibrary() {
     setPreviewModalOpen(true)
   }, [])
 
+  const toggleSelectMode = useCallback(() => {
+    setSelectMode((prev) => !prev)
+    setSelectedIds([])
+  }, [])
+
+  const toggleSelect = useCallback((id: string) => {
+    setSelectedIds((prev) =>
+      prev.includes(id) ? prev.filter((x) => x !== id) : [...prev, id]
+    )
+  }, [])
+
+  const toggleSelectAll = useCallback(() => {
+    if (selectedIds.length === list.length) {
+      setSelectedIds([])
+    } else {
+      setSelectedIds(list.map((r) => r.id))
+    }
+  }, [list, selectedIds])
+
+  const handleBatchDelete = useCallback(async () => {
+    if (selectedIds.length === 0) return
+    setBatchDeleting(true)
+    try {
+      const res = await resumes.batchDelete(selectedIds)
+      message.success(res.data?.detail || `已删除 ${selectedIds.length} 份简历`)
+      setSelectedIds([])
+      setSelectMode(false)
+      loadList()
+    } catch {
+      message.error('批量删除失败')
+    } finally {
+      setBatchDeleting(false)
+    }
+  }, [selectedIds, loadList])
+
   if (!token) return null
 
   return (
@@ -160,6 +198,9 @@ export default function ResumeLibrary() {
         <Space>
           <Button icon={<HomeOutlined />} onClick={() => router.push('/')} type="text" style={{ color: '#fff' }}>
             首页
+          </Button>
+          <Button icon={<BankOutlined />} onClick={() => router.push('/jobs')} type="text" style={{ color: '#fff' }}>
+            岗位库
           </Button>
           <Button icon={<DashboardOutlined />} onClick={() => router.push('/dashboard')} type="text" style={{ color: '#fff' }}>
             仪表盘
@@ -176,7 +217,25 @@ export default function ResumeLibrary() {
       <Content style={{ padding: 24, maxWidth: 1200, margin: '0 auto', width: '100%' }}>
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
           <Typography.Title level={3} style={{ margin: 0 }}>我的简历（{list.length}/10）</Typography.Title>
-          <input
+          <Space>
+            {selectMode && selectedIds.length > 0 && (
+              <Popconfirm
+                title={`确定删除选中的 ${selectedIds.length} 份简历？`}
+                onConfirm={handleBatchDelete}
+                okText="删除"
+                cancelText="取消"
+              >
+                <Button danger loading={batchDeleting}>
+                  批量删除（{selectedIds.length}）
+                </Button>
+              </Popconfirm>
+            )}
+            {list.length > 0 && (
+              <Button onClick={toggleSelectMode}>
+                {selectMode ? '取消选择' : '批量管理'}
+              </Button>
+            )}
+            <input
             type="file"
             id="upload-resume"
             accept=".pdf,.docx,.png,.jpg,.jpeg"
@@ -195,6 +254,7 @@ export default function ResumeLibrary() {
           >
             上传新简历
           </Button>
+          </Space>
         </div>
 
         {loading ? (
@@ -217,9 +277,28 @@ export default function ResumeLibrary() {
             </Button>
           </Empty>
         ) : (
-          <Row gutter={[16, 16]}>
+          <>
+            {selectMode && (
+              <div style={{ marginBottom: 12 }}>
+                <Button size="small" onClick={toggleSelectAll}>
+                  {selectedIds.length === list.length ? '取消全选' : '全选'}
+                </Button>
+                <span style={{ marginLeft: 8, color: '#999', fontSize: 13 }}>
+                  已选 {selectedIds.length} / {list.length}
+                </span>
+              </div>
+            )}
+            <Row gutter={[16, 16]}>
             {list.map((resume) => (
               <Col xs={24} sm={12} md={8} key={resume.id}>
+                <div style={{ position: 'relative' }}>
+                {selectMode && (
+                  <Checkbox
+                    checked={selectedIds.includes(resume.id)}
+                    onChange={() => toggleSelect(resume.id)}
+                    style={{ position: 'absolute', top: 8, left: 8, zIndex: 1 }}
+                  />
+                )}
                 <Card
                   hoverable
                   style={{
@@ -294,9 +373,11 @@ export default function ResumeLibrary() {
                     }
                   />
                 </Card>
+                </div>
               </Col>
             ))}
           </Row>
+          </>
         )}
 
         {/* 创建副本弹窗 */}

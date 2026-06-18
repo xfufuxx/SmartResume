@@ -164,12 +164,13 @@ async def _process_batch(
                     match_result.get("rewrite_strategy", {}),
                     custom_instructions,
                 )
+                changes = await generate_changes_description(resume.parsed_json, optimized)
 
                 pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
                 pdf_url = ""
                 try:
-                    from app.api.optimization import _generate_styled_or_fallback
-                    pdf_bytes = await _generate_styled_or_fallback(resume, optimized)
+                    from app.services.pdf_styler import _generate_styled_or_fallback
+                    pdf_bytes = await _generate_styled_or_fallback(resume, optimized, job.parsed_job_json, custom_instructions)
                     pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
                 except Exception:
                     pass
@@ -181,6 +182,7 @@ async def _process_batch(
                     original_json=resume.parsed_json,
                     optimized_json=optimized,
                     match_score=match_result.get("match_score"),
+                    changes_description=changes,
                     pdf_url=pdf_url,
                     custom_instructions=custom_instructions,
                     job_title=job.parsed_job_json.get("title") or None,

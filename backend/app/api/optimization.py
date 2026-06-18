@@ -1,32 +1,31 @@
 import uuid
-import os
-import io
+import json
 import asyncio
-import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
 from app.database import get_db
-from app.core.deps import get_current_user
+from app.core.deps import get_current_user, get_redis, RateLimiter
 from app.models.user import User
 from app.models.resume import Resume
 from app.models.job_image import JobImage
 from app.models.optimized_resume import OptimizedResume
-from app.schemas.optimization import OptimizeRequest, OptimizeResponse, MatchAnalysis, DiffResponse, SatisfactionFeedbackRequest
+from app.schemas.optimization import OptimizeRequest, OptimizeResponse, MatchAnalysis, DiffResponse, SatisfactionFeedbackRequest, QuickOptimizeRequest
 from app.services.agent_optimizer import analyze_match, optimize_resume, generate_changes_description
-from app.services.pdf_generator import generate_pdf
 from app.services.storage import storage
-from app.services.pdf_layout_editor import parse_pdf_layout, group_blocks_by_field, process_pdf_style_preserving
-from app.services.text_optimizer import optimize_text_blocks, optimize_image_blocks
+from app.services.pdf_styler import _generate_styled_or_fallback
 
-logger = logging.getLogger(__name__)
+import redis.asyncio as aioredis
 
 router = APIRouter()
 TZ_UTC8 = timezone(timedelta(hours=8))
 
 CATEGORIES = ["产品", "开发", "运营", "设计", "市场", "销售", "其他"]
+
+# 优化接口速率限制：每用户每分钟最多 3 次
+_optimize_limiter = RateLimiter(max_requests=3, window_seconds=60)
 
 
 def _to_response(r: OptimizedResume) -> OptimizeResponse:
@@ -48,6 +47,7 @@ async def optimize(
     body: OptimizeRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
+    _rl: None = Depends(_optimize_limiter),
 ):
     resume_result = await db.execute(
         select(Resume).where(Resume.id == body.resume_id, Resume.user_id == user.id)
@@ -104,319 +104,6 @@ async def optimize(
         rewrite_strategy=match_result.get("rewrite_strategy", {}),
     )
     return resp
-
-
-async def _generate_styled_or_fallback(
-    resume: Resume, optimized: dict, job_json: dict, custom_instructions: str | None = None
-) -> bytes:
-    """
-    生成优化后的 PDF（版式保留优先，逐层回退）。
-
-    策略（按优先级从高到低）：
-    1. 文本型 PDF → PyMuPDF 原地编辑（保留矢量图形、字体、颜色、照片，文本可选中）
-    2. 图片型 PDF（扫描件/无文本层）→ 渲染为图片 → 视觉模型提取版式 → Pillow 合成
-    3. 图片文件 → 视觉模型版式提取 + Pillow 合成
-    4. DOCX 文件 → 现有 DOCX 替换方案
-    5. 任何失败 → 回退到模板 PDF
-    """
-    file_type = (resume.file_type or "").lower()
-    logger.info(f"[PDF生成] 文件类型: {file_type}, 原始文件: {resume.original_file_url}")
-
-    if file_type == "pdf":
-        # ── 第1层：PyMuPDF 原地编辑（文本型 PDF，保留矢量样式和照片）──
-        try:
-            logger.info("[PDF生成] 第1层尝试：PyMuPDF 原地编辑（保留矢量样式+照片）")
-            pdf_bytes = await _run_styled_pdf_text(resume, optimized, job_json, custom_instructions)
-            if pdf_bytes and len(pdf_bytes) > 1000:
-                logger.info(f"[PDF生成] PyMuPDF 方案成功: {len(pdf_bytes)} bytes")
-                return pdf_bytes
-        except Exception as e:
-            logger.warning(f"[PDF生成] PyMuPDF 方案失败: {e}")
-
-        # ── 第2层：视觉模型方案（图片型 PDF，无文本层）──
-        try:
-            logger.info("[PDF生成] 第2层尝试：渲染为图片 → 视觉模型提取版式 → Pillow 合成")
-            pdf_bytes = await _run_styled_pdf_image(resume, optimized, job_json, custom_instructions)
-            if pdf_bytes and len(pdf_bytes) > 1000:
-                logger.info(f"[PDF生成] 视觉模型方案成功: {len(pdf_bytes)} bytes")
-                return pdf_bytes
-        except Exception as e:
-            logger.warning(f"[PDF生成] 视觉模型方案失败: {e}")
-
-    elif file_type in ("png", "jpg", "jpeg", "webp"):
-        try:
-            logger.info("[PDF生成] 图片简历，使用视觉模型版式提取...")
-            pdf_bytes = await _run_styled_image(resume, optimized, job_json, custom_instructions)
-            if pdf_bytes and len(pdf_bytes) > 1000:
-                logger.info(f"[PDF生成] 图片版式保留成功: {len(pdf_bytes)} bytes")
-                return pdf_bytes
-        except Exception as e:
-            logger.warning(f"[PDF生成] 图片版式保留失败: {e}")
-    else:
-        try:
-            logger.info(f"[PDF生成] DOCX 文件，使用样式保留方案...")
-            pdf_bytes = await asyncio.to_thread(
-                _run_styled_pdf, resume, optimized
-            )
-            if pdf_bytes and len(pdf_bytes) > 1000:
-                logger.info(f"[PDF生成] DOCX 样式保留成功: {len(pdf_bytes)} bytes")
-                return pdf_bytes
-        except Exception as e:
-            logger.warning(f"[PDF生成] DOCX 样式保留失败: {e}")
-
-    # 回退：使用固定模板生成 PDF
-    logger.info("[PDF生成] 使用固定模板生成 PDF（回退方案）")
-    fallback_bytes = await generate_pdf(optimized)
-    logger.info(f"[PDF生成] 回退模板 PDF 生成完成: {len(fallback_bytes)} bytes")
-    return fallback_bytes
-
-
-async def _run_styled_pdf_text(
-    resume: Resume, optimized: dict, job_json: dict, custom_instructions: str | None = None
-) -> bytes:
-    """
-    文本型 PDF 处理（PyMuPDF 原地编辑）。
-
-    流程：
-    1. 解析 PDF 版式（提取文本块位置/字体/颜色/大小 + 照片信息）
-    2. 分类文本块为保护字段和优化字段
-    3. 优化字段文本（MiMo 模型）
-    4. 在原 PDF 上原地重写文本（白色覆盖旧文字 + 插入新文字）
-    5. 照片、矢量图形、线条等全部原样保留
-
-    优势：
-    - 100% 保留原始 PDF 模板样式（字体、颜色、排版、背景）
-    - 100% 保留照片（PyMuPDF 只修改文本，不碰图片对象）
-    - 输出仍是文本型 PDF（文字可选中/搜索）
-    - 不需要视觉模型 API 调用（快速、低成本）
-    """
-    # Step 1: 解析 PDF 版式（同步，线程池执行）
-    pages, all_blocks = await asyncio.to_thread(_parse_pdf_layout_sync, resume)
-
-    if not all_blocks:
-        raise ValueError("PDF 无文本层，无法使用 PyMuPDF 方案（请使用视觉模型方案）")
-
-    logger.info(
-        f"[PyMuPDF] 解析完成: {len(pages)} 页, {len(all_blocks)} 个文本块, "
-        f"字段分布: {_count_field_types(all_blocks)}"
-    )
-
-    # Step 2: 优化文本（异步，主事件循环执行）
-    optimized_texts = await optimize_text_blocks(all_blocks, job_json, custom_instructions)
-
-    if not optimized_texts:
-        raise ValueError("文本优化结果为空")
-
-    changed = sum(1 for idx, new_text in optimized_texts.items()
-                  if idx < len(all_blocks) and new_text != all_blocks[idx].text)
-    logger.info(f"[PyMuPDF] 文本优化完成: {len(optimized_texts)} 个块, 其中 {changed} 个有变化")
-
-    # Step 3: 重写 PDF（同步，线程池执行）
-    pdf_bytes = await asyncio.to_thread(_rewrite_pdf_sync, resume, pages, optimized_texts)
-    logger.info(f"[PyMuPDF] PDF 重写完成: {len(pdf_bytes)} bytes")
-    return pdf_bytes
-
-
-def _resolve_local_path(original_url: str) -> str:
-    """将 original_file_url 解析为本地文件路径（支持HTTP URL和本地路径）"""
-    if not original_url:
-        raise ValueError("original_file_url 为空")
-    # HTTP URL → 提取 /uploads/ 后面的路径
-    if "/uploads/" in original_url:
-        rel = original_url.split("/uploads/", 1)[-1]
-        local_path = os.path.join("uploads", rel)
-        if os.path.exists(local_path):
-            return local_path
-    # 绝对路径
-    if os.path.isabs(original_url):
-        if os.path.exists(original_url):
-            return original_url
-    # 相对路径
-    local_path = os.path.join("uploads", original_url)
-    if os.path.exists(local_path):
-        return local_path
-    raise FileNotFoundError(f"原始文件不存在: {original_url}")
-
-
-def _parse_pdf_layout_sync(resume: Resume):
-    """同步解析 PDF 版式"""
-    from app.services.pdf_layout_editor import parse_pdf_layout
-
-    local_path = _resolve_local_path(resume.original_file_url)
-
-    with open(local_path, "rb") as f:
-        pdf_bytes = f.read()
-
-    pages = parse_pdf_layout(pdf_bytes)
-    all_blocks = []
-    for page in pages:
-        all_blocks.extend(page.text_blocks)
-
-    return pages, all_blocks
-
-
-def _rewrite_pdf_sync(resume: Resume, pages, optimized_texts: dict) -> bytes:
-    """同步重写 PDF（原地编辑文本，保留版式）"""
-    from app.services.pdf_layout_editor import process_pdf_style_preserving
-
-    local_path = _resolve_local_path(resume.original_file_url)
-
-    with open(local_path, "rb") as f:
-        pdf_bytes = f.read()
-
-    # 传递 pages 避免重复解析，且保持 block_index 与 optimized_texts 一致
-    return process_pdf_style_preserving(pdf_bytes, optimized_texts, pages=pages)
-
-
-async def _run_styled_pdf_image(
-    resume: Resume, optimized: dict, job_json: dict, custom_instructions: str | None = None
-) -> bytes:
-    """
-    图片型 PDF 处理（PDF 无文本层，渲染为图片后用视觉模型处理）。
-
-    流程：
-    1. 渲染 PDF 每页为高 DPI 图片
-    2. 视觉模型提取每页版式
-    3. 优化文本
-    4. Pillow 合成图片
-    5. 将图片组合为 PDF
-    """
-    import fitz
-    from PIL import Image
-    from app.services.image_layout_editor import extract_image_layout, composite_image
-    from app.services.text_optimizer import optimize_image_blocks
-
-    local_path = _resolve_local_path(resume.original_file_url)
-
-    doc = fitz.open(local_path)
-    total_pages = len(doc)
-    page_images = []
-
-    logger.info(f"[视觉PDF] 开始处理: {total_pages} 页, 渲染DPI=300")
-
-    for page_idx in range(total_pages):
-        page = doc[page_idx]
-        # 渲染为图片（300 DPI，高清还原）
-        pix = page.get_pixmap(dpi=300)
-        img_bytes = pix.tobytes("png")
-        logger.info(f"[视觉PDF] 第 {page_idx+1}/{total_pages} 页渲染完成: {pix.width}x{pix.height}px")
-
-        # 提取版式
-        layout = await extract_image_layout(img_bytes)
-        block_types = {}
-        for b in layout.blocks:
-            block_types[b.block_type] = block_types.get(b.block_type, 0) + 1
-        logger.info(
-            f"[视觉PDF] 第 {page_idx+1} 页版式: {len(layout.blocks)} 块 "
-            f"(字段分布: {block_types}), 照片: {'有' if layout.photo_bbox else '无'}"
-        )
-
-        # 优化文本
-        optimized_texts = await optimize_image_blocks(
-            layout.blocks, job_json, custom_instructions
-        )
-        logger.info(f"[视觉PDF] 第 {page_idx+1} 页文本优化: {len(optimized_texts)} 块")
-
-        # 合成图片
-        result_img = composite_image(img_bytes, layout, optimized_texts)
-        logger.info(f"[视觉PDF] 第 {page_idx+1} 页合成完成: {len(result_img)} bytes")
-        page_images.append(result_img)
-
-    doc.close()
-
-    # 将多页图片组合为 PDF
-    images = [Image.open(io.BytesIO(img)) for img in page_images]
-    pdf_buf = io.BytesIO()
-    if len(images) == 1:
-        images[0].convert("RGB").save(pdf_buf, format="PDF")
-    else:
-        images[0].convert("RGB").save(
-            pdf_buf, format="PDF", save_all=True,
-            append_images=[img.convert("RGB") for img in images[1:]]
-        )
-
-    return pdf_buf.getvalue()
-
-
-async def _run_styled_image(
-    resume: Resume, optimized: dict, job_json: dict, custom_instructions: str | None = None
-) -> bytes:
-    """
-    图片简历版式保留引擎（视觉模型 + Pillow）。
-
-    流程：
-    1. 视觉模型提取版式 JSON
-    2. 优化文本块
-    3. Pillow 合成图片
-    """
-    from app.services.image_layout_editor import extract_image_layout, composite_image
-
-    # 1. 获取原始图片字节
-    local_path = _resolve_local_path(resume.original_file_url)
-
-    with open(local_path, "rb") as f:
-        image_bytes = f.read()
-
-    # 2. 提取版式
-    layout = await extract_image_layout(image_bytes)
-    logger.info(
-        f"图片版式提取完成: {len(layout.blocks)} 个块, "
-        f"照片: {'有' if layout.photo_bbox else '无'}"
-    )
-
-    # 3. 优化文本
-    optimized_texts = await optimize_image_blocks(
-        layout.blocks, job_json, custom_instructions
-    )
-    logger.info(f"图片文本优化完成: {len(optimized_texts)} 个块")
-
-    # 4. 合成图片
-    result_bytes = composite_image(image_bytes, layout, optimized_texts)
-
-    # 图片结果转为 PDF（使用 Pillow 保存为 PDF 格式）
-    from PIL import Image
-    import io
-    img = Image.open(io.BytesIO(result_bytes))
-    pdf_buf = io.BytesIO()
-    img.convert("RGB").save(pdf_buf, format="PDF")
-    return pdf_buf.getvalue()
-
-
-def _count_field_types(blocks: list) -> dict:
-    """统计各字段类型的块数量"""
-    from collections import Counter
-    return dict(Counter(b.field_type for b in blocks))
-
-
-def _run_styled_pdf(resume: Resume, optimized: dict) -> bytes:
-    """
-    旧版 DOCX 样式保留 PDF 生成（用于 DOCX 文件）。
-
-    流程：DOCX → 替换文本 → 转 PDF
-    """
-    from app.services.converter import ensure_docx, TEMP_DIR
-    from app.services.docx_styler import apply_optimization, docx_to_pdf
-
-    local_path = _resolve_local_path(resume.original_file_url)
-    docx_path = ensure_docx(local_path)
-
-    optimized_docx = os.path.join(TEMP_DIR, f"optimized_{uuid.uuid4().hex[:8]}.docx")
-    apply_optimization(docx_path, optimized, optimized_docx)
-
-    pdf_path = os.path.join(TEMP_DIR, f"optimized_{uuid.uuid4().hex[:8]}.pdf")
-    docx_to_pdf(optimized_docx, pdf_path)
-
-    with open(pdf_path, "rb") as f:
-        pdf_bytes = f.read()
-
-    for tmp in [docx_path, optimized_docx, pdf_path]:
-        if tmp != local_path and os.path.exists(tmp):
-            try:
-                os.remove(tmp)
-            except OSError:
-                pass
-
-    return pdf_bytes
 
 
 @router.get("/", response_model=list[OptimizeResponse])
@@ -579,6 +266,40 @@ async def diff_versions(
     return DiffResponse(record_a=_to_response(a), record_b=_to_response(b), diff_summary=diff_summary)
 
 
+# ── 我的信息：从个人中心 saved_texts 一键优化 ──
+
+@router.post("/quick")
+async def optimize_quick(
+    body: QuickOptimizeRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    redis: aioredis.Redis = Depends(get_redis),
+    _rl: None = Depends(_optimize_limiter),
+):
+    """一键优化：使用个人中心中保存的简历文本和岗位文本直接优化"""
+    if not body.resume_text or not body.resume_text.strip():
+        raise HTTPException(status_code=400, detail="简历文本不能为空")
+    if not body.job_text or not body.job_text.strip():
+        raise HTTPException(status_code=400, detail="岗位文本不能为空")
+
+    task_id = str(uuid.uuid4())
+    task_key = f"optimize_task:{task_id}"
+
+    await redis.setex(task_key, _TASK_TTL, json.dumps({
+        "status": "pending",
+        "progress": "正在解析文本...",
+        "created_at": datetime.now(TZ_UTC8).isoformat(),
+    }))
+
+    asyncio.create_task(
+        _run_optimize_task_from_text(
+            task_id, user.id, body.resume_text, body.job_text, body.custom_instructions, body.template
+        )
+    )
+
+    return {"task_id": task_id, "status": "pending"}
+
+
 @router.get("/{opt_id}", response_model=OptimizeResponse)
 async def get_optimization(
     opt_id: str,
@@ -620,6 +341,285 @@ async def submit_satisfaction(
     await db.commit()
 
     return {"detail": "评价已提交"}
+
+
+# ── 异步优化（任务队列 + 轮询） ──
+
+_TASK_TTL = 3600  # 任务状态在 Redis 中保留 1 小时
+
+
+@router.post("/async")
+async def optimize_async(
+    body: OptimizeRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    redis: aioredis.Redis = Depends(get_redis),
+    _rl: None = Depends(_optimize_limiter),
+):
+    """提交异步优化任务，立即返回 task_id"""
+    resume_result = await db.execute(
+        select(Resume).where(Resume.id == body.resume_id, Resume.user_id == user.id)
+    )
+    resume = resume_result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+
+    job_result = await db.execute(
+        select(JobImage).where(JobImage.id == body.job_image_id, JobImage.user_id == user.id)
+    )
+    job = job_result.scalar_one_or_none()
+    if not job:
+        raise HTTPException(status_code=404, detail="Job image not found")
+
+    if not resume.parsed_json or not job.parsed_job_json:
+        raise HTTPException(status_code=400, detail="Resume or Job has not been parsed yet")
+
+    task_id = str(uuid.uuid4())
+    task_key = f"optimize_task:{task_id}"
+
+    await redis.setex(task_key, _TASK_TTL, json.dumps({
+        "status": "pending",
+        "progress": "排队中...",
+        "created_at": datetime.now(TZ_UTC8).isoformat(),
+    }))
+
+    # 后台异步执行
+    asyncio.create_task(
+        _run_optimize_task(task_id, user.id, resume, job, body.custom_instructions, body.template)
+    )
+
+    return {"task_id": task_id, "status": "pending"}
+
+
+def _compute_diff_summary(a: OptimizedResume, b: OptimizedResume) -> str:
+    parts = []
+    if a.match_score and b.match_score:
+        parts.append(f"匹配分: {a.match_score} → {b.match_score} ({b.match_score - a.match_score:+d})")
+    if a.company != b.company:
+        parts.append(f"公司: {a.company or '-'} → {b.company or '-'}")
+    if a.job_title != b.job_title:
+        parts.append(f"岗位: {a.job_title or '-'} → {b.job_title or '-'}")
+    parts.append(f"A: {a.created_at}, B: {b.created_at}")
+    return " | ".join(parts) if parts else "无显著差异"
+
+
+@router.get("/async/{task_id}")
+async def get_optimize_status(
+    task_id: str,
+    redis: aioredis.Redis = Depends(get_redis),
+):
+    """查询异步优化任务状态"""
+    task_key = f"optimize_task:{task_id}"
+    data = await redis.get(task_key)
+    if not data:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+
+    task_info = json.loads(data)
+    return task_info
+
+
+async def _run_optimize_task(
+    task_id: str,
+    user_id: str,
+    resume: Resume,
+    job: JobImage,
+    custom_instructions: str | None,
+    template: str | None = None,
+):
+    """后台执行优化任务，完成后更新 Redis 状态"""
+    from app.database import async_session_factory
+    from app.config import settings as app_config
+
+    task_key = f"optimize_task:{task_id}"
+    redis = None
+
+    # 初始化 Redis 连接
+    try:
+        redis = aioredis.from_url(app_config.REDIS_URL, decode_responses=True)
+    except Exception as e:
+        # Redis 不可达，任务无法追踪，直接返回
+        import logging
+        logging.getLogger(__name__).error(f"优化任务 {task_id} 无法连接 Redis: {e}")
+        return
+
+    try:
+        await _update_status_impl(redis, task_key, "processing", "正在分析匹配度...")
+
+        match_result = await analyze_match(resume.parsed_json, job.parsed_job_json)
+
+        await _update_status_impl(redis, task_key, "processing", "正在优化简历内容...")
+
+        optimized = await optimize_resume(
+            resume.parsed_json, job.parsed_job_json,
+            match_result.get("rewrite_strategy", {}),
+            custom_instructions,
+        )
+
+        await _update_status_impl(redis, task_key, "processing", "正在生成修改说明...")
+
+        changes = await generate_changes_description(resume.parsed_json, optimized)
+
+        await _update_status_impl(redis, task_key, "processing", "正在生成 PDF...")
+
+        pdf_bytes = await _generate_styled_or_fallback(resume, optimized, job.parsed_job_json, custom_instructions, template)
+        pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
+        pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
+
+        # 保存到数据库
+        job_title = job.parsed_job_json.get("title", "")
+        company = job.parsed_job_json.get("company", "")
+        category = _guess_category(job_title)
+
+        async with async_session_factory() as db:
+            opt_record = OptimizedResume(
+                user_id=user_id, resume_id=resume.id, job_image_id=job.id,
+                original_json=resume.parsed_json, optimized_json=optimized,
+                match_score=match_result.get("match_score"), pdf_url=pdf_url,
+                changes_description=changes, custom_instructions=custom_instructions,
+                job_title=job_title or None, company=company or None, category=category,
+                thumbnail_url=job.image_url, status="completed",
+            )
+            db.add(opt_record)
+            await db.flush()
+            await db.refresh(opt_record)
+            await db.commit()
+
+            response = _to_response(opt_record)
+            response.match_analysis = MatchAnalysis(
+                match_score=match_result.get("match_score", 0),
+                strengths=match_result.get("strengths", []),
+                gaps=match_result.get("gaps", []),
+                rewrite_strategy=match_result.get("rewrite_strategy", {}),
+            )
+
+        await _update_status_impl(redis, task_key, "completed", "优化完成", result=response.model_dump(mode="json"))
+
+    except Exception as e:
+        try:
+            await _update_status_impl(redis, task_key, "failed", f"优化失败: {str(e)[:200]}")
+        except Exception:
+            pass
+    finally:
+        if redis is not None:
+            try:
+                await redis.close()
+            except Exception:
+                pass
+
+
+async def _run_optimize_task_from_text(
+    task_id: str,
+    user_id: str,
+    resume_text: str,
+    job_text: str,
+    custom_instructions: str | None,
+    template: str | None = None,
+):
+    """后台执行基于文本的一键优化任务（从个人中心 saved_texts）"""
+    from app.database import async_session_factory
+    from app.config import settings as app_config
+    from app.services.resume_parser import parse_resume_text
+    from app.services.job_parser import parse_job_text
+
+    task_key = f"optimize_task:{task_id}"
+    redis = None
+
+    try:
+        redis = aioredis.from_url(app_config.REDIS_URL, decode_responses=True)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"优化任务 {task_id} 无法连接 Redis: {e}")
+        return
+
+    try:
+        # 1. 解析简历文本
+        await _update_status_impl(redis, task_key, "processing", "正在解析简历文本...")
+        parsed_resume = await parse_resume_text(resume_text)
+
+        # 2. 解析岗位文本
+        await _update_status_impl(redis, task_key, "processing", "正在解析岗位文本...")
+        parsed_job = await parse_job_text(job_text)
+
+        job_title = parsed_job.get("title", "")
+        company = parsed_job.get("company", "")
+        category = _guess_category(job_title)
+
+        # 3. 匹配分析
+        await _update_status_impl(redis, task_key, "processing", "正在分析匹配度...")
+        match_result = await analyze_match(parsed_resume, parsed_job)
+
+        # 4. 优化简历
+        await _update_status_impl(redis, task_key, "processing", "正在优化简历内容...")
+        optimized = await optimize_resume(
+            parsed_resume, parsed_job,
+            match_result.get("rewrite_strategy", {}),
+            custom_instructions,
+        )
+
+        # 5. 生成修改说明
+        await _update_status_impl(redis, task_key, "processing", "正在生成修改说明...")
+        changes = await generate_changes_description(parsed_resume, optimized)
+
+        # 6. 生成 PDF（使用选定的模板方案）
+        await _update_status_impl(redis, task_key, "processing", f"正在使用 {template or 'professional'} 方案生成 PDF...")
+        pdf_bytes = await _generate_styled_or_fallback(None, optimized, parsed_job, custom_instructions, template)
+        pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
+        pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
+
+        # 7. 保存到数据库
+        async with async_session_factory() as db:
+            opt_record = OptimizedResume(
+                user_id=user_id,
+                original_json=parsed_resume,
+                optimized_json=optimized,
+                match_score=match_result.get("match_score"),
+                pdf_url=pdf_url,
+                changes_description=changes,
+                custom_instructions=custom_instructions,
+                job_title=job_title or None,
+                company=company or None,
+                category=category,
+                status="completed",
+            )
+            db.add(opt_record)
+            await db.flush()
+            await db.refresh(opt_record)
+            await db.commit()
+
+            response = _to_response(opt_record)
+            response.match_analysis = MatchAnalysis(
+                match_score=match_result.get("match_score", 0),
+                strengths=match_result.get("strengths", []),
+                gaps=match_result.get("gaps", []),
+                rewrite_strategy=match_result.get("rewrite_strategy", {}),
+            )
+
+        await _update_status_impl(redis, task_key, "completed", "优化完成", result=response.model_dump(mode="json"))
+
+    except Exception as e:
+        try:
+            await _update_status_impl(redis, task_key, "failed", f"优化失败: {str(e)[:200]}")
+        except Exception:
+            pass
+    finally:
+        if redis is not None:
+            try:
+                await redis.close()
+            except Exception:
+                pass
+
+
+async def _update_status_impl(redis: aioredis.Redis, task_key: str, status: str, progress: str, **extra):
+    existing = await redis.get(task_key)
+    if not existing:
+        import logging
+        logging.getLogger(__name__).warning(f"任务状态 key 不存在: {task_key}（可能已过期或 Redis 重启）")
+        return
+    info = json.loads(existing)
+    info["status"] = status
+    info["progress"] = progress
+    info.update(extra)
+    await redis.setex(task_key, _TASK_TTL, json.dumps(info))
 
 
 def _guess_category(title: str) -> str:
