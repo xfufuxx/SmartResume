@@ -11,6 +11,17 @@ celery_app = Celery(
 
 celery_app.conf.update(task_serializer="json", result_serializer="json", accept_content=["json"])
 
+# 模块级事件循环，复用避免反复创建/销毁
+_LOOP: asyncio.AbstractEventLoop | None = None
+
+
+def _get_or_create_loop() -> asyncio.AbstractEventLoop:
+    global _LOOP
+    if _LOOP is None or _LOOP.is_closed():
+        _LOOP = asyncio.new_event_loop()
+        asyncio.set_event_loop(_LOOP)
+    return _LOOP
+
 
 def _resolve_local_path(original_url: str) -> str:
     """将 original_file_url 解析为本地文件路径（支持HTTP URL和本地路径）"""
@@ -55,13 +66,10 @@ def _generate_styled_or_fallback_sync(resume, optimized: dict, job_json: dict, c
             if not all_blocks:
                 raise ValueError("未能从 PDF 中提取到文本块（可能为图片型 PDF）")
 
-            loop = asyncio.new_event_loop()
-            try:
-                optimized_texts = loop.run_until_complete(
-                    optimize_text_blocks(all_blocks, job_json, custom_instructions)
-                )
-            finally:
-                loop.close()
+            loop = _get_or_create_loop()
+            optimized_texts = loop.run_until_complete(
+                optimize_text_blocks(all_blocks, job_json, custom_instructions)
+            )
 
             if not optimized_texts:
                 raise ValueError("文本优化结果为空")
@@ -91,14 +99,11 @@ def _generate_styled_or_fallback_sync(resume, optimized: dict, job_json: dict, c
                 pix = page.get_pixmap(dpi=300)
                 img_bytes = pix.tobytes("png")
 
-                loop = asyncio.new_event_loop()
-                try:
-                    layout = loop.run_until_complete(extract_image_layout(img_bytes))
-                    optimized_texts = loop.run_until_complete(
-                        optimize_image_blocks(layout.blocks, job_json, custom_instructions)
-                    )
-                finally:
-                    loop.close()
+                loop = _get_or_create_loop()
+                layout = loop.run_until_complete(extract_image_layout(img_bytes))
+                optimized_texts = loop.run_until_complete(
+                    optimize_image_blocks(layout.blocks, job_json, custom_instructions)
+                )
 
                 result_img = composite_image(img_bytes, layout, optimized_texts)
                 page_images.append(result_img)
@@ -152,12 +157,8 @@ def _generate_styled_or_fallback_sync(resume, optimized: dict, job_json: dict, c
 
     # 回退：模板 PDF
     from app.services.pdf_generator import generate_pdf
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(generate_pdf(optimized))
-    finally:
-        loop.close()
+    loop = _get_or_create_loop()
+    return loop.run_until_complete(generate_pdf(optimized))
 
 
 @celery_app.task(bind=True, max_retries=3)
@@ -205,9 +206,5 @@ def process_optimization(self, resume_id: str, job_image_id: str):
             await db.refresh(opt)
             return {"id": opt.id, "pdf_url": pdf_url, "status": "completed"}
 
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
-    try:
-        return loop.run_until_complete(_run())
-    finally:
-        loop.close()
+    loop = _get_or_create_loop()
+    return loop.run_until_complete(_run())

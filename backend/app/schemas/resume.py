@@ -42,3 +42,7 @@ class ResumeCreateRequest(BaseModel):
 
 class ResumeUpdateRequest(BaseModel):
     title: Optional[str] = None
+
+
+class ResumeBatchDeleteRequest(BaseModel):
+    ids: list[str]

@@ -76,6 +76,9 @@ export const user = {
   },
   agreePrivacy: () => api.post('/api/user/privacy/agree'),
   exportData: () => api.get('/api/user/export-data'),
+  syncSavedTexts: () => api.post('/api/user/sync-saved-texts'),
+  updateSavedTexts: (data: { resume_text?: string; job_text?: string }) =>
+    api.put('/api/user/saved-texts', data),
 }
 
 export const messages = {
@@ -197,6 +200,7 @@ export const resumes = {
     api.put(`/api/resumes/${id}`, { title }),
   setPrimary: (id: string) => api.put(`/api/resumes/${id}/primary`),
   delete: (id: string) => api.delete(`/api/resumes/${id}`),
+  batchDelete: (ids: string[]) => api.post('/api/resumes/batch-delete', { ids }),
 }
 
 export const jobs = {
@@ -205,9 +209,23 @@ export const jobs = {
     form.append('file', file)
     return api.post(`/api/jobs/upload?use_ocr=${useOcr}`, form)
   },
-  list: () => api.get('/api/jobs/'),
+  list: (q = '', category = '') =>
+    api.get('/api/jobs/', { params: { q, category } }),
   get: (id: string) => api.get(`/api/jobs/${id}`),
+  update: (id: string, data: { title?: string; company?: string; category?: string; user_remark?: string }) =>
+    api.put(`/api/jobs/${id}`, data),
+  setPrimary: (id: string) => api.put(`/api/jobs/${id}/primary`),
+  toggleFavorite: (id: string) => api.post(`/api/jobs/${id}/favorite`),
+  copy: (id: string) => api.post(`/api/jobs/${id}/copy`),
+  trash: (id: string) => api.post(`/api/jobs/${id}/trash`),
+  restore: (id: string) => api.post(`/api/jobs/${id}/restore`),
+  getFavorites: () => api.get('/api/jobs/favorites'),
+  getTrash: () => api.get('/api/jobs/trash'),
+  categories: () => api.get('/api/jobs/categories'),
   delete: (id: string) => api.delete(`/api/jobs/${id}`),
+  batchTrash: (ids: string[]) => api.post('/api/jobs/batch-trash', { ids }),
+  batchDelete: (ids: string[]) => api.post('/api/jobs/batch-delete', { ids }),
+  batchRestore: (ids: string[]) => api.post('/api/jobs/batch-restore', { ids }),
 }
 
 export const optimize = {
@@ -217,6 +235,23 @@ export const optimize = {
       job_image_id: jobImageId,
       custom_instructions: customInstructions || null,
     }),
+  runAsync: (resumeId: string, jobImageId: string, customInstructions?: string, template?: string) =>
+    api.post('/api/optimize/async', {
+      resume_id: resumeId,
+      job_image_id: jobImageId,
+      custom_instructions: customInstructions || null,
+      template: template || null,
+    }),
+  /** 一键优化：使用个人中心保存的简历文本和岗位文本直接优化 */
+  quick: (resumeText: string, jobText: string, customInstructions?: string, template?: string) =>
+    api.post('/api/optimize/quick', {
+      resume_text: resumeText,
+      job_text: jobText,
+      custom_instructions: customInstructions || null,
+      template: template || 'professional',
+    }),
+  getTaskStatus: (taskId: string) =>
+    api.get(`/api/optimize/async/${taskId}`),
   list: (q = '', category = '') =>
     api.get('/api/optimize/', { params: { q, category } }),
   get: (id: string) => api.get(`/api/optimize/${id}`),

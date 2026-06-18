@@ -1,4 +1,5 @@
-from pydantic import BaseModel, EmailStr, Field
+import re
+from pydantic import BaseModel, EmailStr, Field, field_validator
 from typing import Optional
 from datetime import datetime
 
@@ -10,9 +11,18 @@ class SendCodeRequest(BaseModel):
 
 class UserRegister(BaseModel):
     email: EmailStr
-    password: str
+    password: str = Field(..., min_length=8, max_length=128)
     code: str
     platform: Optional[str] = None
+
+    @field_validator("password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        if not re.search(r"[A-Z]", v) and not re.search(r"[a-z]", v):
+            raise ValueError("密码必须包含字母")
+        if not re.search(r"[0-9]", v):
+            raise ValueError("密码必须包含数字")
+        return v
 
 
 class UserLogin(BaseModel):
@@ -43,6 +53,7 @@ class UserProfileResponse(BaseModel):
     avatar_url: Optional[str] = None
     career_state: Optional[str] = None
     expectation: Optional[dict] = None
+    saved_texts: Optional[dict] = None
     privacy_agreed: bool = False
     status: str = "active"
     created_at: Optional[datetime] = None
@@ -94,7 +105,16 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     email: EmailStr
     code: str
-    new_password: str
+    new_password: str = Field(..., min_length=8, max_length=128)
+
+    @field_validator("new_password")
+    @classmethod
+    def validate_password_strength(cls, v: str) -> str:
+        if not re.search(r"[A-Za-z]", v):
+            raise ValueError("密码必须包含字母")
+        if not re.search(r"[0-9]", v):
+            raise ValueError("密码必须包含数字")
+        return v
 
 
 class MessageResponse(BaseModel):

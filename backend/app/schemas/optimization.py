@@ -11,9 +11,18 @@ class MatchAnalysis(BaseModel):
 
 
 class OptimizeRequest(BaseModel):
-    resume_id: str
-    job_image_id: str
+    resume_id: Optional[str] = None
+    job_image_id: Optional[str] = None
     custom_instructions: Optional[str] = None
+    template: Optional[str] = None  # 模板方案: 不传则自动选择
+
+
+class QuickOptimizeRequest(BaseModel):
+    """「我的信息」一键优化：直接传入简历文本和岗位文本"""
+    resume_text: str
+    job_text: str
+    custom_instructions: Optional[str] = None
+    template: Optional[str] = "professional"  # professional | simple
 
 
 class OptimizeResponse(BaseModel):

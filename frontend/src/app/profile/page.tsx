@@ -46,6 +46,10 @@ export default function ProfilePage() {
   const [changePwdOpen, setChangePwdOpen] = useState(false)
   const [pwdLoading, setPwdLoading] = useState(false)
   const [deleteModalOpen, setDeleteModalOpen] = useState(false)
+  const [syncing, setSyncing] = useState(false)
+  const [editField, setEditField] = useState<'resume_text' | 'job_text' | null>(null)
+  const [editText, setEditText] = useState('')
+  const [editLoading, setEditLoading] = useState(false)
 
   const [profileForm] = Form.useForm()
   const [expectationForm] = Form.useForm()
@@ -179,6 +183,39 @@ export default function ProfilePage() {
       message.success('全部已读')
       loadAll()
     } catch {}
+  }
+
+  const handleSyncSavedTexts = async () => {
+    setSyncing(true)
+    try {
+      const res = await user.syncSavedTexts()
+      message.success(res.data?.detail || '同步成功')
+      loadAll()
+    } catch {
+      message.error('同步失败')
+    } finally {
+      setSyncing(false)
+    }
+  }
+
+  const handleOpenEdit = (field: 'resume_text' | 'job_text') => {
+    setEditField(field)
+    setEditText(profile?.saved_texts?.[field] || '')
+  }
+
+  const handleSaveSavedText = async () => {
+    if (!editField) return
+    setEditLoading(true)
+    try {
+      await user.updateSavedTexts({ [editField]: editText })
+      message.success('已保存')
+      setEditField(null)
+      loadAll()
+    } catch {
+      message.error('保存失败')
+    } finally {
+      setEditLoading(false)
+    }
   }
 
   if (!token || !profile) return <Spin style={{ display: 'block', margin: '40px auto' }} />
@@ -383,6 +420,62 @@ export default function ProfilePage() {
                 </Card>
               ),
             },
+            {
+              key: 'saved_texts',
+              label: <span><FileTextOutlined /> 我的信息</span>,
+              children: (
+                <>
+                  <div style={{ marginBottom: 16, textAlign: 'right' }}>
+                    <Button
+                      type="primary"
+                      loading={syncing}
+                      onClick={handleSyncSavedTexts}
+                    >
+                      从简历库/岗位库同步
+                    </Button>
+                    <Typography.Text type="secondary" style={{ marginLeft: 8, fontSize: 12 }}>
+                      从已有的默认简历和默认岗位中读取信息
+                    </Typography.Text>
+                  </div>
+                  <Row gutter={[24, 24]}>
+                    <Col xs={24} md={12}>
+                      <Card
+                        title="简历信息"
+                        extra={<Button type="link" size="small" onClick={() => handleOpenEdit('resume_text')}>编辑</Button>}
+                        styles={{ body: { maxHeight: 500, overflow: 'auto' } }}
+                      >
+                        {profile.saved_texts?.resume_text ? (
+                          <Typography.Paragraph
+                            style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.8 }}
+                          >
+                            {profile.saved_texts.resume_text}
+                          </Typography.Paragraph>
+                        ) : (
+                          <Empty description="暂无简历信息，请先上传简历或点击同步" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                        )}
+                      </Card>
+                    </Col>
+                    <Col xs={24} md={12}>
+                      <Card
+                        title="岗位信息"
+                        extra={<Button type="link" size="small" onClick={() => handleOpenEdit('job_text')}>编辑</Button>}
+                        styles={{ body: { maxHeight: 500, overflow: 'auto' } }}
+                      >
+                        {profile.saved_texts?.job_text ? (
+                          <Typography.Paragraph
+                            style={{ whiteSpace: 'pre-wrap', fontSize: 13, lineHeight: 1.8 }}
+                          >
+                            {profile.saved_texts.job_text}
+                          </Typography.Paragraph>
+                        ) : (
+                          <Empty description="暂无岗位信息，请先上传岗位图片或点击同步" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+                        )}
+                      </Card>
+                    </Col>
+                  </Row>
+                </>
+              ),
+            },
           ]}
         />
 
@@ -424,6 +517,26 @@ export default function ProfilePage() {
           <Typography.Paragraph type="secondary">
             包括：简历文件、优化记录、投递反馈、个人资料等全部数据。
           </Typography.Paragraph>
+        </Modal>
+
+        {/* 编辑简历/岗位信息弹窗 */}
+        <Modal
+          title={editField === 'resume_text' ? '编辑简历信息' : '编辑岗位信息'}
+          open={!!editField}
+          onCancel={() => setEditField(null)}
+          width={700}
+          footer={[
+            <Button key="cancel" onClick={() => setEditField(null)}>取消</Button>,
+            <Button key="save" type="primary" loading={editLoading} onClick={handleSaveSavedText}>保存</Button>,
+          ]}
+        >
+          <Input.TextArea
+            value={editText}
+            onChange={(e) => setEditText(e.target.value)}
+            autoSize={{ minRows: 12, maxRows: 30 }}
+            style={{ fontSize: 13, lineHeight: 1.8 }}
+            placeholder={editField === 'resume_text' ? '请输入简历信息...' : '请输入岗位信息...'}
+          />
         </Modal>
       </Content>
     </Layout>

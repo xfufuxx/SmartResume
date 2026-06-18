@@ -17,10 +17,23 @@ def _get_client() -> AsyncOpenAI:
 
 
 async def _call_with_retry(client, **kwargs):
+    """带指数退避重试的 LLM 调用，自动处理 response_format 不兼容"""
+    kwargs.setdefault("timeout", 120.0)
     for attempt in range(MAX_RETRIES):
         try:
             return await client.chat.completions.create(**kwargs)
         except Exception as e:
+            error_msg = str(e).lower()
+            # response_format 不兼容时去掉该参数重试（使用副本，不影响后续 retry）
+            if "response_format" in error_msg or "json_object" in error_msg:
+                fallback_kwargs = {k: v for k, v in kwargs.items() if k != "response_format"}
+                try:
+                    return await client.chat.completions.create(**fallback_kwargs)
+                except Exception:
+                    if attempt == MAX_RETRIES - 1:
+                        raise
+                    await asyncio.sleep(1 * (attempt + 1))
+                    continue
             if attempt == MAX_RETRIES - 1:
                 raise
             await asyncio.sleep(1 * (attempt + 1))

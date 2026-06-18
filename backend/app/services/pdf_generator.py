@@ -294,7 +294,8 @@ def _build_fallback_pdf(resume: dict) -> bytes:
     return buf.getvalue()
 
 
-async def generate_pdf(resume_json: dict, template_name: str = "professional.html") -> bytes:
+def generate_pdf_sync(resume_json: dict, template_name: str = "professional.html") -> bytes:
+    """同步生成 PDF（在线程池中使用，避免阻塞事件循环）"""
     _ensure_template(template_name)
 
     template = env.get_template(template_name)
@@ -307,3 +308,9 @@ async def generate_pdf(resume_json: dict, template_name: str = "professional.htm
         except (ImportError, OSError):
             pass
     return _build_fallback_pdf(resume_json)
+
+
+async def generate_pdf(resume_json: dict, template_name: str = "professional.html") -> bytes:
+    """异步接口（兼容旧调用方），内部在线程池中执行"""
+    import asyncio as _asyncio
+    return await _asyncio.to_thread(generate_pdf_sync, resume_json, template_name)

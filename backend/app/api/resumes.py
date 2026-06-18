@@ -10,9 +10,10 @@ from app.core.deps import get_current_user
 from app.config import settings
 from app.models.user import User
 from app.models.resume import Resume
-from app.schemas.resume import ResumeResponse, ResumeUploadResponse, ResumeCreateRequest, ResumeUpdateRequest
+from app.schemas.resume import ResumeResponse, ResumeUploadResponse, ResumeCreateRequest, ResumeUpdateRequest, ResumeBatchDeleteRequest
 from app.services.resume_parser import parse_resume_from_bytes
 from app.services.storage import storage
+from app.services.text_formatter import format_resume_text
 
 logger = logging.getLogger(__name__)
 
@@ -67,6 +68,14 @@ async def upload_resume(
         raw_text=result["raw_text"],
     )
     db.add(resume)
+
+    # 将解析后的简历信息转为可读文字保存到用户个人信息中
+    resume_text = format_resume_text(result["parsed_json"])
+    if resume_text:
+        if not user.saved_texts:
+            user.saved_texts = {}
+        user.saved_texts = {**user.saved_texts, "resume_text": resume_text}
+
     await db.flush()
     await db.refresh(resume)
 
@@ -191,6 +200,55 @@ async def set_primary_resume(
     await db.commit()
     await db.refresh(resume)
     return resume
+
+
+@router.post("/batch-delete")
+async def batch_delete_resumes(
+    body: ResumeBatchDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    if not body.ids:
+        raise HTTPException(status_code=400, detail="请提供要删除的简历 ID 列表")
+
+    result = await db.execute(
+        select(Resume).where(
+            Resume.id.in_(body.ids),
+            Resume.user_id == user.id,
+            Resume.deleted_at.is_(None),
+        )
+    )
+    resumes_to_delete = result.scalars().all()
+
+    if not resumes_to_delete:
+        raise HTTPException(status_code=404, detail="未找到可删除的简历")
+
+    TZ_UTC8 = timezone(timedelta(hours=8))
+    now = datetime.now(TZ_UTC8)
+    deleted_count = 0
+    has_primary_deleted = False
+
+    for resume in resumes_to_delete:
+        if resume.is_primary:
+            has_primary_deleted = True
+        resume.deleted_at = now
+        resume.is_primary = False
+        deleted_count += 1
+
+    # 如果删除了主简历，自动提升下一个为默认
+    if has_primary_deleted:
+        primary_result = await db.execute(
+            select(Resume).where(
+                Resume.user_id == user.id,
+                Resume.deleted_at.is_(None),
+            ).order_by(Resume.created_at.desc()).limit(1)
+        )
+        first = primary_result.scalar_one_or_none()
+        if first:
+            first.is_primary = True
+
+    await db.commit()
+    return {"detail": f"已删除 {deleted_count} 份简历", "deleted_count": deleted_count}
 
 
 @router.get("/{resume_id}", response_model=ResumeResponse)

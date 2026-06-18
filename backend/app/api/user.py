@@ -6,11 +6,14 @@ from app.database import get_db
 from app.core.deps import get_current_user
 from app.core.crypto import mask_phone, mask_email
 from app.models.user import User
+from app.models.resume import Resume
+from app.models.job_image import JobImage
 from app.schemas.user import (
     UserResponse, UserProfileResponse, UpdateProfileRequest,
     UpdateExpectationRequest,
 )
 from app.services.storage import storage
+from app.services.text_formatter import format_resume_text, format_job_text
 
 router = APIRouter()
 
@@ -34,6 +37,7 @@ def _user_to_profile(user: User) -> UserProfileResponse:
         avatar_url=user.avatar_url,
         career_state=user.career_state,
         expectation=user.expectation,
+        saved_texts=user.saved_texts,
         privacy_agreed=user.privacy_agreed,
         status=user.status,
         created_at=user.created_at,
@@ -76,6 +80,94 @@ async def update_expectation(
     }
     await db.commit()
     return {"detail": "求职意向已更新", "expectation": user.expectation}
+
+
+@router.post("/sync-saved-texts")
+async def sync_saved_texts(
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """从已有的简历库和岗位库中读取默认数据，填充到用户的 saved_texts 中"""
+    saved = dict(user.saved_texts) if user.saved_texts else {}
+    updated_fields = []
+
+    # 读取默认简历（可能存在多条 is_primary=True，取最新一条）
+    resume_result = await db.execute(
+        select(Resume).where(
+            Resume.user_id == user.id,
+            Resume.deleted_at.is_(None),
+            Resume.is_primary == True,
+        ).order_by(Resume.created_at.desc()).limit(1)
+    )
+    primary_resume = resume_result.scalars().first()
+    if not primary_resume:
+        fallback = await db.execute(
+            select(Resume).where(
+                Resume.user_id == user.id,
+                Resume.deleted_at.is_(None),
+            ).order_by(Resume.created_at.desc()).limit(1)
+        )
+        primary_resume = fallback.scalars().first()
+
+    if primary_resume and primary_resume.parsed_json:
+        resume_text = format_resume_text(primary_resume.parsed_json)
+        if resume_text:
+            saved["resume_text"] = resume_text
+            updated_fields.append("简历信息")
+
+    # 读取默认岗位（可能存在多条 is_primary=True，取最新一条）
+    job_result = await db.execute(
+        select(JobImage).where(
+            JobImage.user_id == user.id,
+            JobImage.deleted_at.is_(None),
+            JobImage.is_primary == True,
+        ).order_by(JobImage.created_at.desc()).limit(1)
+    )
+    primary_job = job_result.scalars().first()
+    if not primary_job:
+        fallback = await db.execute(
+            select(JobImage).where(
+                JobImage.user_id == user.id,
+                JobImage.deleted_at.is_(None),
+            ).order_by(JobImage.created_at.desc()).limit(1)
+        )
+        primary_job = fallback.scalars().first()
+
+    if primary_job and primary_job.parsed_job_json:
+        job_text = format_job_text(primary_job.parsed_job_json)
+        if job_text:
+            saved["job_text"] = job_text
+            updated_fields.append("岗位信息")
+
+    if not updated_fields:
+        return {"detail": "没有找到可同步的简历或岗位数据", "saved_texts": user.saved_texts}
+
+    user.saved_texts = saved
+    await db.commit()
+    await db.refresh(user)
+
+    return {"detail": f"已同步: {', '.join(updated_fields)}", "saved_texts": user.saved_texts}
+
+
+@router.put("/saved-texts")
+async def update_saved_texts(
+    body: dict,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """允许用户手动修改简历文字和岗位文字"""
+    saved = dict(user.saved_texts) if user.saved_texts else {}
+
+    if "resume_text" in body:
+        saved["resume_text"] = body["resume_text"] or ""
+    if "job_text" in body:
+        saved["job_text"] = body["job_text"] or ""
+
+    user.saved_texts = saved
+    await db.commit()
+    await db.refresh(user)
+
+    return {"detail": "已更新", "saved_texts": user.saved_texts}
 
 
 @router.post("/avatar")
@@ -129,6 +221,7 @@ async def export_user_data(
             "nickname": user.nickname,
             "career_state": user.career_state,
             "expectation": user.expectation,
+            "saved_texts": user.saved_texts,
             "created_at": user.created_at.isoformat() if user.created_at else None,
         },
         "resumes": [

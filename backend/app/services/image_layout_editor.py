@@ -13,6 +13,7 @@ import io
 import uuid
 import json
 import base64
+import asyncio
 import logging
 from dataclasses import dataclass, field
 from typing import Optional
@@ -24,6 +25,9 @@ from app.config import settings
 from app.services import has_valid_api_key
 
 logger = logging.getLogger(__name__)
+
+MAX_RETRIES = 3
+VISION_TIMEOUT = 90.0  # 视觉模型超时（秒）
 
 # ─── 数据结构 ───────────────────────────────────────────────────
 
@@ -78,8 +82,11 @@ JSON 格式：
    - 不要留过多空白，也不要截断文字
    - 坐标是相对于图片左上角的像素坐标 [x1, y1, x2, y2]
 
-2. **photo_bbox**：
-   - 人脸照片的矩形区域（圆形头像取外接矩形）
+2. **photo_bbox**（仔细检查，不要遗漏）：
+   - 人脸照片/证件照/职业照/人物头像的矩形区域（圆形头像取外接矩形）
+   - 照片通常位于简历顶部左侧或右侧（中文简历常见右上角或左上角）
+   - 特征：蓝色/白色背景、带有边框的方形/圆形区域、人物面部
+   - 请仔细扫描简历顶部区域（上方 1/3），确认是否有照片
    - 如果没有照片则为 null
 
 3. **type 分类**：
@@ -135,20 +142,58 @@ async def extract_image_layout(image_bytes: bytes) -> ImageLayout:
     data_url = f"data:image/png;base64,{b64}"
 
     client = _get_client()
-    resp = await client.chat.completions.create(
-        model=settings.LLM_MODEL_VISION,
-        messages=[
-            {
-                "role": "user",
-                "content": [
-                    {"type": "text", "text": LAYOUT_EXTRACTION_PROMPT},
-                    {"type": "image_url", "image_url": {"url": data_url}},
-                ],
-            }
-        ],
-        max_tokens=4096,
-        response_format={"type": "json_object"},
-    )
+
+    def _make_request():
+        return client.chat.completions.create(
+            model=settings.LLM_MODEL_VISION,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": LAYOUT_EXTRACTION_PROMPT},
+                        {"type": "image_url", "image_url": {"url": data_url}},
+                    ],
+                }
+            ],
+            max_tokens=4096,
+            timeout=VISION_TIMEOUT,
+            response_format={"type": "json_object"},
+        )
+
+    for attempt in range(MAX_RETRIES):
+        try:
+            resp = await _make_request()
+            break
+        except Exception as e:
+            error_msg = str(e).lower()
+            if "response_format" in error_msg or "json_object" in error_msg:
+                # 去掉 response_format 重试
+                try:
+                    resp = await client.chat.completions.create(
+                        model=settings.LLM_MODEL_VISION,
+                        messages=[
+                            {
+                                "role": "user",
+                                "content": [
+                                    {"type": "text", "text": LAYOUT_EXTRACTION_PROMPT},
+                                    {"type": "image_url", "image_url": {"url": data_url}},
+                                ],
+                            }
+                        ],
+                        max_tokens=4096,
+                        timeout=VISION_TIMEOUT,
+                    )
+                    break
+                except Exception as e2:
+                    if attempt == MAX_RETRIES - 1:
+                        raise
+                    logger.warning(f"视觉模型调用失败 (attempt {attempt + 1}/{MAX_RETRIES}): {e2}")
+                    await asyncio.sleep(1 * (attempt + 1))
+                    continue
+            if attempt == MAX_RETRIES - 1:
+                raise
+            logger.warning(f"视觉模型调用失败 (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+            await asyncio.sleep(1 * (attempt + 1))
 
     content = resp.choices[0].message.content or "{}"
     try:
@@ -167,40 +212,12 @@ async def extract_image_layout(image_bytes: bytes) -> ImageLayout:
     if photo_bbox and isinstance(photo_bbox, list) and len(photo_bbox) == 4:
         layout.photo_bbox = tuple(photo_bbox)
     else:
-        # 模型未检测到照片 → 用更强提示词重试一次
-        logger.info("[照片检测] 第一次未检测到照片，用强化提示词重试...")
-        try:
-            resp2 = await client.chat.completions.create(
-                model=settings.LLM_MODEL_VISION,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": [
-                            {"type": "text", "text": (
-                                "请仔细看这张简历图片，找到证件照/职业照/人物头像的位置。\n"
-                                "照片通常是：人的面部照片、蓝色或白色背景的证件照、带有边框的方形/圆形头像。\n"
-                                "照片通常位于简历顶部左侧或右侧（中文简历常见右上角或左上角）。\n"
-                                "请返回照片的精确像素坐标边界框。\n"
-                                "如果确实没有任何人物照片，返回 {\"photo_bbox\": null}。\n"
-                                "只返回JSON，格式：{\"photo_bbox\": [x1, y1, x2, y2]}"
-                            )},
-                            {"type": "image_url", "image_url": {"url": data_url}},
-                        ],
-                    }
-                ],
-                max_tokens=256,
-                response_format={"type": "json_object"},
-            )
-            content2 = resp2.choices[0].message.content or "{}"
-            result2 = json.loads(content2)
-            pbbox = result2.get("photo_bbox")
-            if pbbox and isinstance(pbbox, list) and len(pbbox) == 4:
-                layout.photo_bbox = tuple(pbbox)
-                logger.info(f"[照片检测] 重试成功: {layout.photo_bbox}")
-            else:
-                logger.warning("[照片检测] 重试后仍未检测到照片，跳过照片保留")
-        except Exception as e:
-            logger.warning(f"[照片检测] 重试失败: {e}")
+        logger.info("[照片检测] 视觉模型未检测到照片，尝试启发式检测...")
+        layout.photo_bbox = _detect_photo_heuristic(img)
+        if layout.photo_bbox:
+            logger.info(f"[照片检测] 启发式检测成功: {layout.photo_bbox}")
+        else:
+            logger.warning("[照片检测] 未检测到照片，跳过照片保留")
 
     if layout.photo_bbox:
         try:
@@ -241,11 +258,11 @@ PROTECTED_TYPES = {"name", "contact", "education"}
 OPTIMIZABLE_TYPES = {"summary", "experience", "skills", "projects"}
 
 
-def _find_actual_text_bbox(img: Image.Image, bbox: tuple, search_margin: int = 15) -> tuple | None:
+def _find_actual_text_bbox(img: Image.Image, bbox: tuple, search_margin: int = 50) -> tuple | None:
     """
     在模型 bbox 周围搜索，返回实际文字像素的包围盒。
 
-    模型给出的 bbox 可能有 1-15px 偏差。此函数在 bbox ± search_margin
+    模型给出的 bbox 偏差可能很大（尤其多行文本）。此函数在 bbox ± search_margin
     范围内扫描非白色像素，返回真正的文字区域包围盒。
 
     如果搜索区域内没有足够文字像素（<5个），返回 None 表示 bbox 完全错位。
@@ -340,48 +357,110 @@ def _get_cjk_font(size: int) -> ImageFont.FreeTypeFont:
     return ImageFont.load_default()
 
 
+def _validate_and_clamp_bbox(
+    bbox: tuple, img_width: int, img_height: int, block_idx: int, text_preview: str = ""
+) -> tuple[int, int, int, int] | tuple[None, None, None, None]:
+    """
+    校验并裁剪 bbox 坐标，防止视觉模型返回非法坐标导致内容错位。
+
+    常见非法情况：
+    1. bbox 覆盖整个页面（全 0 或全图片尺寸）
+    2. 坐标超出图片范围
+    3. 区域面积过大（> 80% 页面）
+    4. 区域面积过小或为负
+    5. 坐标顺序颠倒（x0 > x1 或 y0 > y1）
+
+    Returns:
+        合法时返回 (x0, y0, x1, y1)，非法时返回 (None, None, None, None)
+    """
+    try:
+        x0, y0, x1, y1 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+    except (ValueError, IndexError, TypeError):
+        logger.warning(f"[BBox校验] block={block_idx} bbox 无法解析: {bbox}")
+        return None, None, None, None
+
+    # 坐标顺序修正
+    if x0 > x1:
+        x0, x1 = x1, x0
+    if y0 > y1:
+        y0, y1 = y1, y0
+
+    area = (x1 - x0) * (y1 - y0)
+    img_area = img_width * img_height
+
+    # 检查：面积为零或负
+    if area <= 0:
+        logger.warning(f"[BBox校验] block={block_idx} 面积为零: bbox=({x0},{y0},{x1},{y1})")
+        return None, None, None, None
+
+    # 检查：bbox 覆盖整个页面（视觉模型常见错误）
+    if area > img_area * 0.8:
+        logger.warning(
+            f"[BBox校验] block={block_idx} bbox 覆盖页面 {area/img_area*100:.0f}%，"
+            f"疑似视觉模型错误，跳过: text='{text_preview}'"
+        )
+        return None, None, None, None
+
+    # 检查：坐标完全在图片外
+    if x1 <= 0 or y1 <= 0 or x0 >= img_width or y0 >= img_height:
+        logger.warning(f"[BBox校验] block={block_idx} bbox 完全在图片外: ({x0},{y0},{x1},{y1})")
+        return None, None, None, None
+
+    # 裁剪到图片边界内
+    x0 = max(0, x0)
+    y0 = max(0, y0)
+    x1 = min(img_width, x1)
+    y1 = min(img_height, y1)
+
+    # 检查：裁剪后区域是否过小
+    if (x1 - x0) < 5 or (y1 - y0) < 5:
+        logger.warning(f"[BBox校验] block={block_idx} 裁剪后区域过小: ({x0},{y0},{x1},{y1})")
+        return None, None, None, None
+
+    return x0, y0, x1, y1
+
+
 def composite_image(
     original_bytes: bytes,
     layout: ImageLayout,
     optimized_texts: dict[int, str],  # {block_index: new_text}
 ) -> bytes:
     """
-    合成优化后的简历图片（100% 样式还原）。
+    合成优化后的简历图片（保留原简历全部视觉风格）。
 
-    照片处理策略（证件照/职业照完美还原）：
-    1. 在任何修改之前，从原图完整保存照片区域的所有像素
-    2. 文字处理时跳过与照片重叠的块（重叠>30%即跳过）
-    3. 所有文字处理完成后，将原始照片像素完整覆盖回去
-       → 不做掩码分析，不做灰度检测，100% 像素原样还原
-       → 圆形裁剪、边框、阴影、人像肤色全部完美保留
+    核心原则：
+    - 原简历的背景、装饰、线条、颜色、字体样式全部保留
+    - 只替换被优化的文字区域，替换后位置/大小/颜色与原版一致
+    - 照片（证件照/职业照）像素级还原
+    - 姓名、联系方式等受保护字段不做任何修改
 
-    Args:
-        original_bytes: 原始图片字节
-        layout: 版式信息
-        optimized_texts: {block_index: new_text} 映射
-
-    Returns:
-        合成后的图片字节
+    流程：
+    1. 从原图裁剪照片区域像素（后续原样还原）
+    2. 对每个需优化的文字块：
+       a. 从文字区域四边外侧采样真实背景色
+       b. 用背景色填充文字区域（带边距，彻底擦除旧文字像素）
+       c. 在原始精确位置写入优化后文字（保持字号、颜色一致）
+    3. 将照片像素原样还原（覆盖任何被误擦的区域）
     """
     # 加载原图
     original_img = Image.open(io.BytesIO(original_bytes)).convert("RGB")
     img = original_img.copy()
     draw = ImageDraw.Draw(img)
 
-    # ── 1. 从原图完整保存照片区域像素（证件照/职业照） ──
+    # ── 1. 保存照片区域像素 ──
     photo_pixels = None
     photo_rect = None
     if layout.photo_bbox:
         px0, py0, px1, py1 = layout.photo_bbox
         px0, py0 = max(0, px0), max(0, py0)
         px1, py1 = min(img.width, px1), min(img.height, py1)
-
         if px1 > px0 and py1 > py0:
             photo_pixels = original_img.crop((px0, py0, px1, py1))
             photo_rect = (px0, py0, px1, py1)
-            logger.info(f"照片区域完整保存: ({px0},{py0},{px1},{py1}), 尺寸: {px1-px0}x{py1-py0}px")
 
-    # ── 2. 处理每个文本块 ──
+    # ── 2. 逐块擦除旧文字 + 写入新文字 ──
+    ERASE_PADDING = 20  # 擦除边距（像素），确保旧文字边缘完全清除
+
     for idx, block in enumerate(layout.blocks):
         if idx not in optimized_texts:
             continue
@@ -389,7 +468,7 @@ def composite_image(
         if new_text == block.text:
             continue
 
-        # 跳过章节标题（is_header=True，不修改）
+        # 跳过章节标题（不修改）
         if block.is_header:
             continue
 
@@ -399,24 +478,53 @@ def composite_image(
         if is_white_text:
             continue
 
-        x0, y0, x1, y1 = block.bbox
-        x0 = max(0, int(x0))
-        y0 = max(0, int(y0))
-        x1 = min(img.width, int(x1))
-        y1 = min(img.height, int(y1))
-        if x1 <= x0 or y1 <= y0:
+        # ── bbox 合法性校验 ──
+        bx0, by0, bx1, by1 = _validate_and_clamp_bbox(
+            block.bbox, img.width, img.height, idx, block.text[:30]
+        )
+        if bx0 is None:
+            continue  # 跳过非法 bbox
+
+        # ── 像素扫描修正 bbox（修正视觉模型 1-15px 偏差）──
+        actual_bbox = _find_actual_text_bbox(original_img, (bx0, by0, bx1, by1))
+        if actual_bbox:
+            bx0, by0, bx1, by1 = actual_bbox
+            logger.debug(f"[bbox修正] block={idx} 修正后: ({bx0},{by0},{bx1},{by1})")
+        else:
+            logger.debug(f"[bbox修正] block={idx} 未找到文字像素，使用原始 bbox")
+
+        ex0 = max(0, bx0 - ERASE_PADDING)
+        ey0 = max(0, by0 - ERASE_PADDING)
+        ex1 = min(img.width, bx1 + ERASE_PADDING)
+        ey1 = min(img.height, by1 + ERASE_PADDING)
+        if ex1 <= ex0 or ey1 <= ey0:
             continue
 
-        # 跳过与照片重叠的文字块
-        if photo_rect:
-            overlap = _check_overlap((x0, y0, x1, y1), photo_rect)
-            if overlap > 0.3:
-                continue
+        # 跳过与照片重叠的块
+        if photo_rect and _check_overlap((ex0, ey0, ex1, ey1), photo_rect) > 0.3:
+            continue
 
-        # 用视觉模型的 bbox 直接填充背景色（覆盖旧文字像素）
-        # 不做像素扫描（不可靠），直接用 bbox + 小边距
-        bg_color = _sample_background_color(img, (x0, y0, x1, y1))
-        draw.rectangle([x0, y0, x1, y1], fill=bg_color)
+        # ── 裁剪擦除框，避免覆盖相邻块的内容 ──
+        for other in layout.blocks:
+            if other is block:
+                continue
+            obx0, oby0, obx1, oby1 = other.bbox
+            # 水平重叠时才检查
+            if obx0 >= ex1 or obx1 <= ex0:
+                continue
+            # 上方块：裁剪擦除框上边界
+            if oby1 <= ey0 + ERASE_PADDING and oby1 > ey0:
+                ey0 = max(ey0, oby1 + 2)
+            # 下方块：裁剪擦除框下边界
+            if oby0 >= ey1 - ERASE_PADDING and oby0 < ey1:
+                ey1 = min(ey1, oby0 - 2)
+
+        if ex1 <= ex0 or ey1 <= ey0:
+            continue
+
+        # ── 用背景色填充擦除区域（彻底覆盖旧文字像素）──
+        bg_color = _sample_background_color(img, (ex0, ey0, ex1, ey1))
+        draw.rectangle([ex0, ey0, ex1, ey1], fill=bg_color)
 
         # 解析文字颜色
         try:
@@ -429,16 +537,32 @@ def composite_image(
         font_size = max(10, min(block.font_size, 48))
         font = _get_cjk_font(font_size)
 
-        # 写入新文字
-        _draw_text_in_box(draw, new_text, (x0, y0, x1, y1), font, color_rgb)
+        # ── 限制写入高度：防止新文字压住下方模块 ──
+        capped_y1 = by1
+        for other in layout.blocks:
+            if other is block:
+                continue
+            oy0 = other.bbox[1]
+            # 找到正下方且水平有重叠的块
+            if oy0 > by0 and other.bbox[0] < bx1 and other.bbox[2] > bx0:
+                gap = oy0 - by1
+                if gap < 20:  # 间距 < 20px，有压住风险
+                    capped_y1 = min(by1, oy0 - 3)  # 留 3px 安全间距
+                    if capped_y1 < by0 + 10:
+                        capped_y1 = by0 + 10  # 最小高度（足够容纳 6px 最小字号）
+                    logger.debug(f"[下方保护] block={idx} y1: {by1} → {capped_y1} "
+                                 f"(下方 block 间距={gap}px)")
+                break  # 只检查最近的
 
-    # ── 3. 完整还原照片像素（证件照/职业照） ──
+        # 在原始精确位置写入新文字（不加边距，但限制最大高度）
+        draw_bbox = (bx0, by0, bx1, capped_y1)
+        _draw_text_in_box(draw, new_text, draw_bbox, font, color_rgb)
+
+    # ── 3. 还原照片像素 ──
     if photo_pixels and photo_rect:
-        # 直接覆盖，不做掩码分析，100% 像素还原
         img.paste(photo_pixels, (photo_rect[0], photo_rect[1]))
-        logger.info(f"照片完整还原: {photo_rect[2]-photo_rect[0]}x{photo_rect[3]-photo_rect[1]}px")
 
-    # 输出为高质量 PNG
+    # 输出
     buf = io.BytesIO()
     img.save(buf, format="PNG", optimize=True)
     return buf.getvalue()
@@ -478,33 +602,49 @@ def _sample_background_color(
     bbox: tuple[int, int, int, int],
 ) -> tuple[int, int, int]:
     """
-    采样文字区域的背景色。
-    策略：取文字区域上下边缘的像素中位数作为背景色。
+    采样擦除区域的背景色。
+
+    策略：在擦除框四角内侧各取 3x3 像素，过滤暗色后取中位数。
+    四角采样确保覆盖不同背景区域，中位数抗装饰线条/色块干扰。
     """
-    x0, y0, x1, y1 = bbox
+    x0, y0, x1, y1 = int(bbox[0]), int(bbox[1]), int(bbox[2]), int(bbox[3])
+    w, h = img.size
+
     samples = []
+    margin = 3
+    sample_size = 3
 
-    # 上边缘采样（y0-2 到 y0 的区域）
-    for dy in range(-2, 1):
-        y = max(0, y0 + dy)
-        for x in range(x0, min(x1, x0 + 50)):
-            if 0 <= x < img.width:
-                samples.append(img.getpixel((x, y)))
+    for dx in range(sample_size):
+        for dy in range(sample_size):
+            # 左上角
+            px, py = x0 + margin + dx, y0 + margin + dy
+            if 0 <= px < w and 0 <= py < h:
+                samples.append(img.getpixel((px, py)))
+            # 右上角
+            px, py = x1 - margin - dx, y0 + margin + dy
+            if 0 <= px < w and 0 <= py < h:
+                samples.append(img.getpixel((px, py)))
+            # 左下角
+            px, py = x0 + margin + dx, y1 - margin - dy
+            if 0 <= px < w and 0 <= py < h:
+                samples.append(img.getpixel((px, py)))
+            # 右下角
+            px, py = x1 - margin - dx, y1 - margin - dy
+            if 0 <= px < w and 0 <= py < h:
+                samples.append(img.getpixel((px, py)))
 
-    # 下边缘采样
-    for dy in range(0, 3):
-        y = min(img.height - 1, y1 + dy)
-        for x in range(x0, min(x1, x0 + 50)):
-            if 0 <= x < img.width:
-                samples.append(img.getpixel((x, y)))
+    # 过滤掉明显的文字像素（暗色）
+    bright_samples = [p for p in samples if p[0] > 180 and p[1] > 180 and p[2] > 180]
+    if bright_samples:
+        samples = bright_samples
 
     if not samples:
-        return (255, 255, 255)  # 默认白色
+        return (245, 245, 245)
 
-    # 取中位数颜色（避免异常值影响）
-    r = sorted(s[0] for s in samples)[len(samples) // 2]
-    g = sorted(s[1] for s in samples)[len(samples) // 2]
-    b = sorted(s[2] for s in samples)[len(samples) // 2]
+    # 使用中位数抗异常值
+    r = sorted(p[0] for p in samples)[len(samples) // 2]
+    g = sorted(p[1] for p in samples)[len(samples) // 2]
+    b = sorted(p[2] for p in samples)[len(samples) // 2]
     return (r, g, b)
 
 
@@ -516,59 +656,76 @@ def _draw_text_in_box(
     color: tuple[int, int, int],
 ):
     """
-    在指定矩形区域内绘制文字，支持自动换行。
+    在指定矩形区域内绘制文字，支持自动换行和字号自适应。
 
-    如果文字超出宽度，自动换行；超出高度则截断。
+    如果文字超出宽度，自动换行；超出高度则自动缩小字号重试。
     """
     x0, y0, x1, y1 = bbox
     max_width = x1 - x0
     max_height = y1 - y0
 
-    # 计算行高（基于字号，适当紧凑）
-    try:
-        # 使用实际字体度量
-        test_bbox = draw.textbbox((0, 0), "测试Tg", font=font)
-        actual_height = test_bbox[3] - test_bbox[1]
-        line_height = actual_height + 2
-    except (AttributeError, TypeError):
-        line_height = int(font.size * 1.3) if hasattr(font, 'size') else 20
+    _font = font
+    _font_size = font.size if hasattr(font, 'size') else 14
 
-    # 智能换行：中文按字，英文按词
-    lines = []
-    current_line = ""
+    # 字号自适应：最多尝试 7 次，每次缩小 2px（最小 4px）
+    for shrink_attempt in range(7):
+        if shrink_attempt > 0:
+            _font_size = max(4, _font_size - 2)
+            _font = _get_cjk_font(_font_size)
+            logger.debug(f"[字号自适应] 缩小字号至 {_font_size}px (attempt {shrink_attempt})")
 
-    for char in text:
-        if char == '\n':
-            lines.append(current_line)
-            current_line = ""
-            continue
-
-        test_line = current_line + char
+        # 计算行高（基于字号，适当紧凑）
         try:
-            bbox_test = draw.textbbox((0, 0), test_line, font=font)
-            test_width = bbox_test[2] - bbox_test[0]
+            test_bbox = draw.textbbox((0, 0), "测试Tg", font=_font)
+            actual_height = test_bbox[3] - test_bbox[1]
+            line_height = actual_height + 2
         except (AttributeError, TypeError):
-            try:
-                test_width = font.getlength(test_line)
-            except (AttributeError, TypeError):
-                test_width = len(test_line) * (font.size * 0.6 if hasattr(font, 'size') else 10)
+            line_height = int(_font.size * 1.3) if hasattr(_font, 'size') else 20
 
-        if test_width <= max_width:
-            current_line = test_line
-        else:
-            if current_line:
+        # 智能换行：中文按字，英文按词
+        lines = []
+        current_line = ""
+
+        for char in text:
+            if char == '\n':
                 lines.append(current_line)
-            current_line = char
+                current_line = ""
+                continue
 
-    if current_line:
-        lines.append(current_line)
+            test_line = current_line + char
+            try:
+                bbox_test = draw.textbbox((0, 0), test_line, font=_font)
+                test_width = bbox_test[2] - bbox_test[0]
+            except (AttributeError, TypeError):
+                try:
+                    test_width = _font.getlength(test_line)
+                except (AttributeError, TypeError):
+                    test_width = len(test_line) * (_font.size * 0.6 if hasattr(_font, 'size') else 10)
+
+            if test_width <= max_width:
+                current_line = test_line
+            else:
+                if current_line:
+                    lines.append(current_line)
+                current_line = char
+
+        if current_line:
+            lines.append(current_line)
+
+        # 检查是否超出高度
+        total_height = len(lines) * line_height
+        if total_height <= max_height + 2:
+            # 可以放下，结束适配
+            break
+        # 超出高度，缩小字号重试
+        lines = []
 
     # 绘制每一行
     y = y0
     for line in lines:
-        if y + line_height > y1 + 2:  # 允许少量溢出
+        if y + line_height > y1:  # 严格不超出 bbox 下边界
             break
-        draw.text((x0, y), line, font=font, fill=color)
+        draw.text((x0, y), line, font=_font, fill=color)
         y += line_height
 
 

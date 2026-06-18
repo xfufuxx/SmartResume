@@ -312,6 +312,28 @@ def rewrite_pdf(
                 continue
 
             bbox = block.bbox
+            # ── bbox 合法性校验 ──
+            x0, y0, x1, y1 = bbox
+            if x1 <= x0 or y1 <= y0:
+                logger.warning(
+                    f"[PDF重写] block={block.block_index} bbox 非法: ({x0:.1f},{y0:.1f},{x1:.1f},{y1:.1f})，跳过"
+                )
+                continue
+            area = (x1 - x0) * (y1 - y0)
+            page_area = page_layout.width * page_layout.height
+            if page_area > 0 and area > page_area * 0.8:
+                logger.warning(
+                    f"[PDF重写] block={block.block_index} bbox 覆盖页面 {area/page_area*100:.0f}%，"
+                    f"疑似解析异常，跳过"
+                )
+                continue
+            # 裁剪到页面边界
+            x0 = max(0, x0)
+            y0 = max(0, y0)
+            x1 = min(page_layout.width, x1)
+            y1 = min(page_layout.height, y1)
+            bbox = (x0, y0, x1, y1)
+
             rect = fitz.Rect(*bbox)
 
             # 检查是否与照片重叠
