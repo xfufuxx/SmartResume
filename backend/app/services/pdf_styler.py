@@ -6,9 +6,16 @@ import logging
 from collections import Counter
 
 from app.models.resume import Resume
-from app.services.pdf_generator import generate_pdf_sync
+from app.services.pdf_generator import generate_pdf
 
 logger = logging.getLogger(__name__)
+
+# 4 种 PDF 策略模板
+STRATEGY_TEMPLATES = {"jinja2", "html", "latex", "preserve"}
+# Jinja2 风格模板（映射到 templates/ 目录下的 .html 文件）
+JINJA2_STYLE_TEMPLATES = {"professional", "simple", "modern", "compact", "elegant", "dark", "fresh", "classic"}
+# 所有可用的模板选项
+ALL_TEMPLATES = STRATEGY_TEMPLATES | JINJA2_STYLE_TEMPLATES
 
 
 async def _generate_styled_or_fallback(
@@ -32,9 +39,9 @@ async def _generate_styled_or_fallback(
     """
     # 用户指定了模板方案 → 直接使用
     if template and resume is not None:
-        if template == "jinja2":
-            logger.info("[PDF生成] 用户指定 Jinja2 模板")
-            return await asyncio.to_thread(generate_pdf_sync, optimized)
+        if template in JINJA2_STYLE_TEMPLATES:
+            logger.info(f"[PDF生成] 用户指定 Jinja2 风格模板: {template}")
+            return await generate_pdf(optimized, f"{template}.html")
         if template == "html":
             logger.info("[PDF生成] 用户指定 HTML+Playwright 模板")
             try:
@@ -61,15 +68,15 @@ async def _generate_styled_or_fallback(
                 logger.warning(f"[PDF生成] 保留原样式失败: {e}")
         # 指定模板失败，回退到 Jinja2
         logger.info(f"[PDF生成] 指定模板 {template} 失败，回退到 Jinja2 模板")
-        return await asyncio.to_thread(generate_pdf_sync, optimized)
+        return await generate_pdf(optimized)
 
     if resume is None:
         # 纯文本来源（一键优化），根据 template 选择模板
-        if template and template not in ("professional", "simple", "jinja2"):
+        if template and template not in JINJA2_STYLE_TEMPLATES and template not in ("jinja2",):
             logger.info(f"[PDF生成] 纯文本来源不支持 '{template}' 方案，回退到专业分栏模板")
-        template_name = (template if template in ("professional", "simple") else "professional") + ".html"
+        template_name = (template if template in JINJA2_STYLE_TEMPLATES else "professional") + ".html"
         logger.info("[PDF生成] 无原始简历文件，使用模板渲染")
-        fallback_bytes = await asyncio.to_thread(generate_pdf_sync, optimized, template_name)
+        fallback_bytes = await generate_pdf(optimized, template_name)
         logger.info(f"[PDF生成] 模板 PDF 生成完成 ({template_name}): {len(fallback_bytes)} bytes")
         return fallback_bytes
 
@@ -128,9 +135,9 @@ async def _generate_styled_or_fallback(
         except Exception as e:
             logger.warning(f"[PDF生成] DOCX 样式保留失败: {e}")
 
-    # 回退：使用固定模板生成 PDF（在线程池中执行）
+    # 回退：使用固定模板生成 PDF
     logger.info("[PDF生成] 使用固定模板生成 PDF（回退方案）")
-    fallback_bytes = await asyncio.to_thread(generate_pdf_sync, optimized)
+    fallback_bytes = await generate_pdf(optimized)
     logger.info(f"[PDF生成] 回退模板 PDF 生成完成: {len(fallback_bytes)} bytes")
     return fallback_bytes
 
@@ -325,7 +332,7 @@ async def _run_styled_pdf_template(
     import fitz
     from app.services.image_layout_editor import extract_image_layout
     from app.services.text_optimizer import optimize_image_blocks
-    from app.services.resume_renderer import render_resume
+    from app.services.resume_renderer import render_resume_async
 
     local_path = _resolve_local_path(resume.original_file_url)
     file_type = (resume.file_type or "").lower()
@@ -353,8 +360,8 @@ async def _run_styled_pdf_template(
     optimized_texts = await optimize_image_blocks(layout.blocks, job_json, custom_instructions)
     logger.info(f"[模板渲染] 文本优化完成: {len(optimized_texts)} 个块")
 
-    # Step 4: 统一模板渲染 → PDF
-    pdf_bytes, html = render_resume(
+    # Step 4: 统一模板渲染 → PDF（使用异步 Playwright API，避免 Windows 兼容问题）
+    pdf_bytes, html = await render_resume_async(
         blocks=layout.blocks,
         optimized_texts=optimized_texts,
         original_image_bytes=img_bytes,
