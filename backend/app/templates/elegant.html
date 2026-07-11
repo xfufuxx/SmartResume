@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+  }
+  @page { margin: 0; size: A4; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+    font-size: 10pt;
+    color: #3a3a3a;
+    line-height: 1.7;
+    width: 210mm;
+    display: flex;
+  }
+
+  /* ── 左侧深色栏 ── */
+  .sidebar {
+    width: 30%;
+    background: #2d2d2d;
+    color: #d5d5d5;
+    padding: 30px 22px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+  }
+
+  .sidebar .name {
+    font-size: 22pt;
+    font-weight: 300;
+    letter-spacing: 6px;
+    color: #c9a962;
+    text-align: center;
+    border-bottom: 2px solid #c9a962;
+    padding-bottom: 10px;
+    margin-bottom: 4px;
+  }
+  .sidebar .job-title {
+    font-size: 10pt;
+    text-align: center;
+    color: #999;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+  }
+
+  .sidebar h3 {
+    font-size: 11pt;
+    font-weight: 400;
+    color: #c9a962;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    border-bottom: 1px solid #444;
+    padding-bottom: 4px;
+    margin-bottom: 6px;
+  }
+  .sidebar .info-item {
+    font-size: 9.5pt;
+    color: #bbb;
+    margin-bottom: 4px;
+    line-height: 1.6;
+    word-break: break-all;
+  }
+  .sidebar .skill-tag {
+    display: inline-block;
+    border: 1px solid #555;
+    color: #c9a962;
+    padding: 2px 8px;
+    margin: 2px 4px 2px 0;
+    font-size: 8.5pt;
+    letter-spacing: 1px;
+  }
+
+  /* ── 右侧内容区 ── */
+  .content {
+    flex: 1;
+    padding: 28px 28px 28px 26px;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+  }
+  .content h3 {
+    font-size: 13pt;
+    font-weight: 400;
+    color: #c9a962;
+    letter-spacing: 3px;
+    border-bottom: 1px solid #ddd;
+    padding-bottom: 4px;
+    margin-bottom: 8px;
+  }
+
+  .summary-text {
+    font-size: 10pt;
+    color: #666;
+    line-height: 1.8;
+    font-style: italic;
+  }
+
+  .exp-item {
+    margin-bottom: 14px;
+    position: relative;
+    padding-left: 16px;
+  }
+  .exp-item::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 4px;
+    width: 6px;
+    height: 6px;
+    background: #c9a962;
+    border-radius: 50%;
+  }
+  .exp-item:last-child { margin-bottom: 0; }
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 2px;
+  }
+  .exp-header .exp-company {
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: #2d2d2d;
+  }
+  .exp-header .exp-date {
+    font-size: 9pt;
+    color: #999;
+    font-style: italic;
+    white-space: nowrap;
+  }
+  .exp-role {
+    font-size: 9.5pt;
+    color: #777;
+    margin-bottom: 4px;
+  }
+  .exp-points {
+    list-style: none;
+    padding: 0;
+  }
+  .exp-points li {
+    font-size: 9.5pt;
+    color: #555;
+    line-height: 1.6;
+    margin-bottom: 2px;
+    padding-left: 10px;
+    position: relative;
+  }
+  .exp-points li::before {
+    content: "·";
+    position: absolute;
+    left: 0;
+    color: #c9a962;
+    font-weight: bold;
+  }
+
+  .edu-item {
+    margin-bottom: 8px;
+  }
+  .edu-item .school {
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: #2d2d2d;
+  }
+  .edu-item .info {
+    font-size: 9pt;
+    color: #888;
+    margin-top: 1px;
+  }
+
+  .proj-item {
+    margin-bottom: 10px;
+    padding-left: 12px;
+    border-left: 1px solid #e8e8e8;
+  }
+  .proj-item .proj-name {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #2d2d2d;
+  }
+  .proj-item .proj-desc {
+    font-size: 9pt;
+    color: #666;
+    margin: 2px 0;
+  }
+  .proj-item .proj-tech {
+    font-size: 8.5pt;
+    color: #c9a962;
+    letter-spacing: 0.5px;
+  }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="sidebar">
+    <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
+    {% if resume.personal_info.title %}
+    <div class="job-title">{{ resume.personal_info.title }}</div>
+    {% endif %}
+
+    {% if resume.personal_info.email or resume.personal_info.phone or resume.personal_info.address %}
+    <h3>联系方式</h3>
+    {% if resume.personal_info.email %}<div class="info-item">{{ resume.personal_info.email }}</div>{% endif %}
+    {% if resume.personal_info.phone %}<div class="info-item">{{ resume.personal_info.phone }}</div>{% endif %}
+    {% if resume.personal_info.address %}<div class="info-item">{{ resume.personal_info.address }}</div>{% endif %}
+    {% endif %}
+
+    {% if resume.skills %}
+    <h3>专业技能</h3>
+    {% for skill in resume.skills %}<span class="skill-tag">{{ skill }}</span>{% endfor %}
+    {% endif %}
+
+    {% if resume.personal_info.github or resume.personal_info.linkedin %}
+    <h3>社交链接</h3>
+    {% if resume.personal_info.github %}<div class="info-item">GitHub: {{ resume.personal_info.github }}</div>{% endif %}
+    {% if resume.personal_info.linkedin %}<div class="info-item">LinkedIn: {{ resume.personal_info.linkedin }}</div>{% endif %}
+    {% endif %}
+  </div>
+
+  <div class="content">
+    {% if resume.summary %}
+    <div>
+      <h3>个人概述</h3>
+      <div class="summary-text">{{ resume.summary }}</div>
+    </div>
+    {% endif %}
+
+    {% if resume.experience %}
+    <div>
+      <h3>工作经历</h3>
+      {% for exp in resume.experience %}
+      <div class="exp-item">
+        <div class="exp-header">
+          <span class="exp-company">{{ exp.company or exp.title }}</span>
+          <span class="exp-date">{{ exp.start }} — {{ exp.end }}</span>
+        </div>
+        <div class="exp-role">{{ exp.title }}</div>
+        {% if exp.points %}
+        <ul class="exp-points">
+          {% for point in exp.points %}<li>{{ point }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if resume.projects %}
+    <div>
+      <h3>项目经历</h3>
+      {% for proj in resume.projects %}
+      <div class="proj-item">
+        <div class="proj-name">{{ proj.name }}</div>
+        {% if proj.description %}<div class="proj-desc">{{ proj.description }}</div>{% endif %}
+        {% if proj.tech %}<div class="proj-tech">{{ proj.tech | join(' · ') }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if resume.education %}
+    <div>
+      <h3>教育背景</h3>
+      {% for edu in resume.education %}
+      <div class="edu-item">
+        <div class="school">{{ edu.school }}</div>
+        <div class="info">{{ edu.degree }}{% if edu.major %} · {{ edu.major }}{% endif %} | {{ edu.start }} — {{ edu.end }}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>

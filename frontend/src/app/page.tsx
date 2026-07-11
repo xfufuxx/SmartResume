@@ -4,28 +4,67 @@ import React, { useEffect, useState, useCallback, useRef } from 'react'
 import {
   Layout, Button, Upload, Card, Typography, Spin, Row, Col, message,
   Descriptions, Tag, Divider, Space, Alert, Progress, List, Input,
-  Modal, Empty, Dropdown,
+  Modal, Empty,
 } from 'antd'
 import {
   UploadOutlined, FileTextOutlined, PictureOutlined,
   ThunderboltOutlined, DownloadOutlined, LogoutOutlined,
   HistoryOutlined, HomeOutlined, BulbOutlined,
   DashboardOutlined, UserOutlined, SettingOutlined, FolderOpenOutlined,
-  BankOutlined, StarFilled, CodeOutlined, ToolOutlined,
+  BankOutlined, StarFilled, CodeOutlined, ToolOutlined, CrownOutlined,
+  RocketOutlined, ExperimentOutlined, HighlightOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { resumes, jobs, optimize, user, toBackendUrl } from '@/lib/api'
 import { getToken, clearAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/utils'
+import TemplateSelector from '@/components/TemplateSelector'
+import type { TemplateOption } from '@/components/TemplateSelector'
 import type { ResumeParseResult, JobParseResult, OptimizeResult, ResumeRecord } from '@/types'
 
 const { Header, Content } = Layout
 
-const TEMPLATE_OPTIONS = [
-  { key: 'professional', label: '专业分栏 (Jinja2)', icon: <FileTextOutlined /> },
-  { key: 'simple', label: '简约单栏 (Jinja2)', icon: <BulbOutlined /> },
-  { key: 'latex', label: 'LaTeX 专业排版', icon: <CodeOutlined /> },
-  { key: 'preserve', label: '保留原样式 (PyMuPDF)', icon: <ToolOutlined /> },
+const TEMPLATE_OPTIONS: TemplateOption[] = [
+  {
+    key: 'professional', label: '专业分栏', icon: <FileTextOutlined />,
+    preview: { primary: '#2c6fbb', secondary: '#1a5276', bg: '#fff', text: '#333', layout: 'dual', desc: '蓝色主题双栏布局，左侧联系信息右侧工作经历' },
+  },
+  {
+    key: 'simple', label: '简约单栏', icon: <BulbOutlined />,
+    preview: { primary: '#444', secondary: '#ddd', bg: '#fff', text: '#444', layout: 'single', desc: '极简单栏居中，浅灰色调，适合内容简洁的简历' },
+  },
+  {
+    key: 'modern', label: '现代渐变', icon: <StarFilled />,
+    preview: { primary: '#2c6fbb', secondary: '#3498db', bg: '#fff', text: '#333', layout: 'banner', desc: '蓝色渐变顶部横幅，左侧技能标签右侧工作经历' },
+  },
+  {
+    key: 'compact', label: '紧凑高效', icon: <ThunderboltOutlined />,
+    preview: { primary: '#111', secondary: '#333', bg: '#fff', text: '#333', layout: 'single', desc: '最大信息密度，时间线排版，适合内容丰富的简历' },
+  },
+  {
+    key: 'elegant', label: '优雅金边', icon: <CrownOutlined />,
+    preview: { primary: '#c9a962', secondary: '#2d2d2d', bg: '#fff', text: '#3a3a3a', layout: 'dual', desc: '深色侧边栏+金色点缀，高端商务风格' },
+  },
+  {
+    key: 'dark', label: '深色科技', icon: <RocketOutlined />,
+    preview: { primary: '#00d4ff', secondary: '#0d1117', bg: '#0d1117', text: '#e0e0e0', layout: 'dark', desc: '深色背景+霓虹蓝点缀，科技感十足，适合技术岗' },
+  },
+  {
+    key: 'fresh', label: '清新绿意', icon: <ExperimentOutlined />,
+    preview: { primary: '#2d6a4f', secondary: '#52b788', bg: '#fafcf8', text: '#3a5a40', layout: 'banner', desc: '绿色渐变顶部，自然清新风格，双栏布局' },
+  },
+  {
+    key: 'classic', label: '经典黑白', icon: <HighlightOutlined />,
+    preview: { primary: '#000', secondary: '#555', bg: '#fff', text: '#1a1a1a', layout: 'single', desc: '黑白极简，传统正式风格，粗线分隔，适合严肃场合' },
+  },
+  {
+    key: 'latex', label: 'LaTeX 专业排版', icon: <CodeOutlined />,
+    preview: { primary: '#2c3e50', secondary: '#2c6fbb', bg: '#fff', text: '#333', layout: 'dual', desc: '专业排版引擎，深蓝侧边栏，学术风格（需安装xelatex）' },
+  },
+  {
+    key: 'preserve', label: '保留原样式', icon: <ToolOutlined />,
+    preview: { primary: '#666', secondary: '#999', bg: '#fafafa', text: '#333', layout: 'single', desc: '在原PDF上替换文字，保留矢量图形/字体/照片（仅PDF）' },
+  },
 ]
 
 const POLL_INTERVAL = 2000     // 轮询间隔 2 秒
@@ -55,6 +94,7 @@ export default function Home() {
   const [optimizeProgress, setOptimizeProgress] = useState('')
   const [customInstructions, setCustomInstructions] = useState('')
   const [selectedTemplate, setSelectedTemplate] = useState('professional')
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [result, setResult] = useState<OptimizeResult | null>(null)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -418,20 +458,24 @@ export default function Home() {
           title={<span><ThunderboltOutlined /> 我的信息 — 一键优化</span>}
           style={{ marginBottom: 16, borderColor: '#1677ff' }}
           extra={
-            <Dropdown.Button
-              type="primary"
-              size="small"
-              loading={optimizing}
-              disabled={!savedTexts.resumeText.trim() || !savedTexts.jobText.trim()}
-              onClick={() => handleQuickOptimize()}
-              menu={{
-                items: TEMPLATE_OPTIONS,
-                selectedKeys: [selectedTemplate],
-                onClick: ({ key }) => setSelectedTemplate(key),
-              }}
-            >
-              优化我的简历
-            </Dropdown.Button>
+            <Space size={8}>
+              <Button
+                size="small"
+                icon={TEMPLATE_OPTIONS.find(o => o.key === selectedTemplate)?.icon || <FileTextOutlined />}
+                onClick={() => setShowTemplateModal(true)}
+              >
+                {TEMPLATE_OPTIONS.find(o => o.key === selectedTemplate)?.label || '选择模板'}
+              </Button>
+              <Button
+                type="primary"
+                size="small"
+                loading={optimizing}
+                disabled={!savedTexts.resumeText.trim() || !savedTexts.jobText.trim()}
+                onClick={() => handleQuickOptimize()}
+              >
+                优化我的简历
+              </Button>
+            </Space>
           }
         >
           {(!savedTexts.resumeText && !savedTexts.jobText) ? (
@@ -591,22 +635,24 @@ export default function Home() {
               />
             </Card>
           )}
-          <div style={{ display: 'flex', justifyContent: 'center' }}>
-            <Dropdown.Button
+          <div style={{ display: 'flex', justifyContent: 'center', gap: 12 }}>
+            <Button
+              size="large"
+              icon={TEMPLATE_OPTIONS.find(o => o.key === selectedTemplate)?.icon || <FileTextOutlined />}
+              onClick={() => setShowTemplateModal(true)}
+            >
+              {TEMPLATE_OPTIONS.find(o => o.key === selectedTemplate)?.label || '选择模板'}
+            </Button>
+            <Button
               type="primary"
               size="large"
               icon={<ThunderboltOutlined />}
               onClick={handleOptimize}
               loading={optimizing}
               disabled={!resumeId || !jobId}
-              menu={{
-                items: TEMPLATE_OPTIONS,
-                selectedKeys: [selectedTemplate],
-                onClick: ({ key }) => setSelectedTemplate(key),
-              }}
             >
               优化我的简历
-            </Dropdown.Button>
+            </Button>
           </div>
         </div>
 
@@ -788,6 +834,14 @@ export default function Home() {
           </Spin>
         </Modal>
       </Content>
+
+      <TemplateSelector
+        open={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        selected={selectedTemplate}
+        onSelect={setSelectedTemplate}
+        options={TEMPLATE_OPTIONS}
+      />
     </Layout>
   )
 }

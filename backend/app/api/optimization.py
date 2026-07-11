@@ -2,7 +2,7 @@ import uuid
 import json
 import asyncio
 from datetime import datetime, timedelta, timezone
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
@@ -635,6 +635,93 @@ def _guess_category(title: str) -> str:
     if any(w in t for w in ["市场", "marketing", "销售"]):
         return "市场"
     return "其他"
+
+
+# ── 模板测试（跳过 LLM，直接渲染 PDF） ──
+
+_MOCK_RESUME_DATA = {
+    "personal_info": {
+        "name": "张三",
+        "email": "zhangsan@example.com",
+        "phone": "138-0000-0000",
+    },
+    "summary": "5年全栈开发经验，熟悉 Python、TypeScript、React、FastAPI。主导过多个中大型项目的架构设计与落地，具备良好的团队协作与技术攻关能力。",
+    "experience": [
+        {
+            "title": "高级后端工程师",
+            "company": "某科技有限公司",
+            "start": "2021.06",
+            "end": "至今",
+            "points": [
+                "主导微服务架构迁移，将单体应用拆分为 8 个独立服务，系统可用性从 99.5% 提升至 99.95%",
+                "设计并实现统一网关层，支持限流、熔断、灰度发布，日均处理请求 500 万+",
+                "推动 CI/CD 流水线自动化，部署频率从每周一次提升至每日多次",
+            ],
+        },
+        {
+            "title": "全栈开发工程师",
+            "company": "另一家科技公司",
+            "start": "2019.07",
+            "end": "2021.05",
+            "points": [
+                "使用 React + FastAPI 开发内部数据平台，覆盖 200+ 日活用户",
+                "优化 PostgreSQL 慢查询 30+ 条，平均响应时间降低 60%",
+            ],
+        },
+    ],
+    "education": [
+        {
+            "school": "某某大学",
+            "degree": "硕士",
+            "major": "计算机科学与技术",
+            "start": "2017.09",
+            "end": "2019.06",
+        },
+        {
+            "school": "某某大学",
+            "degree": "学士",
+            "major": "软件工程",
+            "start": "2013.09",
+            "end": "2017.06",
+        },
+    ],
+    "skills": ["Python", "TypeScript", "React", "FastAPI", "PostgreSQL", "Docker", "Kubernetes", "Redis", "Git"],
+    "projects": [
+        {
+            "name": "智能简历优化系统",
+            "description": "基于 AI 的简历分析与优化平台，支持多种格式导入、智能内容优化、多模板 PDF 导出。",
+            "tech": ["FastAPI", "React", "Playwright", "SQLAlchemy"],
+        },
+    ],
+}
+
+
+@router.post("/test-template")
+async def test_template(
+    template: str = Query("professional", description="模板名称: professional, simple, modern, compact, elegant, dark, fresh, classic"),
+    body: dict | None = None,
+):
+    """测试模板渲染（跳过 LLM 优化，直接用数据生成 PDF）
+
+    用法:
+      POST /api/optimize/test-template?template=professional
+      POST /api/optimize/test-template?template=modern  （body 可传自定义 resume JSON）
+    """
+    from app.services.pdf_generator import generate_pdf
+
+    data = (body or {}).get("resume_data") or _MOCK_RESUME_DATA
+    template_name = f"{template}.html"
+
+    try:
+        pdf_bytes = await generate_pdf(data, template_name)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"PDF 生成失败: {type(e).__name__}: {e}")
+
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'inline; filename="test_{template}.pdf"'},
+    )
 
 
 def _compute_diff_summary(a: OptimizedResume, b: OptimizedResume) -> str:

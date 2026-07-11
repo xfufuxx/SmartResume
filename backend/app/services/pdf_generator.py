@@ -1,8 +1,11 @@
 import json
 import os
+import logging
 from io import BytesIO
 from jinja2 import Environment, FileSystemLoader
 from app.config import settings
+
+logger = logging.getLogger(__name__)
 
 TEMPLATE_DIR = os.path.join(os.path.dirname(__file__), "..", "templates")
 FONTS_DIR = os.path.join(os.path.dirname(__file__), "..", "fonts")
@@ -295,22 +298,68 @@ def _build_fallback_pdf(resume: dict) -> bytes:
 
 
 def generate_pdf_sync(resume_json: dict, template_name: str = "professional.html") -> bytes:
-    """同步生成 PDF（在线程池中使用，避免阻塞事件循环）"""
+    """同步生成 PDF（在线程池中使用，避免阻塞事件循环）
+
+    渲染策略：
+    1. Playwright (Chromium) — 完整 CSS 支持，无 GTK3 依赖，Windows 友好
+    2. WeasyPrint — 备选方案
+    3. ReportLab — 最终回退（纯 Python，无外部依赖）
+    """
     _ensure_template(template_name)
 
     template = env.get_template(template_name)
     html = template.render(resume=resume_json)
 
+    # 策略 1：Playwright (Chromium) — 支持完整 CSS，Windows 无需 GTK3
+    try:
+        from app.services.resume_renderer import html_to_pdf
+        logger.info(f"[PDF生成] 使用 Playwright 渲染 {template_name}")
+        result = html_to_pdf(html, base_url=TEMPLATE_DIR)
+        logger.info(f"[PDF生成] Playwright 成功: {len(result)} bytes")
+        return result
+    except (ImportError, OSError) as e:
+        logger.warning(f"[PDF生成] Playwright 不可用: {e}")
+    except Exception as e:
+        logger.error(f"[PDF生成] Playwright 渲染失败: {type(e).__name__}: {e}", exc_info=True)
+
+    # 策略 2：WeasyPrint — 需要 GTK3 系统库
     if settings.USE_WEASYPRINT:
         try:
             from weasyprint import HTML
             return HTML(string=html, base_url=TEMPLATE_DIR).write_pdf()
         except (ImportError, OSError):
             pass
+
+    # 策略 3：ReportLab — 纯 Python，无外部依赖
     return _build_fallback_pdf(resume_json)
 
 
 async def generate_pdf(resume_json: dict, template_name: str = "professional.html") -> bytes:
-    """异步接口（兼容旧调用方），内部在线程池中执行"""
-    import asyncio as _asyncio
-    return await _asyncio.to_thread(generate_pdf_sync, resume_json, template_name)
+    """异步接口，直接使用 Playwright 异步 API，避免 Windows 上的 NotImplementedError"""
+    _ensure_template(template_name)
+
+    template = env.get_template(template_name)
+    html = template.render(resume=resume_json)
+
+    # 策略 1：Playwright 异步 API — 避免 sync_playwright 在线程池中的 Windows 兼容问题
+    try:
+        from app.services.resume_renderer import html_to_pdf_async
+        logger.info(f"[PDF生成] 使用 Playwright 异步渲染 {template_name}")
+        result = await html_to_pdf_async(html, base_url=TEMPLATE_DIR)
+        logger.info(f"[PDF生成] Playwright 异步成功: {len(result)} bytes")
+        return result
+    except (ImportError, OSError) as e:
+        logger.warning(f"[PDF生成] Playwright 不可用: {e}")
+    except Exception as e:
+        logger.error(f"[PDF生成] Playwright 异步渲染失败: {type(e).__name__}: {e}", exc_info=True)
+
+    # 策略 2：WeasyPrint
+    if settings.USE_WEASYPRINT:
+        try:
+            from weasyprint import HTML
+            return HTML(string=html, base_url=TEMPLATE_DIR).write_pdf()
+        except (ImportError, OSError):
+            pass
+
+    # 策略 3：ReportLab 回退
+    return _build_fallback_pdf(resume_json)

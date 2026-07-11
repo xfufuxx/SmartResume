@@ -1,4 +1,9 @@
-import os
+import os, sys, asyncio
+
+# Windows 下必须使用 SelectorEventLoop 才能支持子进程（Playwright 需要）
+if sys.platform == "win32":
+    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware

@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+  }
+  @page { margin: 1.5cm 1.8cm; size: A4; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+    font-size: 10pt;
+    color: #1a1a1a;
+    line-height: 1.6;
+    width: 210mm;
+    background: #fff;
+  }
+
+  /* ── 经典黑线标题 ── */
+  .header {
+    text-align: center;
+    padding-bottom: 12px;
+    border-bottom: 3px solid #1a1a1a;
+    margin-bottom: 16px;
+  }
+  .header .name {
+    font-size: 26pt;
+    font-weight: 700;
+    letter-spacing: 10px;
+    color: #000;
+    margin-bottom: 6px;
+  }
+  .header .contact {
+    font-size: 9.5pt;
+    color: #555;
+    display: flex;
+    justify-content: center;
+    gap: 0 20px;
+    flex-wrap: wrap;
+  }
+  .header .contact span {
+    white-space: nowrap;
+    letter-spacing: 0.5px;
+  }
+
+  /* ── 章节 ── */
+  .section {
+    margin-bottom: 14px;
+  }
+  .section-title {
+    font-size: 12pt;
+    font-weight: 700;
+    letter-spacing: 3px;
+    text-transform: uppercase;
+    color: #000;
+    border-bottom: 2px solid #000;
+    padding-bottom: 2px;
+    margin-bottom: 8px;
+  }
+
+  .summary-text {
+    font-size: 9.5pt;
+    color: #333;
+    line-height: 1.7;
+    text-align: justify;
+  }
+
+  /* ── 经历条目 ── */
+  .exp-item {
+    margin-bottom: 10px;
+    page-break-inside: avoid;
+  }
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 2px;
+  }
+  .exp-header .title {
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: #000;
+  }
+  .exp-header .date {
+    font-size: 9pt;
+    color: #666;
+    white-space: nowrap;
+  }
+  .exp-sub {
+    font-size: 9.5pt;
+    color: #555;
+    font-style: italic;
+    margin-bottom: 4px;
+  }
+  .exp-points {
+    list-style: none;
+    padding: 0;
+  }
+  .exp-points li {
+    font-size: 9.5pt;
+    color: #333;
+    line-height: 1.6;
+    margin-bottom: 2px;
+    padding-left: 14px;
+    position: relative;
+  }
+  .exp-points li::before {
+    content: "—";
+    position: absolute;
+    left: 0;
+    color: #000;
+  }
+
+  .edu-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    margin-bottom: 4px;
+  }
+  .edu-item .school {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #000;
+  }
+  .edu-item .detail {
+    font-size: 9pt;
+    color: #555;
+    font-style: italic;
+  }
+
+  /* ── 技能 ── */
+  .skills-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 16px;
+  }
+  .skills-list span {
+    font-size: 9.5pt;
+    color: #333;
+    white-space: nowrap;
+  }
+  .skills-list span::before {
+    content: "▪ ";
+    font-size: 8pt;
+  }
+
+  .proj-item {
+    margin-bottom: 8px;
+    padding-left: 12px;
+    border-left: 2px solid #000;
+  }
+  .proj-item .proj-name {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #000;
+  }
+  .proj-item .proj-desc {
+    font-size: 9pt;
+    color: #444;
+    margin: 2px 0;
+  }
+  .proj-item .proj-tech {
+    font-size: 9pt;
+    color: #666;
+    font-style: italic;
+  }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
+    <div class="contact">
+      {% if resume.personal_info.email %}<span>{{ resume.personal_info.email }}</span>{% endif %}
+      {% if resume.personal_info.phone %}<span>{{ resume.personal_info.phone }}</span>{% endif %}
+      {% if resume.personal_info.address %}<span>{{ resume.personal_info.address }}</span>{% endif %}
+      {% if resume.personal_info.github %}<span>GitHub: {{ resume.personal_info.github }}</span>{% endif %}
+      {% if resume.personal_info.linkedin %}<span>{{ resume.personal_info.linkedin }}</span>{% endif %}
+    </div>
+  </div>
+
+  {% if resume.summary %}
+  <div class="section">
+    <div class="section-title">个人概述</div>
+    <div class="summary-text">{{ resume.summary }}</div>
+  </div>
+  {% endif %}
+
+  {% if resume.experience %}
+  <div class="section">
+    <div class="section-title">工作经历</div>
+    {% for exp in resume.experience %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <span class="title">{{ exp.title }}{% if exp.company %} — {{ exp.company }}{% endif %}</span>
+        <span class="date">{{ exp.start }} – {{ exp.end }}</span>
+      </div>
+      {% if exp.points %}
+      <ul class="exp-points">
+        {% for point in exp.points %}<li>{{ point }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resume.projects %}
+  <div class="section">
+    <div class="section-title">项目经历</div>
+    {% for proj in resume.projects %}
+    <div class="proj-item">
+      <div class="proj-name">{{ proj.name }}</div>
+      {% if proj.description %}<div class="proj-desc">{{ proj.description }}</div>{% endif %}
+      {% if proj.tech %}<div class="proj-tech">{{ proj.tech | join(' · ') }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resume.skills %}
+  <div class="section">
+    <div class="section-title">专业技能</div>
+    <div class="skills-list">
+      {% for skill in resume.skills %}<span>{{ skill }}</span>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if resume.education %}
+  <div class="section">
+    <div class="section-title">教育背景</div>
+    {% for edu in resume.education %}
+    <div class="edu-item">
+      <span class="school">{{ edu.school }}</span>
+      <span class="detail">{{ edu.degree }}{% if edu.major %} · {{ edu.major }}{% endif %} · {{ edu.start }} – {{ edu.end }}</span>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</body>
+</html>

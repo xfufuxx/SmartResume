@@ -586,7 +586,7 @@ def _parse_exp_header(text: str) -> dict:
     return {"date": "", "company": text, "role": "", "details": []}
 
 
-def html_to_pdf(html: str) -> bytes:
+def html_to_pdf(html: str, base_url: str | None = None) -> bytes:
     """
     使用 Playwright (Chromium) 将 HTML 转换为 PDF。
 
@@ -594,42 +594,83 @@ def html_to_pdf(html: str) -> bytes:
 
     Args:
         html: 完整的 HTML 字符串
+        base_url: 用于解析相对路径（如 @font-face 中的 url()）的基础 URL
 
     Returns:
         PDF 字节流
     """
-    import asyncio
+    # 使用同步 API（playwright 支持 sync 和 async）
+    from playwright.sync_api import sync_playwright
+
+    # 注入 base_url 以便解析相对路径
+    if base_url:
+        import re
+        html = re.sub(
+            r'(<head[^>]*>)',
+            rf'\1<base href="file:///{base_url.replace(chr(92), "/")}/">',
+            html,
+            count=1,
+        )
+
+    with sync_playwright() as p:
+        browser = p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox"]
+        )
+        try:
+            page = browser.new_page()
+            page.set_content(html, wait_until="networkidle")
+            pdf = page.pdf(
+                format="A4",
+                print_background=True,
+                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+            )
+            return pdf
+        finally:
+            browser.close()
+
+
+async def html_to_pdf_async(html: str, base_url: str | None = None) -> bytes:
+    """
+    使用 Playwright (Chromium) 异步 API 将 HTML 转换为 PDF。
+
+    异步版本，可在 async 上下文中直接 await，避免 Windows 上
+    sync_playwright 在非主线程中触发 NotImplementedError 的问题。
+
+    Args:
+        html: 完整的 HTML 字符串
+        base_url: 用于解析相对路径（如 @font-face 中的 url()）的基础 URL
+
+    Returns:
+        PDF 字节流
+    """
     from playwright.async_api import async_playwright
 
-    async def _render() -> bytes:
-        async with async_playwright() as p:
-            browser = await p.chromium.launch(
-                headless=True,
-                args=["--no-sandbox", "--disable-setuid-sandbox"]
-            )
-            try:
-                page = await browser.new_page()
-                await page.set_content(html, wait_until="networkidle")
-                pdf = await page.pdf(
-                    format="A4",
-                    print_background=True,
-                    margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
-                )
-                return pdf
-            finally:
-                await browser.close()
+    if base_url:
+        import re
+        html = re.sub(
+            r'(<head[^>]*>)',
+            rf'\1<base href="file:///{base_url.replace(chr(92), "/")}/">',
+            html,
+            count=1,
+        )
 
-    # 检查是否已在事件循环中
-    try:
-        loop = asyncio.get_running_loop()
-        # 在运行中的事件循环内，使用 run_coroutine_threadsafe 或直接 await
-        import concurrent.futures
-        with concurrent.futures.ThreadPoolExecutor() as executor:
-            future = executor.submit(asyncio.run, _render())
-            return future.result()
-    except RuntimeError:
-        # 没有运行中的事件循环，直接 asyncio.run
-        return asyncio.run(_render())
+    async with async_playwright() as p:
+        browser = await p.chromium.launch(
+            headless=True,
+            args=["--no-sandbox", "--disable-setuid-sandbox"]
+        )
+        try:
+            page = await browser.new_page()
+            await page.set_content(html, wait_until="networkidle")
+            pdf = await page.pdf(
+                format="A4",
+                print_background=True,
+                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+            )
+            return pdf
+        finally:
+            await browser.close()
 
 
 def render_resume(
@@ -673,6 +714,55 @@ def render_resume(
 
     # 生成 PDF
     pdf_bytes = html_to_pdf(html)
+    logger.info(f"[渲染] PDF 生成完成: {len(pdf_bytes)} bytes")
+
+    return pdf_bytes, html
+
+
+async def render_resume_async(
+    blocks: list,
+    optimized_texts: dict[int, str],
+    original_image_bytes: bytes | None = None,
+    photo_bbox: tuple | None = None,
+) -> tuple[bytes, str]:
+    """
+    一站式简历渲染（异步版本）：块 → HTML → PDF + HTML。
+
+    使用 Playwright 异步 API，可在 async 上下文中直接 await，
+    避免 Windows 上 sync_playwright 的 NotImplementedError。
+
+    Args:
+        blocks: ImageBlock 列表（来自视觉模型）
+        optimized_texts: {block_index: new_text}
+        original_image_bytes: 原始简历图片字节（用于提取照片）
+        photo_bbox: 照片区域 (x0, y0, x1, y1)
+
+    Returns:
+        (pdf_bytes, html_string)
+    """
+    # 提取照片
+    photo_bytes = None
+    if original_image_bytes and photo_bbox:
+        try:
+            img = Image.open(io.BytesIO(original_image_bytes))
+            px0, py0, px1, py1 = photo_bbox
+            px0, py0 = max(0, int(px0)), max(0, int(py0))
+            px1, py1 = min(img.width, int(px1)), min(img.height, int(py1))
+            if px1 > px0 and py1 > py0:
+                photo_img = img.crop((px0, py0, px1, py1))
+                buf = io.BytesIO()
+                photo_img.save(buf, format="PNG")
+                photo_bytes = buf.getvalue()
+                logger.info(f"[渲染] 照片提取成功: {px1-px0}x{py1-py0}px")
+        except Exception as e:
+            logger.warning(f"[渲染] 照片提取失败: {e}")
+
+    # 生成 HTML
+    html = blocks_to_html(blocks, optimized_texts, photo_bytes)
+    logger.info(f"[渲染] HTML 生成完成: {len(html)} 字符")
+
+    # 生成 PDF（异步）
+    pdf_bytes = await html_to_pdf_async(html)
     logger.info(f"[渲染] PDF 生成完成: {len(pdf_bytes)} bytes")
 
     return pdf_bytes, html
