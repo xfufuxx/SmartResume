@@ -1124,3 +1124,223 @@ body {
     padding: 12px 16px 20px !important;
   }
 }
+
+/* ═════════════════════════════════════════════════════════════════
+   Web iOS Shell — 网页端 iOS 风格外壳（侧边栏 + 顶部栏，非手机端）
+   ═════════════════════════════════════════════════════════════════ */
+.wb-shell {
+  min-height: 100vh;
+  background: var(--bg-body);
+  position: relative;
+}
+
+.wb-sidebar {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 248px;
+  display: flex;
+  flex-direction: column;
+  background: rgba(246, 246, 249, 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-right: 0.5px solid var(--ios-separator);
+  z-index: 80;
+  transition: transform 0.28s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+[data-theme="dark"] .wb-sidebar {
+  background: rgba(28, 28, 30, 0.82);
+}
+
+.wb-main {
+  margin-left: 248px;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.wb-header {
+  position: sticky;
+  top: 0;
+  z-index: 70;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 0 20px;
+  background: rgba(249, 249, 249, 0.82);
+  backdrop-filter: saturate(180%) blur(20px);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  border-bottom: 0.5px solid var(--ios-separator);
+}
+
+[data-theme="dark"] .wb-header {
+  background: rgba(0, 0, 0, 0.82);
+}
+
+.wb-content {
+  flex: 1;
+  padding: 24px 28px 40px;
+}
+
+.wb-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 16px 16px 10px;
+}
+
+.wb-brand-logo {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: var(--primary-500);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fff;
+  font-size: 18px;
+}
+
+.wb-brand-name {
+  font-size: 17px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.01em;
+}
+
+.wb-nav-group-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 14px 16px 6px;
+}
+
+.wb-navitem {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  width: 100%;
+  text-align: left;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  padding: 10px 12px;
+  margin: 2px 8px;
+  border-radius: 10px;
+  font-size: 15px;
+  color: var(--text-primary);
+  transition: background 0.15s, color 0.15s;
+  font-family: inherit;
+}
+
+.wb-navitem:hover {
+  background: var(--ios-systemfill-secondary);
+}
+
+.wb-navitem.active {
+  background: var(--ios-systemfill);
+  color: var(--ios-blue);
+  font-weight: 600;
+}
+
+.wb-navitem .wb-nav-icon {
+  font-size: 18px;
+  display: flex;
+}
+
+.wb-sidebar-footer {
+  margin-top: auto;
+  padding: 12px 16px;
+  border-top: 0.5px solid var(--ios-separator);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.wb-hamburger {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border: none;
+  background: transparent;
+  color: var(--text-primary);
+  font-size: 20px;
+  cursor: pointer;
+  border-radius: 9px;
+}
+
+.wb-hamburger:hover {
+  background: var(--ios-systemfill-secondary);
+}
+
+.wb-backdrop {
+  display: none;
+}
+
+.wb-header-title {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  min-width: 0;
+}
+
+.wb-header-title b {
+  font-size: 17px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-header-title span {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.wb-header-right {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+@media (max-width: 900px) {
+  .wb-sidebar {
+    transform: translateX(-100%);
+    box-shadow: none;
+  }
+  .wb-sidebar.open {
+    transform: translateX(0);
+    box-shadow: 0 0 40px rgba(0, 0, 0, 0.18);
+  }
+  .wb-main {
+    margin-left: 0;
+  }
+  .wb-hamburger {
+    display: inline-flex;
+  }
+  .wb-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.3);
+    z-index: 75;
+  }
+}
+
+@media (max-width: 640px) {
+  .wb-content {
+    padding: 16px 14px 32px;
+  }
+}
