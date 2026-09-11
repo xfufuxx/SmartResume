@@ -1,4 +1,1104 @@
+/* ═════════════════════════════════════════════════════════════════
+   SmartResume Design System — SaaS 仪表盘风格
+   基于首页.png 的现代、干净、数据驱动设计语言
+   ═════════════════════════════════════════════════════════════════ */
+
+:root {
+  /* ═══ Brand Colors — iOS System Blue ═══ */
+  --primary-50: #E9F2FF;
+  --primary-100: #CCE0FF;
+  --primary-200: #99C2FF;
+  --primary-300: #66A3FF;
+  --primary-400: #3399FF;
+  --primary-500: #007AFF;
+  --primary-600: #0066D6;
+  --primary-700: #0052A8;
+  --primary-800: #003D7A;
+
+  --success-50: #E7FBEC;
+  --success-500: #34C759;
+  --success-600: #28CD41;
+
+  --warning-50: #FFF3E0;
+  --warning-500: #FF9500;
+  --warning-600: #E68600;
+
+  --error-50: #FFE9E8;
+  --error-500: #FF3B30;
+  --error-600: #E0352B;
+
+  --purple-500: #AF52DE;
+  --orange-500: #FF9500;
+  --teal-500: #5AC8FA;
+
+  /* ═══ Neutral Palette — iOS System Gray ═══ */
+  --gray-0: #FFFFFF;
+  --gray-50: #F2F2F7;
+  --gray-100: #E5E5EA;
+  --gray-200: #D1D1D6;
+  --gray-300: #C7C7CC;
+  --gray-400: #AEAEB2;
+  --gray-500: #8E8E93;
+  --gray-600: #636366;
+  --gray-700: #48484A;
+  --gray-800: #2C2C2E;
+  --gray-900: #1C1C1E;
+
+  /* ═══ Semantic Text — iOS Label Colors ═══ */
+  --text-primary: #000000;
+  --text-secondary: rgba(60, 60, 67, 0.60);
+  --text-tertiary: rgba(60, 60, 67, 0.30);
+  --text-quaternary: rgba(60, 60, 67, 0.18);
+  --text-placeholder: #8E8E93;
+  --text-disabled: #C7C7CC;
+  --text-inverse: #FFFFFF;
+
+  /* ═══ Semantic Background — iOS ═══ */
+  --bg-body: #F2F2F7;
+  --bg-page: #F2F2F7;
+  --bg-card: #FFFFFF;
+  --bg-sidebar: #FFFFFF;
+  --bg-header: #FFFFFF;
+  --bg-hover: #E5E5EA;
+  --bg-active: rgba(0, 122, 255, 0.08);
+  --bg-overlay: rgba(0, 0, 0, 0.4);
+
+  /* ═══ Semantic Border — iOS Separator ═══ */
+  --border-light: rgba(60, 60, 67, 0.29);
+  --border-default: rgba(60, 60, 67, 0.29);
+  --border-medium: #C7C7CC;
+  --border-focus: rgba(0, 122, 255, 0.30);
+
+  /* ═══ Shadow System — light, iOS ═══ */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.04);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.06);
+  --shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.06);
+  --shadow-xl: 0 12px 28px rgba(0, 0, 0, 0.08);
+
+  /* ═══ Radius — iOS ═══ */
+  --radius-xs: 4px;
+  --radius-sm: 8px;
+  --radius-md: 10px;
+  --radius-lg: 12px;
+  --radius-xl: 16px;
+  --radius-2xl: 20px;
+  --radius-3xl: 24px;
+
+  /* ═══ Spacing — 8pt grid ═══ */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 20px;
+  --space-6: 24px;
+  --space-8: 32px;
+  --space-10: 40px;
+  --space-12: 48px;
+  --space-16: 64px;
+
+  /* ═══ Animation — iOS spring ═══ */
+  --ease-out: cubic-bezier(0.32, 0.72, 0, 1);
+  --ease-smooth: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --ease-ios: cubic-bezier(0.32, 0.72, 0, 1);
+  --duration-fast: 150ms;
+  --duration-normal: 280ms;
+  --duration-slow: 350ms;
+
+  /* ═══ Layout ═══ */
+  --sidebar-width: 220px;
+  --header-height: 84px;
+  --tabbar-height: 50px;
+  --safe-bottom: env(safe-area-inset-bottom);
+
+  /* ═══ Backward compat aliases ═══ */
+  --apple-blue: var(--primary-500);
+  --apple-blue-dark: var(--primary-600);
+  --apple-blue-light: var(--primary-400);
+  --apple-blue-surface: var(--primary-50);
+  --apple-green: var(--success-500);
+  --apple-green-surface: var(--success-50);
+  --apple-red: var(--error-500);
+  --apple-red-surface: var(--error-50);
+  --apple-orange: var(--warning-500);
+  --apple-orange-surface: var(--warning-50);
+  --bg-base: var(--bg-body);
+  --ios-blue: var(--primary-500);
+  --ios-green: var(--success-500);
+  --ios-red: var(--error-500);
+  --ios-orange: var(--warning-500);
+  --ios-separator: var(--border-light);
+  --ios-systemfill: rgba(120, 120, 128, 0.12);
+  --ios-systemfill-secondary: rgba(120, 120, 128, 0.08);
+  --ios-label-secondary: var(--text-secondary);
+  --ios-label-tertiary: var(--text-tertiary);
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Dark Theme Variables
+   ═════════════════════════════════════════════════════════════════ */
+
+[data-theme="dark"] {
+  /* Brand Colors — iOS dark blue */
+  --primary-50: rgba(10, 132, 255, 0.13);
+  --primary-100: rgba(10, 132, 255, 0.20);
+  --primary-200: rgba(10, 132, 255, 0.33);
+  --primary-300: #0A84FF;
+  --primary-400: #409CFF;
+  --primary-500: #0A84FF;
+  --primary-600: #409CFF;
+  --primary-700: #66B2FF;
+  --primary-800: #99CCFF;
+
+  --success-50: #1C3B26;
+  --success-500: #30D158;
+  --success-600: #4CD964;
+
+  --warning-50: #3A2E12;
+  --warning-500: #FF9F0A;
+  --warning-600: #FFB340;
+
+  --error-50: #3A1B19;
+  --error-500: #FF453A;
+  --error-600: #FF6961;
+
+  --purple-500: #BF5AF2;
+  --orange-500: #FF9F0A;
+  --teal-500: #64D2FF;
+
+  /* Neutral Palette — iOS dark */
+  --gray-0: #1C1C1E;
+  --gray-50: #2C2C2E;
+  --gray-100: #3A3A3C;
+  --gray-200: #48484A;
+  --gray-300: #636366;
+  --gray-400: #8E8E93;
+  --gray-500: #AEAEB2;
+  --gray-600: #C7C7CC;
+  --gray-700: #D1D1D6;
+  --gray-800: #E5E5EA;
+  --gray-900: #F5F5F7;
+
+  /* Semantic Text */
+  --text-primary: #FFFFFF;
+  --text-secondary: rgba(235, 235, 245, 0.60);
+  --text-tertiary: rgba(235, 235, 245, 0.30);
+  --text-quaternary: rgba(235, 235, 245, 0.18);
+  --text-placeholder: #8E8E93;
+  --text-disabled: #48484A;
+  --text-inverse: #000000;
+
+  /* Semantic Background — iOS dark */
+  --bg-body: #000000;
+  --bg-page: #000000;
+  --bg-card: #1C1C1E;
+  --bg-sidebar: #1C1C1E;
+  --bg-header: #1C1C1E;
+  --bg-hover: #2C2C2E;
+  --bg-active: rgba(10, 132, 255, 0.16);
+  --bg-overlay: rgba(0, 0, 0, 0.6);
+
+  /* Semantic Border */
+  --border-light: rgba(84, 84, 88, 0.6);
+  --border-default: rgba(84, 84, 88, 0.6);
+  --border-medium: #636366;
+  --border-focus: rgba(64, 156, 255, 0.40);
+
+  /* Shadow System — softer in dark */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-card: 0 1px 3px rgba(0, 0, 0, 0.35);
+  --shadow-md: 0 4px 10px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 20px rgba(0, 0, 0, 0.45);
+  --shadow-xl: 0 12px 28px rgba(0, 0, 0, 0.5);
+
+  /* Backward compat aliases */
+  --apple-blue: var(--primary-500);
+  --apple-blue-dark: var(--primary-400);
+  --apple-blue-light: var(--primary-600);
+  --apple-blue-surface: var(--primary-50);
+  --apple-green: var(--success-500);
+  --apple-green-surface: var(--success-50);
+  --apple-red: var(--error-500);
+  --apple-red-surface: var(--error-50);
+  --apple-orange: var(--warning-500);
+  --apple-orange-surface: var(--warning-50);
+  --bg-base: var(--bg-body);
+  --ios-blue: var(--primary-500);
+  --ios-green: var(--success-500);
+  --ios-red: var(--error-500);
+  --ios-orange: var(--warning-500);
+  --ios-separator: var(--border-light);
+  --ios-systemfill: rgba(120, 120, 128, 0.24);
+  --ios-systemfill-secondary: rgba(120, 120, 128, 0.16);
+  --ios-label-secondary: var(--text-secondary);
+  --ios-label-tertiary: var(--text-tertiary);
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Global Reset
+   ═════════════════════════════════════════════════════════════════ */
+
+* {
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
 body {
   margin: 0;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Noto Sans SC', sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Noto Sans SC',
+    'Microsoft YaHei', 'Segoe UI', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  background: var(--bg-body);
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Typography Utilities
+   ═════════════════════════════════════════════════════════════════ */
+
+.app-text-display {
+  font-size: 28px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.25;
+}
+
+.app-text-title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+  line-height: 1.35;
+}
+
+.app-text-subtitle {
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.app-text-body {
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.6;
+}
+
+.app-text-caption {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.5;
+  color: var(--text-tertiary);
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Card Utilities
+   ═════════════════════════════════════════════════════════════════ */
+
+.app-card {
+  border-radius: var(--radius-lg) !important;
+  border: 1px solid var(--border-light) !important;
+  background: var(--bg-card) !important;
+  box-shadow: var(--shadow-card) !important;
+  transition: box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.app-card:hover {
+  box-shadow: var(--shadow-md) !important;
+}
+
+.app-card-interactive {
+  cursor: pointer;
+}
+
+.app-card-interactive:hover {
+  box-shadow: var(--shadow-lg) !important;
+}
+
+.app-card-primary {
+  border-color: rgba(37, 99, 235, 0.12) !important;
+  background: linear-gradient(135deg, var(--primary-50), #FFFFFF) !important;
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Page Layout
+   ═════════════════════════════════════════════════════════════════ */
+
+.app-page {
+  min-height: calc(100vh - var(--header-height));
+  padding: var(--space-6);
+}
+
+.app-page-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: var(--space-6);
+  gap: var(--space-4);
+}
+
+.app-page-header-left h1 {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-primary);
+  margin: 0 0 4px;
+  letter-spacing: -0.02em;
+}
+
+.app-page-header-left p {
+  font-size: 14px;
+  color: var(--text-tertiary);
+  margin: 0;
+}
+
+.app-section-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-primary);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.app-section-subtitle {
+  font-size: 13px;
+  color: var(--text-tertiary);
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Stat Cards
+   ═════════════════════════════════════════════════════════════════ */
+
+.app-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: var(--space-5);
+  margin-bottom: var(--space-6);
+}
+
+.app-stat-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  padding: var(--space-5);
+  box-shadow: var(--shadow-card);
+  transition: box-shadow var(--duration-normal) var(--ease-out);
+}
+
+.app-stat-card:hover {
+  box-shadow: var(--shadow-md);
+}
+
+.app-stat-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: var(--space-3);
+}
+
+.app-stat-label {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  font-weight: 500;
+}
+
+.app-stat-icon {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 18px;
+}
+
+.app-stat-icon.blue { background: var(--primary-50); color: var(--primary-600); }
+.app-stat-icon.green { background: var(--success-50); color: var(--success-600); }
+.app-stat-icon.orange { background: var(--warning-50); color: var(--warning-600); }
+.app-stat-icon.red { background: var(--error-50); color: var(--error-600); }
+.app-stat-icon.purple { background: #F3E8FF; color: var(--purple-500); }
+.app-stat-icon.teal { background: #CCFBF1; color: var(--teal-500); }
+
+.app-stat-value {
+  font-size: 28px;
+  font-weight: 700;
+  color: var(--text-primary);
+  letter-spacing: -0.02em;
+  line-height: 1.2;
+}
+
+.app-stat-footer {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-top: var(--space-2);
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.app-stat-trend {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  font-weight: 600;
+  padding: 2px 6px;
+  border-radius: var(--radius-sm);
+}
+
+.app-stat-trend.up { color: var(--success-600); background: var(--success-50); }
+.app-stat-trend.down { color: var(--error-600); background: var(--error-50); }
+
+/* ═════════════════════════════════════════════════════════════════
+   Animation Keyframes
+   ═════════════════════════════════════════════════════════════════ */
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% center; }
+  100% { background-position: 200% center; }
+}
+
+/* 路由切换顶部进度条：从左到右扫过 */
+@keyframes route-progress {
+  0% { transform: translateX(-100%); opacity: 0; }
+  15% { opacity: 1; }
+  100% { transform: translateX(100%); opacity: 0; }
+}
+
+.animate-in {
+  animation: fade-in 0.4s var(--ease-out) both;
+}
+
+.animate-scale {
+  animation: scale-in 0.35s var(--ease-out) both;
+}
+
+.animate-slide {
+  animation: slide-up 0.45s var(--ease-out) both;
+}
+
+.stagger-list > * {
+  animation: fade-in 0.4s var(--ease-out) both;
+}
+
+.stagger-list > *:nth-child(1) { animation-delay: 0ms; }
+.stagger-list > *:nth-child(2) { animation-delay: 40ms; }
+.stagger-list > *:nth-child(3) { animation-delay: 80ms; }
+.stagger-list > *:nth-child(4) { animation-delay: 120ms; }
+.stagger-list > *:nth-child(5) { animation-delay: 160ms; }
+.stagger-list > *:nth-child(6) { animation-delay: 200ms; }
+
+/* ═════════════════════════════════════════════════════════════════
+   Content Blocks
+   ═════════════════════════════════════════════════════════════════ */
+
+.app-content-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  padding: var(--space-5);
+}
+
+.app-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  margin: var(--space-6) 0;
+  flex-wrap: wrap;
+}
+
+.app-empty-state {
+  text-align: center;
+  padding: var(--space-12) var(--space-6);
+}
+
+.app-empty-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  margin: var(--space-3) 0 var(--space-1);
+}
+
+.app-empty-desc {
+  font-size: 13px;
+  color: var(--text-tertiary);
+  margin-bottom: var(--space-4);
+}
+
+.app-skeleton {
+  background: linear-gradient(90deg, var(--gray-100) 25%, var(--gray-200) 50%, var(--gray-100) 75%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s ease-in-out infinite;
+  border-radius: var(--radius-sm);
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Progress / Rank
+   ═════════════════════════════════════════════════════════════════ */
+
+.app-rank-badge {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.app-rank-badge.top { background: #FEF3C7; color: #D97706; }
+.app-rank-badge.normal { background: var(--gray-100); color: var(--text-tertiary); }
+
+.app-progress-bar {
+  background: var(--gray-100);
+  border-radius: 999px;
+  height: 8px;
+  overflow: hidden;
+}
+
+.app-progress-bar > div {
+  height: 100%;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--primary-500), var(--primary-400));
+  transition: width 0.6s var(--ease-out);
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Lists
+   ═════════════════════════════════════════════════════════════════ */
+
+.app-list-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) 0;
+  border-bottom: 1px solid var(--border-light);
+}
+
+.app-list-item:last-child {
+  border-bottom: none;
+}
+
+.app-list-avatar {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--radius-md);
+  background: var(--gray-100);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-tertiary);
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.app-list-content {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-list-title {
+  font-weight: 500;
+  color: var(--text-primary);
+  margin-bottom: 2px;
+}
+
+.app-list-desc {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.app-list-extra {
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Ant Design Overrides
+   ═════════════════════════════════════════════════════════════════ */
+
+/* ── Card ── */
+.ant-card {
+  border-radius: var(--radius-xl) !important;
+  border: 1px solid var(--border-light) !important;
+  box-shadow: var(--shadow-card) !important;
+  background: var(--bg-card) !important;
+  overflow: hidden;
+}
+
+.ant-card:hover {
+  box-shadow: var(--shadow-md) !important;
+}
+
+.ant-card-head {
+  border-bottom: 1px solid var(--border-light) !important;
+  padding: 16px 20px !important;
+  font-weight: 600 !important;
+  min-height: auto !important;
+}
+
+.ant-card-head-title {
+  font-size: 15px !important;
+  font-weight: 600 !important;
+}
+
+.ant-card-body {
+  padding: 20px !important;
+}
+
+.ant-card-actions {
+  border-top: 1px solid var(--border-light) !important;
+  background: var(--gray-50) !important;
+}
+
+/* ── Button ── */
+.ant-btn {
+  border-radius: var(--radius-md) !important;
+  font-weight: 500 !important;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out) !important;
+  box-shadow: none !important;
+}
+
+.ant-btn-primary {
+  background: var(--primary-600) !important;
+  border-color: var(--primary-600) !important;
+}
+
+.ant-btn-primary:hover {
+  background: var(--primary-700) !important;
+  border-color: var(--primary-700) !important;
+}
+
+.ant-btn-default {
+  background: var(--bg-card) !important;
+  border-color: var(--border-medium) !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-btn-default:hover {
+  border-color: var(--primary-600) !important;
+  color: var(--primary-600) !important;
+}
+
+.ant-btn-text {
+  color: var(--text-secondary) !important;
+}
+
+.ant-btn-text:hover {
+  background: var(--bg-hover) !important;
+  color: var(--primary-600) !important;
+}
+
+.ant-btn-link {
+  color: var(--primary-600) !important;
+}
+
+.ant-btn-lg {
+  font-size: 15px !important;
+  height: 44px !important;
+  padding: 0 24px !important;
+}
+
+/* ── Input ── */
+.ant-input,
+.ant-input-affix-wrapper,
+.ant-input-password {
+  border-radius: var(--radius-md) !important;
+  border: 1px solid var(--border-medium) !important;
+  background: var(--bg-card) !important;
+  transition: background var(--duration-fast) var(--ease-out),
+              border-color var(--duration-fast) var(--ease-out),
+              color var(--duration-fast) var(--ease-out),
+              box-shadow var(--duration-fast) var(--ease-out) !important;
+}
+
+.ant-input:hover,
+.ant-input-affix-wrapper:hover {
+  border-color: var(--gray-400) !important;
+}
+
+.ant-input:focus,
+.ant-input-focused,
+.ant-input-affix-wrapper:focus,
+.ant-input-affix-wrapper-focused {
+  border-color: var(--primary-600) !important;
+  box-shadow: 0 0 0 3px var(--border-focus) !important;
+}
+
+.ant-input-affix-wrapper > input.ant-input {
+  border: none !important;
+}
+
+/* 移除浏览器自动填充时输入框的浅蓝色背景 */
+.ant-input:-webkit-autofill,
+.ant-input:-webkit-autofill:hover,
+.ant-input:-webkit-autofill:focus,
+.ant-input-affix-wrapper:-webkit-autofill,
+.ant-input-affix-wrapper:-webkit-autofill:hover,
+.ant-input-affix-wrapper:-webkit-autofill:focus,
+.ant-input-password:-webkit-autofill,
+.ant-input-password:-webkit-autofill:hover,
+.ant-input-password:-webkit-autofill:focus {
+  -webkit-box-shadow: 0 0 0 1000px var(--bg-card) inset !important;
+  -webkit-text-fill-color: var(--text-primary) !important;
+  transition: background-color 5000s ease-in-out 0s !important;
+}
+
+/* ── Select ── */
+.ant-select-selector {
+  border-radius: var(--radius-md) !important;
+  border-color: var(--border-medium) !important;
+}
+
+.ant-select-focused .ant-select-selector {
+  border-color: var(--primary-600) !important;
+  box-shadow: 0 0 0 3px var(--border-focus) !important;
+}
+
+.ant-select-dropdown {
+  border-radius: var(--radius-md) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* ── Modal ── */
+.ant-modal-content {
+  border-radius: 14px !important;
+  box-shadow: var(--shadow-xl) !important;
+  overflow: hidden;
+  background: var(--bg-card) !important;
+}
+
+.ant-modal-header {
+  background: var(--bg-card) !important;
+  border-bottom: 1px solid var(--border-light) !important;
+  padding: 18px 24px 14px !important;
+  margin-bottom: 0 !important;
+}
+
+.ant-modal-title {
+  font-weight: 600 !important;
+  font-size: 16px !important;
+  color: var(--text-primary) !important;
+}
+
+.ant-modal-body {
+  padding: 16px 24px 24px !important;
+}
+
+.ant-modal-footer {
+  padding: 12px 24px 20px !important;
+  border-top: 1px solid var(--border-light) !important;
+}
+
+/* ── Tag ── */
+.ant-tag {
+  border-radius: var(--radius-sm) !important;
+  font-size: 12px !important;
+  padding: 2px 8px !important;
+  border: none !important;
+  font-weight: 500;
+}
+
+/* ── Upload Dragger ── */
+.ant-upload.ant-upload-drag {
+  border-radius: var(--radius-lg) !important;
+  border: 2px dashed var(--border-medium) !important;
+  background: var(--gray-50) !important;
+}
+
+.ant-upload.ant-upload-drag:hover {
+  border-color: var(--primary-600) !important;
+  background: var(--primary-50) !important;
+}
+
+.ant-upload-drag-icon .anticon {
+  font-size: 40px !important;
+  color: var(--primary-600) !important;
+}
+
+/* ── Layout ── */
+.ant-layout {
+  background: transparent !important;
+}
+
+.ant-layout-content {
+  background: transparent !important;
+}
+
+/* ── Progress ── */
+.ant-progress-circle .ant-progress-circle-trail {
+  stroke: var(--gray-200) !important;
+}
+
+.ant-progress-circle .ant-progress-circle-path {
+  stroke-linecap: round !important;
+}
+
+/* ── List ── */
+.ant-list-item {
+  border-bottom: 1px solid var(--border-light) !important;
+  transition: background var(--duration-fast) var(--ease-out) !important;
+  padding: 12px 0 !important;
+}
+
+.ant-list-item:hover {
+  background: var(--gray-50) !important;
+}
+
+/* ── Alert ── */
+.ant-alert {
+  border-radius: var(--radius-md) !important;
+  border: none !important;
+}
+
+.ant-alert-info { background: var(--primary-50) !important; }
+.ant-alert-success { background: var(--success-50) !important; }
+.ant-alert-warning { background: var(--warning-50) !important; }
+.ant-alert-error { background: var(--error-50) !important; }
+
+/* ── Divider ── */
+.ant-divider {
+  border-color: var(--border-light) !important;
+}
+
+/* ── Typography ── */
+.ant-typography h1,
+.ant-typography h2,
+.ant-typography h3,
+.ant-typography h4 {
+  font-weight: 700 !important;
+  letter-spacing: -0.02em !important;
+  color: var(--text-primary) !important;
+}
+
+/* ── Steps ── */
+.ant-steps-item-title {
+  font-weight: 500 !important;
+  font-size: 13px !important;
+}
+
+.ant-steps .ant-steps-item-process .ant-steps-item-icon {
+  background: var(--primary-600) !important;
+  border-color: var(--primary-600) !important;
+}
+
+/* ── Spin ── */
+.ant-spin .ant-spin-dot-item {
+  background-color: var(--primary-600) !important;
+}
+
+/* ── Descriptions ── */
+.ant-descriptions-item-label {
+  color: var(--text-tertiary) !important;
+  font-size: 13px !important;
+}
+
+.ant-descriptions-item-content {
+  color: var(--text-primary) !important;
+  font-weight: 500 !important;
+}
+
+/* ── Tabs ── */
+.ant-tabs-nav {
+  margin-bottom: 16px !important;
+}
+
+.ant-tabs-tab {
+  font-weight: 500 !important;
+}
+
+.ant-tabs-tab-active .ant-tabs-tab-btn {
+  color: var(--primary-600) !important;
+}
+
+.ant-tabs-ink-bar {
+  background: var(--primary-600) !important;
+  height: 2px !important;
+  border-radius: 1px !important;
+}
+
+/* ── Table ── */
+.ant-table {
+  border-radius: var(--radius-lg) !important;
+  overflow: hidden;
+}
+
+.ant-table-thead > tr > th {
+  background: var(--gray-50) !important;
+  font-weight: 600 !important;
+  font-size: 13px !important;
+  color: var(--text-secondary) !important;
+  border-bottom: 1px solid var(--border-light) !important;
+}
+
+.ant-table-tbody > tr > td {
+  border-bottom: 1px solid var(--border-light) !important;
+}
+
+.ant-table-tbody > tr:hover > td {
+  background: var(--gray-50) !important;
+}
+
+/* ── Statistic ── */
+.ant-statistic-title {
+  font-size: 13px !important;
+  color: var(--text-tertiary) !important;
+  font-weight: 500 !important;
+}
+
+.ant-statistic-content {
+  font-weight: 700 !important;
+  letter-spacing: -0.02em;
+}
+
+/* ── Popconfirm / Popover ── */
+.ant-popover-inner,
+.ant-popconfirm .ant-popover-inner {
+  border-radius: var(--radius-lg) !important;
+  box-shadow: var(--shadow-lg) !important;
+}
+
+/* ── Tooltip ── */
+.ant-tooltip-inner {
+  border-radius: var(--radius-sm) !important;
+  font-size: 12px !important;
+}
+
+/* ── Empty ── */
+.ant-empty-description {
+  color: var(--text-tertiary) !important;
+}
+
+/* ── Badge ── */
+.ant-badge-count {
+  font-weight: 600 !important;
+  box-shadow: 0 0 0 2px var(--bg-card) !important;
+}
+
+/* ── Checkbox ── */
+.ant-checkbox-checked .ant-checkbox-inner {
+  background-color: var(--primary-600) !important;
+  border-color: var(--primary-600) !important;
+}
+
+.ant-checkbox-wrapper:hover .ant-checkbox-inner,
+.ant-checkbox:hover .ant-checkbox-inner {
+  border-color: var(--primary-600) !important;
+}
+
+/* ── Form ── */
+.ant-form-item-label > label {
+  font-weight: 500 !important;
+  font-size: 13px !important;
+  color: var(--text-secondary) !important;
+}
+
+/* ── Menu ── */
+.ant-menu {
+  background: transparent !important;
+  border-right: none !important;
+}
+
+.ant-menu-item {
+  border-radius: var(--radius-md) !important;
+  margin: 4px 12px !important;
+  width: calc(100% - 24px) !important;
+  color: var(--text-secondary) !important;
+}
+
+.ant-menu-item-selected,
+.ant-menu-item-active {
+  background: var(--primary-50) !important;
+  color: var(--primary-600) !important;
+  font-weight: 600 !important;
+}
+
+.ant-menu-item-selected .anticon,
+.ant-menu-item-active .anticon {
+  color: var(--primary-600) !important;
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Scrollbar
+   ═════════════════════════════════════════════════════════════════ */
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--gray-300);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--gray-400);
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Selection
+   ═════════════════════════════════════════════════════════════════ */
+
+::selection {
+  background: rgba(37, 99, 235, 0.15);
+  color: inherit;
+}
+
+/* ═════════════════════════════════════════════════════════════════
+   Responsive
+   ═════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  :root {
+    --radius-lg: 10px;
+    --radius-xl: 14px;
+  }
+
+  .app-page {
+    padding: var(--space-4);
+  }
+
+  .app-stat-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .ant-card-head {
+    padding: 12px 16px !important;
+  }
+
+  .ant-card-body {
+    padding: 16px !important;
+  }
+
+  .ant-modal-body {
+    padding: 12px 16px 20px !important;
+  }
 }

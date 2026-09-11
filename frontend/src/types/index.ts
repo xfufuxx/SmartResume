@@ -68,8 +68,6 @@ export interface AdminUser {
   status: string
   resume_count: number
   opt_count: number
-  is_vip: boolean
-  daily_quota: number
   created_at?: string
 }
 
@@ -89,11 +87,9 @@ export interface AdminUserDetail {
     daily_used: number
     monthly_limit: number
     monthly_used: number
-    is_paid: boolean
   }
   created_at?: string
   recent_logs: Array<{ action: string; detail?: string; created_at?: string }>
-  orders: Array<{ order_no: string; package_name?: string; amount: number; status: string; created_at?: string }>
 }
 
 export interface AdminStats {
@@ -113,7 +109,6 @@ export interface DashboardCore {
   today_optimizations: number
   today_uploads: number
   total_optimizations: number
-  paid_conversion_rate: number
 }
 
 export interface IndustryItem {
@@ -230,39 +225,6 @@ export interface ATSRuleItem {
   description?: string
 }
 
-export interface OrderItem {
-  id: string
-  order_no: string
-  user_id: string
-  nickname?: string
-  email?: string
-  package_name?: string
-  package_type: string
-  amount: number
-  payment_method?: string
-  status: string
-  paid_at?: string
-  created_at?: string
-}
-
-export interface RevenueData {
-  total_revenue: number
-  refund_amount: number
-  net_revenue: number
-  order_count: number
-  daily: Array<{ date: string; revenue: number; orders: number }>
-}
-
-export interface PackageItem {
-  id: string
-  name: string
-  package_type: string
-  price: number
-  duration_days?: number
-  quota_amount?: number
-  is_active: boolean
-}
-
 export interface FeedbackItem {
   id: string
   score: number
@@ -311,7 +273,6 @@ export interface AdminLogItem {
 export interface QuotaConfig {
   free_daily_limit: number
   free_monthly_limit: number
-  vip_unlimited: boolean
   carry_over: boolean
 }
 
@@ -349,8 +310,25 @@ export interface ResumeRecord {
   parsed_json: ResumeParseResult | null
   raw_text: string | null
   is_primary: boolean
+  target_position?: string | null
+  target_company?: string | null
+  version?: number
+  status?: string
+  match_rate?: number | null
+  score?: number | null
+  is_favorite?: boolean
+  thumbnail_url?: string | null
   deleted_at?: string
   created_at: string
+  updated_at?: string | null
+}
+
+export interface ResumeStats {
+  total: number
+  optimized: number
+  draft: number
+  unoptimized: number
+  favorite: number
 }
 
 export interface JobParseResult {

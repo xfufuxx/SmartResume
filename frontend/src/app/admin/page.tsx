@@ -1,22 +1,31 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useRef } from 'react'
+import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   Layout, Button, Card, Typography, Spin, message, Tabs, Row, Col,
   Table, Tag, Space, Statistic, Select, Input, Modal, Empty, Popconfirm,
-  Form, InputNumber, Radio, Badge, Descriptions, Divider, Tooltip,
+  Form, InputNumber, Radio, Badge, Descriptions, Divider, Tooltip, Progress,
+  Avatar, DatePicker, Dropdown,
 } from 'antd'
+import type { TableColumnsType, MenuProps } from 'antd'
 import {
   LogoutOutlined, HomeOutlined, UserOutlined,
   DashboardOutlined, SettingOutlined, TeamOutlined,
   BarChartOutlined, FileTextOutlined, AuditOutlined,
-  ApiOutlined, MonitorOutlined, DollarOutlined,
+  ApiOutlined, MonitorOutlined,
   MessageOutlined, KeyOutlined, SafetyOutlined,
   RobotOutlined, ThunderboltOutlined, ReloadOutlined,
   SearchOutlined, PlusOutlined, EditOutlined, DeleteOutlined,
   SendOutlined, EyeOutlined, StopOutlined, CheckCircleOutlined,
   ExclamationCircleOutlined, ClockCircleOutlined, RiseOutlined,
   FallOutlined, FundOutlined, PieChartOutlined, LineChartOutlined,
+  MenuFoldOutlined, MenuUnfoldOutlined, BellOutlined,
+  DownOutlined, MoreOutlined, SyncOutlined,
+  FileSyncOutlined, FileProtectOutlined,
+  ClusterOutlined, WarningOutlined, DatabaseOutlined,
+  DesktopOutlined, MobileOutlined, TabletOutlined,
+  GlobalOutlined, CarryOutOutlined, CloseCircleOutlined,
+  PauseCircleOutlined, PlayCircleOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import ReactEChartsCore from 'echarts-for-react/lib/core'
@@ -27,11 +36,12 @@ import { CanvasRenderer } from 'echarts/renderers'
 
 import { admin } from '@/lib/api'
 import { getToken, clearAdminAuth } from '@/lib/auth'
+import { formatDate } from '@/lib/utils'
 import type {
   AdminUser, AdminUserDetail, DashboardCore, IndustryItem, MatchTrend,
   FeatureUsage, JobTrendItem, SatisfactionTrend, TaskStats, FailedTask,
   PromptItem, PromptDetail, ModelConfig, CallLog, TemplateItem, KeywordItem,
-  ATSRuleItem, OrderItem, RevenueData, PackageItem, FeedbackItem,
+  ATSRuleItem, FeedbackItem,
   TicketItem, TicketDetail, AdminLogItem, QuotaConfig,
 } from '@/types'
 
@@ -39,50 +49,453 @@ echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, Leg
 
 const { Header, Sider, Content } = Layout
 const { TextArea } = Input
+const { RangePicker } = DatePicker
+
+type ChartOption = any
 
 const SCENE_LABELS: Record<string, string> = {
   work_experience: '工作经历', summary: '个人总结', project: '项目经验',
   skill_fill: '关键词填充', star_rewrite: 'STAR重写', general: '通用优化',
 }
-const STATUS_COLOR: Record<string, string> = { active: 'green', frozen: 'red', deleted_pending: 'orange' }
+const STATUS_COLOR: Record<string, string> = { active: 'success', frozen: 'error', deleted_pending: 'warning' }
 const STATUS_LABEL: Record<string, string> = { active: '正常', frozen: '已封禁', deleted_pending: '注销中' }
-const ORDER_STATUS: Record<string, { color: string; label: string }> = {
-  pending: { color: 'default', label: '待支付' }, success: { color: 'green', label: '已支付' },
-  failed: { color: 'red', label: '失败' }, refunding: { color: 'orange', label: '退款中' }, refunded: { color: 'purple', label: '已退款' },
-}
 const TICKET_CATEGORY: Record<string, string> = { bug: '功能故障', content_error: '内容错误', refund: '退款问题', other: '其他' }
+
+const ADMIN_MENU = [
+  { key: 'dashboard', icon: <DashboardOutlined />, label: '首页' },
+  { key: 'users', icon: <TeamOutlined />, label: '用户管理' },
+  { key: 'content', icon: <FileTextOutlined />, label: '内容管理' },
+  { key: 'ai', icon: <RobotOutlined />, label: 'AI模型管理' },
+  { key: 'monitor', icon: <MonitorOutlined />, label: '任务监控中心' },
+  { key: 'feedback', icon: <MessageOutlined />, label: '工单反馈中心' },
+  { key: 'logs', icon: <AuditOutlined />, label: '审计日志中心' },
+  { key: 'settings', icon: <SettingOutlined />, label: '系统设置' },
+]
+
+function formatNumber(n: number): string {
+  return n.toLocaleString('zh-CN')
+}
+
+function formatPercent(n: number, digits = 1): string {
+  return `${n >= 0 ? '+' : ''}${n.toFixed(digits)}%`
+}
+
+function cssVar(name: string): string {
+  return `var(${name})`
+}
+
+function resolveCssVar(name: string, fallback = ''): string {
+  if (typeof window === 'undefined') return fallback
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim() || fallback
+}
+
+function useCssVars() {
+  const [ready, setReady] = useState(false)
+  useEffect(() => {
+    setReady(true)
+  }, [])
+  return ready
+}
+
+function TrendTag({ value, prefix = '较昨日' }: { value: number; prefix?: string }) {
+  const isUp = value >= 0
+  return (
+    <span style={{
+      fontSize: 12, color: cssVar(isUp ? '--success-500' : '--error-500'),
+      display: 'inline-flex', alignItems: 'center', gap: 2,
+    }}>
+      {isUp ? <RiseOutlined /> : <FallOutlined />}
+      {prefix} {formatPercent(value)}
+    </span>
+  )
+}
+
+interface KpiCardProps {
+  label: string
+  value: React.ReactNode
+  icon: React.ReactNode
+  footer?: React.ReactNode
+  iconBg?: string
+  iconColor?: string
+}
+
+function KpiCard({ label, value, icon, footer, iconBg = cssVar('--primary-50'), iconColor = cssVar('--primary-500') }: KpiCardProps) {
+  return (
+    <Card bodyStyle={{ padding: 20 }} style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+      <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+        <div>
+          <div style={{ fontSize: 13, color: cssVar('--text-tertiary'), marginBottom: 8 }}>{label}</div>
+          <div style={{ fontSize: 24, fontWeight: 700, color: cssVar('--text-primary'), letterSpacing: '-0.02em' }}>{value}</div>
+          {footer && <div style={{ marginTop: 8 }}>{footer}</div>}
+        </div>
+        <div style={{
+          width: 44, height: 44, borderRadius: 10, display: 'flex', alignItems: 'center', justifyContent: 'center',
+          background: iconBg, color: iconColor, fontSize: 20, flexShrink: 0,
+        }}>
+          {icon}
+        </div>
+      </div>
+    </Card>
+  )
+}
+
+interface ChartCardProps {
+  title: React.ReactNode
+  children: React.ReactNode
+  extra?: React.ReactNode
+  height?: number
+}
+
+function ChartCard({ title, children, extra, height }: ChartCardProps) {
+  return (
+    <Card
+      title={<span style={{ color: cssVar('--text-primary'), fontWeight: 600, fontSize: 15 }}>{title}</span>}
+      extra={extra}
+      bodyStyle={{ padding: 16, height: height ? height + 32 : undefined }}
+      style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light'), height: '100%' }}
+    >
+      {children}
+    </Card>
+  )
+}
+
+function ProgressBar({ label, value, color = cssVar('--primary-500'), suffix = '%' }: { label: string; value: number; color?: string; suffix?: string }) {
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13, color: cssVar('--text-secondary') }}>
+        <span>{label}</span>
+        <span style={{ color: cssVar('--text-primary'), fontWeight: 600 }}>{value}{suffix}</span>
+      </div>
+      <div style={{ height: 8, borderRadius: 4, background: cssVar('--gray-100'), overflow: 'hidden' }}>
+        <div style={{
+          height: '100%', width: `${Math.min(100, Math.max(0, value))}%`, borderRadius: 4,
+          background: color, transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+        }} />
+      </div>
+    </div>
+  )
+}
+
+function UsersPanel() {
+  const [users, setUsers] = useState<AdminUser[]>([])
+  const [loading, setLoading] = useState(true)
+  const [search, setSearch] = useState('')
+  const [status, setStatus] = useState('')
+  const [page, setPage] = useState(1)
+  const [total, setTotal] = useState(0)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const res = await admin.getUsers(page, 10, search, status)
+      setUsers(res.data?.items || [])
+      setTotal(res.data?.total || 0)
+    } catch { message.error('加载用户失败') } finally { setLoading(false) }
+  }, [page, search, status])
+
+  useEffect(() => { load() }, [load])
+
+  const columns: TableColumnsType<AdminUser> = [
+    { title: '用户ID', dataIndex: 'id', width: 90 },
+    { title: '用户名', dataIndex: 'username', render: (v) => <span style={{ color: cssVar('--text-primary') }}>{v}</span> },
+    { title: '邮箱', dataIndex: 'email' },
+    { title: '注册时间', dataIndex: 'created_at', render: (v) => formatDate(v) },
+    { title: '状态', dataIndex: 'status', render: (v) => <Tag color={STATUS_COLOR[v]}>{STATUS_LABEL[v]}</Tag> },
+    { title: '操作', key: 'action', render: (_, record) => (
+      <Space>
+        <Button type="link" size="small">详情</Button>
+        {record.status === 'active' ? (
+          <Button type="link" danger size="small" onClick={() => admin.banUser(record.id, '违规').then(load)}>封禁</Button>
+        ) : (
+          <Button type="link" size="small" onClick={() => admin.unbanUser(record.id).then(load)}>解封</Button>
+        )}
+      </Space>
+    )},
+  ]
+
+  return (
+    <Card style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+      <div style={{ display: 'flex', gap: 12, marginBottom: 16 }}>
+        <Input placeholder="搜索用户名/邮箱" value={search} onChange={(e) => setSearch(e.target.value)} style={{ width: 240 }} />
+        <Select placeholder="状态" allowClear value={status || undefined} onChange={setStatus} options={[{ label: '正常', value: 'active' }, { label: '已封禁', value: 'frozen' }]} style={{ width: 120 }} />
+        <Button type="primary" icon={<SearchOutlined />} onClick={load}>查询</Button>
+      </div>
+      <Table rowKey="id" columns={columns} dataSource={users} loading={loading} pagination={{ current: page, pageSize: 10, total, onChange: setPage }} />
+    </Card>
+  )
+}
+
+function ContentPanel() {
+  const [activeTab, setActiveTab] = useState('templates')
+  const [templates, setTemplates] = useState<TemplateItem[]>([])
+  const [keywords, setKeywords] = useState<KeywordItem[]>([])
+  const [atsRules, setAtsRules] = useState<ATSRuleItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [t, k, a] = await Promise.all([
+        admin.getTemplates().catch(() => ({ data: [] })),
+        admin.getKeywords().catch(() => ({ data: [] })),
+        admin.getAtsRules().catch(() => ({ data: [] })),
+      ])
+      setTemplates(t.data || [])
+      setKeywords(k.data || [])
+      setAtsRules(a.data || [])
+    } catch { message.error('加载内容失败') } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const templateColumns: TableColumnsType<TemplateItem> = [
+    { title: '名称', dataIndex: 'name' },
+    { title: '描述', dataIndex: 'description' },
+    { title: '默认', dataIndex: 'is_default', render: (v) => v ? <Tag color="blue">是</Tag> : <Tag>否</Tag> },
+    { title: '操作', render: (_, r) => <Button type="link" size="small">编辑</Button> },
+  ]
+
+  const keywordColumns: TableColumnsType<KeywordItem> = [
+    { title: '关键词', dataIndex: 'keyword' },
+    { title: '行业', dataIndex: 'industry' },
+    { title: '分类', dataIndex: 'category' },
+    { title: '状态', dataIndex: 'is_active', render: (v) => <Tag color={v ? 'success' : 'default'}>{v ? '启用' : '停用'}</Tag> },
+  ]
+
+  const atsColumns: TableColumnsType<ATSRuleItem> = [
+    { title: '规则名', dataIndex: 'name' },
+    { title: '匹配模式', dataIndex: 'pattern' },
+    { title: '严重等级', dataIndex: 'severity', render: (v) => <Tag color={v === 'error' ? 'error' : v === 'warning' ? 'warning' : 'default'}>{v}</Tag> },
+    { title: '状态', dataIndex: 'is_active', render: (v) => <Tag color={v ? 'success' : 'default'}>{v ? '启用' : '停用'}</Tag> },
+  ]
+
+  return (
+    <Card style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+      <Tabs activeKey={activeTab} onChange={setActiveTab} items={[
+        { key: 'templates', label: '简历模板', children: <Table rowKey="id" columns={templateColumns} dataSource={templates} loading={loading} pagination={{ pageSize: 8 }} /> },
+        { key: 'keywords', label: '关键词库', children: <Table rowKey="id" columns={keywordColumns} dataSource={keywords} loading={loading} pagination={{ pageSize: 8 }} /> },
+        { key: 'ats', label: 'ATS规则', children: <Table rowKey="id" columns={atsColumns} dataSource={atsRules} loading={loading} pagination={{ pageSize: 8 }} /> },
+      ]} />
+    </Card>
+  )
+}
+
+function AIModelPanel() {
+  const [models, setModels] = useState<ModelConfig[]>([])
+  const [logs, setLogs] = useState<CallLog[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const [m, l] = await Promise.all([admin.getModels(), admin.getCallLogs(1, 20)])
+        setModels(m.data || [])
+        setLogs(l.data?.items || [])
+      } catch { message.error('加载模型数据失败') } finally { setLoading(false) }
+    }
+    load()
+  }, [])
+
+  const modelColumns: TableColumnsType<ModelConfig> = [
+    { title: '模型', dataIndex: 'name' },
+    { title: '提供商', dataIndex: 'provider' },
+    { title: '权重', dataIndex: 'weight' },
+    { title: '每分钟限制', dataIndex: 'rate_limit_per_minute' },
+    { title: '状态', dataIndex: 'is_enabled', render: (v) => <Tag color={v ? 'success' : 'error'}>{v ? '启用' : '停用'}</Tag> },
+    { title: '操作', render: () => <Button type="link" size="small">配置</Button> },
+  ]
+
+  const logColumns: TableColumnsType<CallLog> = [
+    { title: '时间', dataIndex: 'created_at', render: (v) => formatDate(v) },
+    { title: '模型', dataIndex: 'model_name' },
+    { title: '耗时', dataIndex: 'latency_ms', render: (v) => `${v}ms` },
+    { title: '结果', dataIndex: 'is_success', render: (v) => <Tag color={v ? 'success' : 'error'}>{v ? '成功' : '失败'}</Tag> },
+  ]
+
+  return (
+    <Row gutter={[16, 16]}>
+      <Col xs={24} lg={14}>
+        <Card title="模型配置" style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+          <Table rowKey="id" columns={modelColumns} dataSource={models} loading={loading} pagination={{ pageSize: 6 }} />
+        </Card>
+      </Col>
+      <Col xs={24} lg={10}>
+        <Card title="最近调用日志" style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+          <Table rowKey="id" columns={logColumns} dataSource={logs} loading={loading} pagination={{ pageSize: 6 }} />
+        </Card>
+      </Col>
+    </Row>
+  )
+}
+
+function MonitorPanel() {
+  const [stats, setStats] = useState<TaskStats | null>(null)
+  const [failed, setFailed] = useState<FailedTask[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const [s, f] = await Promise.all([admin.getTaskStats(), admin.getFailedTasks()])
+        setStats(s.data || null)
+        setFailed(f.data?.items || [])
+      } catch { message.error('加载监控数据失败') } finally { setLoading(false) }
+    }
+    load()
+  }, [])
+
+  const failedColumns: TableColumnsType<FailedTask> = [
+    { title: '任务ID', dataIndex: 'id' },
+    { title: '类型', dataIndex: 'task_type' },
+    { title: '错误信息', dataIndex: 'error_message', ellipsis: true },
+    { title: '失败时间', dataIndex: 'failed_at', render: (v) => formatDate(v) },
+    { title: '操作', render: (_, r) => <Button type="link" size="small" onClick={() => admin.retryTasks([r.id]).then(() => message.success('已重试'))}>重试</Button> },
+  ]
+
+  return (
+    <Row gutter={[16, 16]}>
+      <Col xs={24} lg={8}>
+        <Card title="任务统计" style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+            <KpiCard label="今日任务" value={stats?.today_total || 0} icon={<ClockCircleOutlined />} iconBg={cssVar('--warning-50')} iconColor={cssVar('--warning-500')} />
+            <KpiCard label="今日成功" value={stats?.today_success || 0} icon={<CheckCircleOutlined />} iconBg={cssVar('--success-50')} iconColor={cssVar('--success-500')} />
+            <KpiCard label="成功率" value={`${(stats?.success_rate || 0).toFixed(1)}%`} icon={<SyncOutlined spin />} iconBg={cssVar('--primary-50')} iconColor={cssVar('--primary-500')} />
+            <KpiCard label="平均耗时" value={`${stats?.avg_latency_ms || 0}ms`} icon={<ClockCircleOutlined />} iconBg={`${cssVar('--purple-500')}20`} iconColor={cssVar('--purple-500')} />
+          </div>
+        </Card>
+      </Col>
+      <Col xs={24} lg={16}>
+        <Card title="失败任务" style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+          <Table rowKey="id" columns={failedColumns} dataSource={failed} loading={loading} pagination={{ pageSize: 6 }} />
+        </Card>
+      </Col>
+    </Row>
+  )
+}
+
+function FeedbackPanel() {
+  const [tickets, setTickets] = useState<TicketItem[]>([])
+  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const [t, f] = await Promise.all([admin.getTickets(), admin.getFeedbacks()])
+        setTickets(t.data?.items || [])
+        setFeedbacks(f.data?.items || [])
+      } catch { message.error('加载反馈数据失败') } finally { setLoading(false) }
+    }
+    load()
+  }, [])
+
+  const ticketColumns: TableColumnsType<TicketItem> = [
+    { title: '标题', dataIndex: 'title' },
+    { title: '分类', dataIndex: 'category', render: (v) => TICKET_CATEGORY[v] || v },
+    { title: '优先级', dataIndex: 'priority', render: (v) => <Tag color={v === 'high' ? 'error' : v === 'medium' ? 'warning' : 'default'}>{v}</Tag> },
+    { title: '状态', dataIndex: 'status', render: (v) => <Tag color={v === 'open' ? 'processing' : v === 'resolved' ? 'success' : 'default'}>{v}</Tag> },
+    { title: '操作', render: () => <Button type="link" size="small">处理</Button> },
+  ]
+
+  const feedbackColumns: TableColumnsType<FeedbackItem> = [
+    { title: '用户', dataIndex: 'username' },
+    { title: '评分', dataIndex: 'score', render: (v) => <Tag color={v >= 4 ? 'success' : v >= 3 ? 'warning' : 'error'}>{v}分</Tag> },
+    { title: '内容', dataIndex: 'content', ellipsis: true },
+    { title: '时间', dataIndex: 'created_at', render: (v) => formatDate(v) },
+  ]
+
+  return (
+    <Row gutter={[16, 16]}>
+      <Col xs={24} lg={14}>
+        <Card title="工单列表" style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+          <Table rowKey="id" columns={ticketColumns} dataSource={tickets} loading={loading} pagination={{ pageSize: 8 }} />
+        </Card>
+      </Col>
+      <Col xs={24} lg={10}>
+        <Card title="用户评价" style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+          <Table rowKey="id" columns={feedbackColumns} dataSource={feedbacks} loading={loading} pagination={{ pageSize: 6 }} />
+        </Card>
+      </Col>
+    </Row>
+  )
+}
+
+function LogsPanel() {
+  const [logs, setLogs] = useState<AdminLogItem[]>([])
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    const load = async () => {
+      setLoading(true)
+      try {
+        const res = await admin.getAdminLogs()
+        setLogs(res.data?.items || [])
+      } catch { message.error('加载日志失败') } finally { setLoading(false) }
+    }
+    load()
+  }, [])
+
+  const columns: TableColumnsType<AdminLogItem> = [
+    { title: '时间', dataIndex: 'created_at', render: (v) => formatDate(v), width: 170 },
+    { title: '管理员', dataIndex: 'admin_username' },
+    { title: '操作', dataIndex: 'action' },
+    { title: 'IP', dataIndex: 'ip_address' },
+    { title: '详情', dataIndex: 'details', ellipsis: true },
+  ]
+
+  return (
+    <Card style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+      <Table rowKey="id" columns={columns} dataSource={logs} loading={loading} pagination={{ pageSize: 10 }} />
+    </Card>
+  )
+}
+
+function SettingsPanel() {
+  const [form] = Form.useForm()
+  const [quota, setQuota] = useState<QuotaConfig | null>(null)
+
+  useEffect(() => {
+    admin.getQuotaConfig().then((res) => {
+      setQuota(res.data || null)
+      form.setFieldsValue(res.data || {})
+    })
+  }, [form])
+
+  return (
+    <Card title="配额与系统设置" style={{ background: cssVar('--bg-card'), borderColor: cssVar('--border-light') }}>
+      <Form form={form} layout="vertical" style={{ maxWidth: 600 }}>
+        <Form.Item name="default_daily_quota" label="默认每日额度">
+          <InputNumber style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item name="default_monthly_quota" label="默认每月额度">
+          <InputNumber style={{ width: '100%' }} />
+        </Form.Item>
+        <Form.Item>
+          <Button type="primary">保存设置</Button>
+        </Form.Item>
+      </Form>
+    </Card>
+  )
+}
 
 export default function AdminPage() {
   const router = useRouter()
   const [token, setToken] = useState<string | null>(null)
-  const [loading, setLoading] = useState(true)
   const [collapsed, setCollapsed] = useState(false)
   const [activeMenu, setActiveMenu] = useState('dashboard')
-  const autoRefreshRef = useRef<NodeJS.Timeout | null>(null)
 
   useEffect(() => {
+    if (typeof document !== 'undefined') {
+      document.documentElement.setAttribute('data-theme', 'dark')
+    }
     const t = getToken()
-    const adminData = localStorage.getItem('admin')
+    const adminData = typeof window !== 'undefined' ? localStorage.getItem('admin') : null
     if (!t || !adminData) { router.push('/admin/login'); return }
     setToken(t)
   }, [router])
-
-  useEffect(() => {
-    return () => { if (autoRefreshRef.current) clearInterval(autoRefreshRef.current) }
-  }, [])
-
-  const menuItems = [
-    { key: 'dashboard', icon: <DashboardOutlined />, label: '数据大屏' },
-    { key: 'users', icon: <TeamOutlined />, label: '用户管理' },
-    { key: 'content', icon: <FileTextOutlined />, label: '内容管理' },
-    { key: 'ai', icon: <RobotOutlined />, label: 'AI模型' },
-    { key: 'monitor', icon: <MonitorOutlined />, label: '任务监控' },
-    { key: 'finance', icon: <DollarOutlined />, label: '财务管理' },
-    { key: 'feedback', icon: <MessageOutlined />, label: '反馈工单' },
-    { key: 'logs', icon: <AuditOutlined />, label: '审计日志' },
-  ]
-
-  if (!token) return null
 
   const renderContent = () => {
     switch (activeMenu) {
@@ -91,52 +504,132 @@ export default function AdminPage() {
       case 'content': return <ContentPanel />
       case 'ai': return <AIModelPanel />
       case 'monitor': return <MonitorPanel />
-      case 'finance': return <FinancePanel />
       case 'feedback': return <FeedbackPanel />
       case 'logs': return <LogsPanel />
+      case 'settings': return <SettingsPanel />
       default: return <DashboardPanel />
     }
   }
 
+  if (!token) {
+    return (
+      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: cssVar('--bg-body') }}>
+        <Spin size="large" tip="正在加载..." />
+      </div>
+    )
+  }
+
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Sider collapsible collapsed={collapsed} onCollapse={setCollapsed} width={220} style={{ background: '#001529' }}>
-        <div style={{ height: 64, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-          <Typography.Title level={5} style={{ color: '#fff', margin: 0 }}>
-            {collapsed ? <SettingOutlined /> : '管理后台'}
-          </Typography.Title>
+    <Layout style={{ minHeight: '100vh', background: cssVar('--bg-body') }}>
+      <Sider
+        collapsible
+        collapsed={collapsed}
+        onCollapse={setCollapsed}
+        width={240}
+        collapsedWidth={72}
+        trigger={null}
+        style={{
+          background: cssVar('--bg-sidebar'),
+          borderRight: `1px solid ${cssVar('--border-light')}`,
+          position: 'fixed', left: 0, top: 0, bottom: 0, zIndex: 100,
+          boxShadow: cssVar('--shadow-lg'),
+        }}
+      >
+        <div style={{
+          height: 64, display: 'flex', alignItems: 'center', gap: 12,
+          padding: '0 20px', borderBottom: `1px solid ${cssVar('--border-light')}`,
+        }}>
+          <div style={{
+            width: 34, height: 34, borderRadius: 10,
+            background: `linear-gradient(135deg, ${cssVar('--primary-600')}, ${cssVar('--primary-400')})`,
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            boxShadow: `0 4px 10px ${cssVar('--primary-600')}40`,
+          }}>
+            <SettingOutlined style={{ color: cssVar('--gray-0'), fontSize: 18 }} />
+          </div>
+          {!collapsed && (
+            <Typography.Title level={5} style={{ color: cssVar('--text-primary'), margin: 0, fontWeight: 700, letterSpacing: '-0.01em' }}>
+              管理后台
+            </Typography.Title>
+          )}
         </div>
-        <div style={{ display: 'flex', flexDirection: 'column', height: 'calc(100% - 64px)' }}>
+
+        <div style={{ padding: '12px 0', display: 'flex', flexDirection: 'column', height: 'calc(100% - 64px)' }}>
           <div style={{ flex: 1 }}>
-            {menuItems.map((item) => (
-              <div
-                key={item.key}
-                onClick={() => setActiveMenu(item.key)}
-                style={{
-                  padding: '12px 24px', cursor: 'pointer', color: activeMenu === item.key ? '#fff' : '#ffffffa0',
-                  background: activeMenu === item.key ? '#1890ff' : 'transparent',
-                  display: 'flex', alignItems: 'center', gap: 10, transition: 'all 0.2s',
-                }}
-              >
-                {item.icon}
-                {!collapsed && <span>{item.label}</span>}
-              </div>
-            ))}
+            {ADMIN_MENU.map((item) => {
+              const active = activeMenu === item.key
+              return (
+                <div
+                  key={item.key}
+                  onClick={() => setActiveMenu(item.key)}
+                  style={{
+                    padding: '11px 20px', margin: '4px 12px', borderRadius: 8,
+                    cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
+                    color: active ? cssVar('--text-inverse') : cssVar('--text-secondary'),
+                    background: active ? cssVar('--primary-600') : 'transparent',
+                    transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+                    fontSize: 14, fontWeight: active ? 600 : 500,
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = cssVar('--bg-hover')
+                      e.currentTarget.style.color = cssVar('--text-primary')
+                    }
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!active) {
+                      e.currentTarget.style.background = 'transparent'
+                      e.currentTarget.style.color = cssVar('--text-secondary')
+                    }
+                  }}
+                >
+                  {item.icon}
+                  {!collapsed && <span>{item.label}</span>}
+                </div>
+              )
+            })}
+          </div>
+          <div
+            onClick={() => setCollapsed(!collapsed)}
+            style={{
+              padding: '12px 20px', margin: '8px 12px', borderRadius: 8,
+              cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12,
+              color: cssVar('--text-tertiary'), fontSize: 13,
+            }}
+          >
+            {collapsed ? <MenuUnfoldOutlined /> : <MenuFoldOutlined />}
+            {!collapsed && <span>收起菜单</span>}
           </div>
         </div>
       </Sider>
-      <Layout>
-        <Header style={{ background: '#fff', display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingInline: 24, boxShadow: '0 1px 4px rgba(0,0,0,0.08)' }}>
-          <Typography.Title level={5} style={{ margin: 0 }}>
-            {menuItems.find((m) => m.key === activeMenu)?.icon} {menuItems.find((m) => m.key === activeMenu)?.label}
-          </Typography.Title>
+
+      <Layout style={{
+        marginLeft: collapsed ? 72 : 240,
+        transition: 'margin-left 0.2s ease',
+        minHeight: '100vh', background: cssVar('--bg-body'),
+      }}>
+        <Header style={{
+          background: cssVar('--bg-header'), borderBottom: `1px solid ${cssVar('--border-light')}`,
+          height: 64, position: 'sticky', top: 0, zIndex: 99,
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
+          paddingInline: 24,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <Typography.Title level={5} style={{ margin: 0, color: cssVar('--text-primary'), fontWeight: 600, letterSpacing: '-0.01em' }}>
+              {ADMIN_MENU.find((m) => m.key === activeMenu)?.label}
+            </Typography.Title>
+          </div>
           <Space>
-            <Button icon={<HomeOutlined />} onClick={() => router.push('/')}>首页</Button>
-            <Button icon={<DashboardOutlined />} onClick={() => router.push('/dashboard')}>仪表盘</Button>
-            <Button icon={<LogoutOutlined />} onClick={() => { clearAdminAuth(); router.push('/admin/login') }}>退出</Button>
+            <Button icon={<HomeOutlined />} onClick={() => router.push('/')} type="text" style={{ color: cssVar('--text-secondary') }}>首页</Button>
+            <Button icon={<DashboardOutlined />} onClick={() => router.push('/dashboard')} type="text" style={{ color: cssVar('--text-secondary') }}>仪表盘</Button>
+            <Badge count={3} size="small">
+              <Button type="text" icon={<BellOutlined style={{ fontSize: 18 }} />} style={{ color: cssVar('--text-secondary') }} />
+            </Badge>
+            <Avatar style={{ background: `linear-gradient(135deg, ${cssVar('--primary-600')}, ${cssVar('--primary-400')})` }} icon={<UserOutlined />} />
+            <Button icon={<LogoutOutlined />} onClick={() => { clearAdminAuth(); router.push('/admin/login') }} type="text" style={{ color: cssVar('--text-tertiary') }}>退出</Button>
           </Space>
         </Header>
-        <Content style={{ padding: 24, background: '#f5f5f5', overflow: 'auto' }}>
+        <Content style={{ padding: 24, overflow: 'auto' }}>
           {renderContent()}
         </Content>
       </Layout>
@@ -148,6 +641,66 @@ export default function AdminPage() {
 //  数据大屏 Panel
 // ═══════════════════════════════════════════════════════
 
+const DASHBOARD_KPIS = [
+  { label: '用户总数', value: 28560, delta: 1.14, icon: <TeamOutlined />, iconBg: cssVar('--primary-50'), iconColor: cssVar('--primary-500') },
+  { label: '活跃用户', value: 8560, delta: 2.52, icon: <UserOutlined />, iconBg: cssVar('--success-50'), iconColor: cssVar('--success-500') },
+  { label: '生成任务总数', value: 132890, delta: 0.97, icon: <ThunderboltOutlined />, iconBg: cssVar('--warning-50'), iconColor: cssVar('--warning-500') },
+  { label: '今日任务数', value: 6432, delta: 15.45, icon: <CarryOutOutlined />, iconBg: cssVar('--error-50'), iconColor: cssVar('--error-500') },
+  { label: '系统剩余额度', value: 1256320, delta: 1.91, suffix: '次', icon: <DatabaseOutlined />, iconBg: '#CCFBF1', iconColor: cssVar('--teal-500') },
+]
+
+const TASK_TYPE_DATA = [
+  { value: 38560, name: '简历优化' },
+  { value: 28320, name: '简历评分' },
+  { value: 18820, name: '面试追踪' },
+  { value: 16540, name: '批量优化' },
+  { value: 12680, name: '职位匹配' },
+  { value: 18170, name: '其他' },
+]
+
+const PROVINCE_DATA = [
+  { name: '广东省', value: 3560 },
+  { name: '北京市', value: 2990 },
+  { name: '江苏省', value: 2450 },
+  { name: '浙江省', value: 2160 },
+  { name: '上海市', value: 1980 },
+  { name: '山东省', value: 1680 },
+  { name: '四川省', value: 1420 },
+]
+
+const FEATURE_TOP_DATA = [
+  { name: '简历优化', value: 32560 },
+  { name: '简历评分', value: 18760 },
+  { name: '批量优化', value: 9620 },
+  { name: '面试追踪', value: 6980 },
+  { name: 'AI 改写', value: 4360 },
+]
+
+const DEVICE_DATA = [
+  { value: 56.23, name: 'PC端' },
+  { value: 38.41, name: '移动端' },
+  { value: 5.36, name: '平板端' },
+]
+
+const SOURCE_DATA = [
+  { value: 42.36, name: '官网注册' },
+  { value: 24.18, name: '合作渠道' },
+  { value: 16.35, name: '社交媒体' },
+  { value: 10.24, name: '搜索引擎' },
+  { value: 6.87, name: '其他' },
+]
+
+function generateDates(days: number): string[] {
+  const dates: string[] = []
+  const today = new Date()
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setDate(d.getDate() - i)
+    dates.push(`${d.getMonth() + 1}-${d.getDate()}`)
+  }
+  return dates
+}
+
 function DashboardPanel() {
   const [core, setCore] = useState<DashboardCore | null>(null)
   const [industries, setIndustries] = useState<IndustryItem[]>([])
@@ -156,8 +709,7 @@ function DashboardPanel() {
   const [jobTrending, setJobTrending] = useState<JobTrendItem[]>([])
   const [satisfaction, setSatisfaction] = useState<SatisfactionTrend[]>([])
   const [loading, setLoading] = useState(true)
-  const [fullscreen, setFullscreen] = useState(false)
-  const containerRef = useRef<HTMLDivElement>(null)
+  const [timeRange, setTimeRange] = useState(7)
 
   const loadData = useCallback(async () => {
     try {
@@ -182,1077 +734,258 @@ function DashboardPanel() {
     return () => clearInterval(timer)
   }, [loadData])
 
-  const matchOption = {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 50, right: 20, top: 30, bottom: 30 },
-    xAxis: { type: 'category', data: matchTrend.map((d) => d.date), axisLabel: { rotate: 30, fontSize: 10 } },
-    yAxis: { type: 'value', name: '平均匹配度', min: 0, max: 100 },
-    series: [{ data: matchTrend.map((d) => d.avg_score), type: 'line', smooth: true, areaStyle: { opacity: 0.15 }, itemStyle: { color: '#1890ff' } }],
-  }
+  const dates = useMemo(() => generateDates(timeRange), [timeRange])
 
-  const industryOption = {
-    tooltip: { trigger: 'item' },
-    legend: { orient: 'vertical', left: 'left', type: 'scroll' },
+  const userGrowthOption: ChartOption = useMemo(() => ({
+    tooltip: { trigger: 'axis', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
+    legend: { data: ['新增用户', '活跃用户'], textStyle: { color: cssVar('--text-secondary') }, bottom: 0 },
+    grid: { left: 16, right: 16, top: 24, bottom: 32, containLabel: true },
+    xAxis: {
+      type: 'category', boundaryGap: false, data: dates,
+      axisLine: { lineStyle: { color: cssVar('--border-light') } },
+      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+    },
+    yAxis: {
+      type: 'value', splitLine: { lineStyle: { color: cssVar('--border-light'), type: 'dashed' } },
+      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+    },
+    series: [
+      {
+        name: '新增用户', type: 'line', smooth: true, symbol: 'circle', symbolSize: 6,
+        data: dates.map((_, i) => 3000 + Math.sin(i * 0.8) * 1500 + i * 120 + Math.random() * 500),
+        itemStyle: { color: cssVar('--primary-500') },
+        lineStyle: { width: 3 },
+        areaStyle: { color: new (echarts as any).graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: `${resolveCssVar('--primary-500', '#3b82f6')}66` }, { offset: 1, color: `${resolveCssVar('--primary-500', '#3b82f6')}08` }]) },
+      },
+      {
+        name: '活跃用户', type: 'line', smooth: true, symbol: 'circle', symbolSize: 6,
+        data: dates.map((_, i) => 5000 + Math.cos(i * 0.7) * 1200 + i * 80 + Math.random() * 400),
+        itemStyle: { color: cssVar('--teal-500') },
+        lineStyle: { width: 3 },
+        areaStyle: { color: new (echarts as any).graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: `${resolveCssVar('--teal-500', '#14b8a6')}66` }, { offset: 1, color: `${resolveCssVar('--teal-500', '#14b8a6')}08` }]) },
+      },
+    ],
+  }), [dates])
+
+  const taskTypeOption: ChartOption = useMemo(() => ({
+    tooltip: { trigger: 'item', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
+    color: [cssVar('--primary-500'), cssVar('--success-500'), cssVar('--warning-500'), cssVar('--purple-500'), cssVar('--teal-500'), cssVar('--gray-500')],
+    legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: cssVar('--text-secondary'), fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
     series: [{
-      type: 'pie', radius: ['40%', '70%'], center: ['55%', '50%'],
-      data: industries.slice(0, 10).map((d) => ({ name: d.name, value: d.count })),
-      emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0, 0, 0, 0.5)' } },
+      type: 'pie', radius: ['55%', '80%'], center: ['35%', '50%'],
+      data: TASK_TYPE_DATA,
+      label: { show: true, position: 'center', formatter: '{total|132,890}\n{text|总任务数}', rich: { total: { fontSize: 20, fontWeight: 700, color: cssVar('--text-primary') }, text: { fontSize: 12, color: cssVar('--text-tertiary') } } },
+      labelLine: { show: false },
+      emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.5)' } },
     }],
-  }
+  }), [])
 
-  const jobOption = {
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' } },
-    grid: { left: 120, right: 30, top: 10, bottom: 20 },
-    xAxis: { type: 'value', name: '数量' },
-    yAxis: { type: 'category', data: jobTrending.map((d) => d.title).reverse(), axisLabel: { fontSize: 10 } },
-    series: [{ type: 'bar', data: jobTrending.map((d) => d.count).reverse(), itemStyle: { color: '#52c41a' }, label: { show: true, position: 'right' } }],
-  }
+  const systemStatusOption: ChartOption = null
 
-  const satOption = {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 50, right: 20, top: 10, bottom: 30 },
-    xAxis: { type: 'category', data: satisfaction.map((d) => d.date), axisLabel: { rotate: 30, fontSize: 10 } },
-    yAxis: { type: 'value', name: '满意度', min: 0, max: 5 },
-    series: [{ data: satisfaction.map((d) => d.avg_satisfaction), type: 'line', smooth: true, itemStyle: { color: '#faad14' }, areaStyle: { opacity: 0.15 } }],
-  }
+  const taskTrendOption: ChartOption = useMemo(() => ({
+    tooltip: { trigger: 'axis', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
+    legend: { data: ['简历优化', '简历评分', '面试追踪', '批量优化', '其他'], textStyle: { color: cssVar('--text-secondary') }, bottom: 0 },
+    grid: { left: 16, right: 16, top: 24, bottom: 32, containLabel: true },
+    xAxis: {
+      type: 'category', boundaryGap: false, data: dates,
+      axisLine: { lineStyle: { color: cssVar('--border-light') } },
+      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+    },
+    yAxis: {
+      type: 'value', splitLine: { lineStyle: { color: cssVar('--border-light'), type: 'dashed' } },
+      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+    },
+    series: [
+      { name: '简历优化', type: 'line', smooth: true, data: dates.map((_, i) => 8000 + Math.sin(i) * 2000 + Math.random() * 800), itemStyle: { color: cssVar('--primary-500') } },
+      { name: '简历评分', type: 'line', smooth: true, data: dates.map((_, i) => 6000 + Math.cos(i) * 1500 + Math.random() * 600), itemStyle: { color: cssVar('--success-500') } },
+      { name: '面试追踪', type: 'line', smooth: true, data: dates.map((_, i) => 4000 + Math.sin(i + 1) * 1000 + Math.random() * 500), itemStyle: { color: cssVar('--warning-500') } },
+      { name: '批量优化', type: 'line', smooth: true, data: dates.map((_, i) => 3000 + Math.cos(i + 2) * 800 + Math.random() * 400), itemStyle: { color: cssVar('--purple-500') } },
+      { name: '其他', type: 'line', smooth: true, data: dates.map((_, i) => 2000 + Math.sin(i + 3) * 500 + Math.random() * 300), itemStyle: { color: cssVar('--gray-500') } },
+    ],
+  }), [dates])
 
-  const featureOption = {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 100, right: 30, top: 10, bottom: 20 },
-    xAxis: { type: 'value' },
-    yAxis: { type: 'category', data: features.map((d) => d.name) },
-    series: [{ type: 'bar', data: features.map((d) => d.count), itemStyle: { color: '#722ed1' }, label: { show: true, position: 'right' } }],
-  }
+  const provinceOption: ChartOption = useMemo(() => ({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
+    grid: { left: 16, right: 80, top: 16, bottom: 16, containLabel: true },
+    xAxis: {
+      type: 'value', splitLine: { lineStyle: { color: cssVar('--border-light'), type: 'dashed' } },
+      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+    },
+    yAxis: {
+      type: 'category', data: PROVINCE_DATA.map((d) => d.name).reverse(),
+      axisLine: { lineStyle: { color: cssVar('--border-light') } },
+      axisLabel: { color: cssVar('--text-secondary'), fontSize: 11 },
+    },
+    visualMap: {
+      orient: 'vertical', right: 0, top: 'center', min: 0, max: 4000,
+      text: ['高', '低'], textStyle: { color: cssVar('--text-tertiary') },
+      inRange: { color: [cssVar('--primary-50'), cssVar('--primary-500')] },
+      itemWidth: 12, itemHeight: 80,
+    },
+    series: [{
+      type: 'bar', data: PROVINCE_DATA.map((d) => d.value).reverse(),
+      itemStyle: { borderRadius: [0, 4, 4, 0], color: new (echarts as any).graphic.LinearGradient(1, 0, 0, 0, [{ offset: 0, color: resolveCssVar('--primary-500', '#3b82f6') }, { offset: 1, color: resolveCssVar('--primary-200', '#bfdbfe') }]) },
+      label: { show: true, position: 'right', color: cssVar('--text-secondary'), fontSize: 11 },
+    }],
+  }), [])
+
+  const featureOption: ChartOption = useMemo(() => ({
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
+    grid: { left: 16, right: 64, top: 8, bottom: 8, containLabel: true },
+    xAxis: {
+      type: 'value', splitLine: { show: false },
+      axisLabel: { show: false },
+    },
+    yAxis: {
+      type: 'category', data: FEATURE_TOP_DATA.map((d) => d.name).reverse(),
+      axisLine: { show: false }, axisTick: { show: false },
+      axisLabel: { color: cssVar('--text-secondary'), fontSize: 12 },
+    },
+    series: [{
+      type: 'bar', data: FEATURE_TOP_DATA.map((d) => d.value).reverse(),
+      itemStyle: { borderRadius: 4, color: cssVar('--primary-500') },
+      label: { show: true, position: 'right', color: cssVar('--text-secondary'), fontSize: 11, formatter: '{c}' },
+      barWidth: 14,
+    }],
+  }), [])
+
+  const deviceOption: ChartOption = useMemo(() => ({
+    tooltip: { trigger: 'item', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
+    color: [cssVar('--primary-500'), cssVar('--success-500'), cssVar('--warning-500')],
+    legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: cssVar('--text-secondary'), fontSize: 12 }, itemWidth: 10, itemHeight: 10 },
+    series: [{
+      type: 'pie', radius: ['55%', '80%'], center: ['35%', '50%'],
+      data: DEVICE_DATA,
+      label: { show: true, position: 'center', formatter: '{total|28,560}\n{text|总数}', rich: { total: { fontSize: 18, fontWeight: 700, color: cssVar('--text-primary') }, text: { fontSize: 11, color: cssVar('--text-tertiary') } } },
+      labelLine: { show: false },
+    }],
+  }), [])
+
+  const sourceOption: ChartOption = useMemo(() => ({
+    tooltip: { trigger: 'item', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
+    color: [cssVar('--primary-500'), cssVar('--success-500'), cssVar('--warning-500'), cssVar('--purple-500'), cssVar('--gray-500')],
+    legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: cssVar('--text-secondary'), fontSize: 12 }, itemWidth: 10, itemHeight: 10 },
+    series: [{
+      type: 'pie', radius: ['55%', '80%'], center: ['35%', '50%'],
+      data: SOURCE_DATA,
+      label: { show: true, position: 'center', formatter: '{total|100%}\n{text|来源}', rich: { total: { fontSize: 18, fontWeight: 700, color: cssVar('--text-primary') }, text: { fontSize: 11, color: cssVar('--text-tertiary') } } },
+      labelLine: { show: false },
+    }],
+  }), [])
 
   if (loading) return <Spin size="large" style={{ display: 'block', textAlign: 'center', padding: 60 }} />
 
-  const panelStyle = fullscreen ? { position: 'fixed' as const, top: 0, left: 0, right: 0, bottom: 0, zIndex: 1000, background: '#f5f5f5', padding: 24, overflow: 'auto' } : {}
+  const extraSelect = (
+    <Select value={timeRange} onChange={(v) => setTimeRange(v)} size="small"
+      options={[{ label: '近7日', value: 7 }, { label: '近30日', value: 30 }, { label: '近90日', value: 90 }]}
+      style={{ width: 90 }}
+    />
+  )
 
   return (
-    <div ref={containerRef} style={panelStyle}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 16 }}>
-        <Typography.Title level={4}><BarChartOutlined /> 数据大屏</Typography.Title>
-        <Space>
-          <Tag color="processing">自动刷新 30s</Tag>
-          <Button icon={<ReloadOutlined />} onClick={loadData}>刷新</Button>
-          <Button onClick={() => setFullscreen(!fullscreen)}>{fullscreen ? '退出全屏' : '全屏'}</Button>
-        </Space>
-      </div>
-
+    <div>
       <Row gutter={[16, 16]}>
-        <Col xs={12} sm={6}><Card><Statistic title="DAU" value={core?.dau || 0} suffix="人" prefix={core?.dau_change_percent && core.dau_change_percent > 0 ? <RiseOutlined /> : <FallOutlined />} valueStyle={{ color: (core?.dau_change_percent || 0) >= 0 ? '#52c41a' : '#ff4d4f' }} /><div style={{ fontSize: 12, color: '#999' }}>环比 {(core?.dau_change_percent || 0) >= 0 ? '+' : ''}{core?.dau_change_percent || 0}%</div></Card></Col>
-        <Col xs={12} sm={6}><Card><Statistic title="总用户数" value={core?.total_users || 0} suffix="人" /><div style={{ fontSize: 12, color: '#999' }}>活跃 {core?.active_users || 0} 人</div></Card></Col>
-        <Col xs={12} sm={6}><Card><Statistic title="今日优化" value={core?.today_optimizations || 0} suffix="次" prefix={<ThunderboltOutlined />} /><div style={{ fontSize: 12, color: '#999' }}>累计 {core?.total_optimizations || 0} 次</div></Card></Col>
-        <Col xs={12} sm={6}><Card><Statistic title="付费转化率" value={core?.paid_conversion_rate || 0} suffix="%" precision={1} valueStyle={{ color: (core?.paid_conversion_rate || 0) > 5 ? '#52c41a' : '#faad14' }} /><div style={{ fontSize: 12, color: '#999' }}>今日上传 {core?.today_uploads || 0}</div></Card></Col>
+        {DASHBOARD_KPIS.map((k, idx) => (
+          <Col xs={24} sm={12} lg={8} xl={4} key={idx}>
+            <KpiCard
+              label={k.label}
+              value={`${formatNumber(k.value)}${k.suffix || ''}`}
+              icon={k.icon}
+              iconBg={k.iconBg}
+              iconColor={k.iconColor}
+              footer={<TrendTag value={k.delta} />}
+            />
+          </Col>
+        ))}
       </Row>
 
       <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
         <Col xs={24} lg={12}>
-          <Card title={<><FundOutlined /> 匹配度提升趋势（30天）</>}>
-            {matchTrend.length > 0 ? <ReactEChartsCore echarts={echarts} option={matchOption} style={{ height: 300 }} /> : <Empty description="暂无数据" />}
-          </Card>
+          <ChartCard title={<><LineChartOutlined style={{ marginRight: 8 }} />用户增长趋势</>} extra={extraSelect} height={300}>
+            <ReactEChartsCore echarts={echarts} option={userGrowthOption} style={{ height: 300 }} />
+          </ChartCard>
         </Col>
-        <Col xs={24} lg={12}>
-          <Card title={<><PieChartOutlined /> 各行业简历占比</>}>
-            {industries.length > 0 ? <ReactEChartsCore echarts={echarts} option={industryOption} style={{ height: 300 }} /> : <Empty description="暂无数据" />}
-          </Card>
+        <Col xs={24} lg={6}>
+          <ChartCard title={<><PieChartOutlined style={{ marginRight: 8 }} />任务类型占比</>} height={300}>
+            <ReactEChartsCore echarts={echarts} option={taskTypeOption} style={{ height: 300 }} />
+          </ChartCard>
         </Col>
-      </Row>
-
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} lg={12}>
-          <Card title={<><RiseOutlined /> 热门岗位 TOP 10（30天）</>}>
-            {jobTrending.length > 0 ? <ReactEChartsCore echarts={echarts} option={jobOption} style={{ height: 350 }} /> : <Empty description="暂无数据" />}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title={<><LineChartOutlined /> 满意度趋势（30天）</>}>
-            {satisfaction.length > 0 ? <ReactEChartsCore echarts={echarts} option={satOption} style={{ height: 350 }} /> : <Empty description="暂无数据" />}
-          </Card>
-        </Col>
-      </Row>
-
-      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
-        <Col xs={24} lg={12}>
-          <Card title="最常用功能">
-            {features.length > 0 ? <ReactEChartsCore echarts={echarts} option={featureOption} style={{ height: 250 }} /> : <Empty description="暂无数据" />}
-          </Card>
-        </Col>
-        <Col xs={24} lg={12}>
-          <Card title={<><ExclamationCircleOutlined /> 热门岗位占比</>}>
-            {jobTrending.length > 0 ? (
-              <div>
-                {jobTrending.map((j, i) => (
-                  <div key={i} style={{ display: 'flex', justifyContent: 'space-between', padding: '4px 0', borderBottom: '1px solid #f0f0f0' }}>
-                    <Space><Tag color={i < 3 ? 'gold' : 'default'}>#{i + 1}</Tag><span>{j.title}</span></Space>
-                    <Space><span>{j.count} 次</span><Tag>{j.percent}%</Tag></Space>
-                  </div>
-                ))}
+        <Col xs={24} lg={6}>
+          <ChartCard title={<><MonitorOutlined style={{ marginRight: 8 }} />系统运行状态</>} height={300}>
+            <div style={{ paddingTop: 8 }}>
+              <ProgressBar label="CPU 使用率" value={26} color={cssVar('--primary-500')} />
+              <ProgressBar label="内存使用率" value={48} color={cssVar('--success-500')} />
+              <ProgressBar label="磁盘使用率" value={32} color={cssVar('--warning-500')} />
+              <ProgressBar label="接口调用量" value={68} color={cssVar('--purple-500')} />
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 8, fontSize: 13, color: cssVar('--text-secondary') }}>
+                <span>系统状态</span>
+                <Tag color="success">正常</Tag>
               </div>
-            ) : <Empty description="暂无数据" />}
-          </Card>
+            </div>
+          </ChartCard>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={12}>
+          <ChartCard title={<><LineChartOutlined style={{ marginRight: 8 }} />任务趋势</>} extra={extraSelect} height={300}>
+            <ReactEChartsCore echarts={echarts} option={taskTrendOption} style={{ height: 300 }} />
+          </ChartCard>
+        </Col>
+        <Col xs={24} lg={12}>
+          <ChartCard title={<><GlobalOutlined style={{ marginRight: 8 }} />用户分布</>} height={300}>
+            <ReactEChartsCore echarts={echarts} option={provinceOption} style={{ height: 300 }} />
+          </ChartCard>
+        </Col>
+      </Row>
+
+      <Row gutter={[16, 16]} style={{ marginTop: 16 }}>
+        <Col xs={24} lg={6}>
+          <ChartCard title={<><BarChartOutlined style={{ marginRight: 8 }} />热门功能 TOP5</>} height={260}>
+            <ReactEChartsCore echarts={echarts} option={featureOption} style={{ height: 260 }} />
+          </ChartCard>
+        </Col>
+        <Col xs={24} lg={6}>
+          <ChartCard title={<><DesktopOutlined style={{ marginRight: 8 }} />用户设备分布</>} height={260}>
+            <ReactEChartsCore echarts={echarts} option={deviceOption} style={{ height: 260 }} />
+          </ChartCard>
+        </Col>
+        <Col xs={24} lg={6}>
+          <ChartCard title={<><PieChartOutlined style={{ marginRight: 8 }} />新用户来源渠道</>} height={260}>
+            <ReactEChartsCore echarts={echarts} option={sourceOption} style={{ height: 260 }} />
+          </ChartCard>
+        </Col>
+        <Col xs={24} lg={6}>
+          <ChartCard title={<><CarryOutOutlined style={{ marginRight: 8 }} />实时任务监控</>} height={260}>
+            <Row gutter={[8, 8]}>
+              <Col span={12}>
+                <div style={{ background: cssVar('--bg-body'), borderRadius: 8, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 12, color: cssVar('--text-tertiary'), marginBottom: 4 }}>排队中</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: cssVar('--text-primary') }}>126</div>
+                </div>
+              </Col>
+              <Col span={12}>
+                <div style={{ background: cssVar('--bg-body'), borderRadius: 8, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 12, color: cssVar('--text-tertiary'), marginBottom: 4 }}>处理中</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: cssVar('--primary-500') }}>1,256</div>
+                </div>
+              </Col>
+              <Col span={12}>
+                <div style={{ background: cssVar('--bg-body'), borderRadius: 8, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 12, color: cssVar('--text-tertiary'), marginBottom: 4 }}>已完成(今日)</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: cssVar('--success-500') }}>6,320</div>
+                </div>
+              </Col>
+              <Col span={12}>
+                <div style={{ background: cssVar('--bg-body'), borderRadius: 8, padding: 12, textAlign: 'center' }}>
+                  <div style={{ fontSize: 12, color: cssVar('--text-tertiary'), marginBottom: 4 }}>失败(今日)</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: cssVar('--error-500') }}>32</div>
+                </div>
+              </Col>
+            </Row>
+          </ChartCard>
         </Col>
       </Row>
     </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════
-//  用户管理 Panel
-// ═══════════════════════════════════════════════════════
-
-function UsersPanel() {
-  const [users, setUsers] = useState<AdminUser[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('')
-  const [loading, setLoading] = useState(false)
-
-  const [detailModal, setDetailModal] = useState(false)
-  const [detail, setDetail] = useState<AdminUserDetail | null>(null)
-  const [detailLoading, setDetailLoading] = useState(false)
-
-  const [banModal, setBanModal] = useState(false)
-  const [banUser, setBanUser] = useState<AdminUser | null>(null)
-  const [banReason, setBanReason] = useState('')
-  const [banDays, setBanDays] = useState<number | undefined>()
-
-  const [vipModal, setVipModal] = useState(false)
-  const [vipUser, setVipUser] = useState<AdminUser | null>(null)
-  const [vipPaid, setVipPaid] = useState(false)
-  const [vipDaily, setVipDaily] = useState<number | undefined>()
-  const [vipMonthly, setVipMonthly] = useState<number | undefined>()
-
-  const [quotaModal, setQuotaModal] = useState(false)
-  const [quotaUser, setQuotaUser] = useState<AdminUser | null>(null)
-  const [quotaAmount, setQuotaAmount] = useState(10)
-  const [quotaReason, setQuotaReason] = useState('')
-
-  const loadUsers = useCallback(async (p = 1, s = '', st = '') => {
-    setLoading(true)
-    try {
-      const res = await admin.getUsers(p, 20, s, st)
-      setUsers(res.data.items || [])
-      setTotal(res.data.total || 0)
-      setPage(p)
-    } catch { message.error('加载用户列表失败') } finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { loadUsers() }, [loadUsers])
-
-  const handleBan = async () => {
-    if (!banUser) return
-    try { await admin.banUser(banUser.id, banReason || '违规', banDays); message.success('已封禁'); setBanModal(false); loadUsers(page, search, statusFilter) } catch { message.error('操作失败') }
-  }
-
-  const handleUnban = async (id: string) => {
-    try { await admin.unbanUser(id); message.success('已解封'); loadUsers(page, search, statusFilter) } catch { message.error('操作失败') }
-  }
-
-  const handleSetVip = async () => {
-    if (!vipUser) return
-    try { await admin.setVip(vipUser.id, vipPaid, vipDaily, vipMonthly); message.success('VIP已更新'); setVipModal(false); loadUsers(page, search, statusFilter) } catch { message.error('操作失败') }
-  }
-
-  const handleAddQuota = async () => {
-    if (!quotaUser) return
-    try { await admin.addUserQuota(quotaUser.id, quotaAmount, quotaReason); message.success('额度已增加'); setQuotaModal(false); loadUsers(page, search, statusFilter) } catch { message.error('操作失败') }
-  }
-
-  const showDetail = async (id: string) => {
-    setDetailLoading(true); setDetailModal(true)
-    try { const res = await admin.getUserDetail(id); setDetail(res.data) } catch { message.error('加载详情失败') } finally { setDetailLoading(false) }
-  }
-
-  const columns = [
-    { title: '昵称', dataIndex: 'nickname', key: 'nickname', width: 100 },
-    { title: '邮箱', dataIndex: 'email', key: 'email', width: 160 },
-    { title: '手机', dataIndex: 'phone', key: 'phone', width: 120 },
-    { title: '状态', dataIndex: 'status', key: 'status', width: 80, render: (s: string) => <Tag color={STATUS_COLOR[s] || 'default'}>{STATUS_LABEL[s] || s}</Tag> },
-    { title: 'VIP', dataIndex: 'is_vip', key: 'is_vip', width: 60, render: (v: boolean) => v ? <Tag color="gold">VIP</Tag> : <Tag>免费</Tag> },
-    { title: '简历', dataIndex: 'resume_count', key: 'resume_count', width: 60 },
-    { title: '优化', dataIndex: 'opt_count', key: 'opt_count', width: 60 },
-    { title: '额度', dataIndex: 'daily_quota', key: 'daily_quota', width: 60 },
-    {
-      title: '操作', key: 'action', width: 260,
-      render: (_: any, r: AdminUser) => (
-        <Space size="small" wrap>
-          <Button size="small" icon={<EyeOutlined />} onClick={() => showDetail(r.id)}>详情</Button>
-          {r.status === 'active' ? (
-            <Button size="small" danger onClick={() => { setBanUser(r); setBanModal(true) }}>封禁</Button>
-          ) : r.status === 'frozen' ? (
-            <Popconfirm title="确定解封?" onConfirm={() => handleUnban(r.id)}><Button size="small" type="primary">解封</Button></Popconfirm>
-          ) : null}
-          <Button size="small" onClick={() => { setVipUser(r); setVipPaid(r.is_vip); setVipModal(true) }}>VIP</Button>
-          <Button size="small" onClick={() => { setQuotaUser(r); setQuotaModal(true) }}>额度</Button>
-        </Space>
-      ),
-    },
-  ]
-
-  return (
-    <div>
-      <Card>
-        <Space style={{ marginBottom: 16 }} wrap>
-          <Input.Search placeholder="搜索昵称/邮箱" onSearch={(v) => { setSearch(v); loadUsers(1, v, statusFilter) }} style={{ width: 250 }} allowClear />
-          <Select placeholder="状态" allowClear style={{ width: 120 }} onChange={(v) => { setStatusFilter(v || ''); loadUsers(1, search, v || '') }}
-            options={[{ label: '正常', value: 'active' }, { label: '已封禁', value: 'frozen' }, { label: '注销中', value: 'deleted_pending' }]} />
-        </Space>
-        <Table rowKey="id" columns={columns} dataSource={users} loading={loading}
-          pagination={{ current: page, total, pageSize: 20, onChange: (p) => loadUsers(p, search, statusFilter) }} size="middle" scroll={{ x: 1000 }} />
-      </Card>
-
-      <Modal title="用户详情" open={detailModal} onCancel={() => setDetailModal(false)} footer={null} width={700}>
-        {detailLoading ? <Spin /> : detail ? (
-          <Descriptions bordered column={2} size="small">
-            <Descriptions.Item label="昵称">{detail.nickname || '-'}</Descriptions.Item>
-            <Descriptions.Item label="邮箱">{detail.email}</Descriptions.Item>
-            <Descriptions.Item label="手机">{detail.phone || '-'}</Descriptions.Item>
-            <Descriptions.Item label="状态"><Tag color={STATUS_COLOR[detail.status]}>{STATUS_LABEL[detail.status]}</Tag></Descriptions.Item>
-            <Descriptions.Item label="简历数">{detail.resume_count}</Descriptions.Item>
-            <Descriptions.Item label="优化次数">{detail.opt_count}</Descriptions.Item>
-            <Descriptions.Item label="VIP">{detail.quota?.is_paid ? <Tag color="gold">是</Tag> : '否'}</Descriptions.Item>
-            <Descriptions.Item label="日额度">{detail.quota?.daily_used || 0}/{detail.quota?.daily_limit || 3}</Descriptions.Item>
-            <Descriptions.Item label="月额度">{detail.quota?.monthly_used || 0}/{detail.quota?.monthly_limit || 50}</Descriptions.Item>
-            <Descriptions.Item label="注册时间">{detail.created_at ? new Date(detail.created_at).toLocaleString() : '-'}</Descriptions.Item>
-          </Descriptions>
-        ) : <Empty />}
-        {detail?.orders && detail.orders.length > 0 && (
-          <>
-            <Divider>消费记录</Divider>
-            <Table rowKey="order_no" dataSource={detail.orders} size="small" pagination={false}
-              columns={[
-                { title: '订单号', dataIndex: 'order_no', width: 160 }, { title: '套餐', dataIndex: 'package_name' },
-                { title: '金额', dataIndex: 'amount', render: (v: number) => `¥${v}` },
-                { title: '状态', dataIndex: 'status', render: (s: string) => <Tag color={ORDER_STATUS[s]?.color}>{ORDER_STATUS[s]?.label || s}</Tag> },
-              ]} />
-          </>
-        )}
-      </Modal>
-
-      <Modal title="封禁用户" open={banModal} onOk={handleBan} onCancel={() => setBanModal(false)}>
-        <div style={{ marginBottom: 12 }}>封禁 <Tag color="red">{banUser?.nickname || banUser?.email}</Tag></div>
-        <Input placeholder="封禁原因" value={banReason} onChange={(e) => setBanReason(e.target.value)} style={{ marginBottom: 12 }} />
-        <InputNumber placeholder="封禁天数（留空=永久）" value={banDays} onChange={(v) => setBanDays(v || undefined)} style={{ width: '100%' }} min={1} />
-      </Modal>
-
-      <Modal title="VIP管理" open={vipModal} onOk={handleSetVip} onCancel={() => setVipModal(false)}>
-        <div style={{ marginBottom: 12 }}>用户: <Tag>{vipUser?.nickname || vipUser?.email}</Tag></div>
-        <div style={{ marginBottom: 12 }}><Radio.Group value={vipPaid} onChange={(e) => setVipPaid(e.target.value)}><Radio value={true}>VIP</Radio><Radio value={false}>免费用户</Radio></Radio.Group></div>
-        <InputNumber placeholder="每日额度" value={vipDaily} onChange={(v) => setVipDaily(v || undefined)} style={{ width: '100%', marginBottom: 12 }} min={0} />
-        <InputNumber placeholder="每月额度" value={vipMonthly} onChange={(v) => setVipMonthly(v || undefined)} style={{ width: '100%' }} min={0} />
-      </Modal>
-
-      <Modal title="调整额度" open={quotaModal} onOk={handleAddQuota} onCancel={() => setQuotaModal(false)}>
-        <div style={{ marginBottom: 12 }}>用户: <Tag>{quotaUser?.nickname || quotaUser?.email}</Tag> 当前日余: {quotaUser?.daily_quota}</div>
-        <InputNumber placeholder="增加次数" value={quotaAmount} onChange={(v) => setQuotaAmount(v || 10)} style={{ width: '100%', marginBottom: 12 }} min={1} />
-        <Input placeholder="调整原因" value={quotaReason} onChange={(e) => setQuotaReason(e.target.value)} />
-      </Modal>
-    </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════
-//  内容管理 Panel
-// ═══════════════════════════════════════════════════════
-
-function ContentPanel() {
-  return (
-    <Card>
-      <Tabs defaultActiveKey="templates" items={[
-        { key: 'templates', label: '简历模板', children: <TemplatesSub /> },
-        { key: 'keywords', label: '行业关键词', children: <KeywordsSub /> },
-        { key: 'ats', label: 'ATS规则', children: <ATSRulesSub /> },
-      ]} />
-    </Card>
-  )
-}
-
-function TemplatesSub() {
-  const [templates, setTemplates] = useState<TemplateItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [form] = Form.useForm()
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try { const res = await admin.getTemplates(); setTemplates(res.data || []) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const handleCreate = async () => {
-    const v = await form.validateFields()
-    try { await admin.createTemplate(v.name, v.description || '', v.html_content || '', v.css_content || ''); message.success('已创建'); setModalOpen(false); form.resetFields(); load() } catch { message.error('创建失败') }
-  }
-
-  const handleToggle = async (id: string, isActive: boolean) => {
-    try { await admin.updateTemplate(id, { is_active: isActive }); message.success('已更新'); load() } catch { message.error('操作失败') }
-  }
-
-  const handleDelete = async (id: string) => {
-    try { await admin.deleteTemplate(id); message.success('已删除'); load() } catch { message.error('删除失败') }
-  }
-
-  const columns = [
-    { title: '名称', dataIndex: 'name', key: 'name' },
-    { title: '描述', dataIndex: 'description', key: 'description', ellipsis: true },
-    { title: '状态', dataIndex: 'is_active', key: 'is_active', width: 80, render: (v: boolean) => <Tag color={v ? 'green' : 'default'}>{v ? '上架' : '下架'}</Tag> },
-    { title: '默认', dataIndex: 'is_default', key: 'is_default', width: 80, render: (v: boolean) => v ? <Tag color="blue">是</Tag> : '-' },
-    {
-      title: '操作', key: 'action', width: 220,
-      render: (_: any, r: TemplateItem) => (
-        <Space size="small">
-          <Button size="small" onClick={() => handleToggle(r.id, !r.is_active)}>{r.is_active ? '下架' : '上架'}</Button>
-          <Popconfirm title="确定删除?" onConfirm={() => handleDelete(r.id)}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
-        </Space>
-      ),
-    },
-  ]
-
-  return (
-    <div>
-      <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)} style={{ marginBottom: 16 }}>新增模板</Button>
-      <Table rowKey="id" columns={columns} dataSource={templates} loading={loading} pagination={false} size="middle" />
-      <Modal title="新增模板" open={modalOpen} onOk={handleCreate} onCancel={() => setModalOpen(false)}>
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="description" label="描述"><Input /></Form.Item>
-          <Form.Item name="html_content" label="HTML"><TextArea rows={4} /></Form.Item>
-          <Form.Item name="css_content" label="CSS"><TextArea rows={4} /></Form.Item>
-        </Form>
-      </Modal>
-    </div>
-  )
-}
-
-function KeywordsSub() {
-  const [keywords, setKeywords] = useState<KeywordItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [form] = Form.useForm()
-  const [industryFilter, setIndustryFilter] = useState('')
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try { const res = await admin.getKeywords(industryFilter); setKeywords(res.data || []) } catch {} finally { setLoading(false) }
-  }, [industryFilter])
-
-  useEffect(() => { load() }, [load])
-
-  const handleCreate = async () => {
-    const v = await form.validateFields()
-    try { await admin.createKeyword(v.keyword, v.industry || '通用', v.category || 'hard_skill'); message.success('已添加'); setModalOpen(false); form.resetFields(); load() } catch { message.error('添加失败') }
-  }
-
-  const columns = [
-    { title: '关键词', dataIndex: 'keyword', key: 'keyword' },
-    { title: '行业', dataIndex: 'industry', key: 'industry', width: 100 },
-    { title: '类别', dataIndex: 'category', key: 'category', width: 100, render: (v: string) => <Tag>{v === 'hard_skill' ? '硬技能' : v === 'soft_skill' ? '软技能' : v}</Tag> },
-    { title: '状态', dataIndex: 'is_active', key: 'is_active', width: 80, render: (v: boolean) => <Badge status={v ? 'success' : 'default'} text={v ? '启用' : '停用'} /> },
-    {
-      title: '操作', key: 'action', width: 120,
-      render: (_: any, r: KeywordItem) => (
-        <Space size="small">
-          <Button size="small" onClick={async () => { try { await admin.updateKeyword(r.id, !r.is_active); load() } catch {} }}>{r.is_active ? '停用' : '启用'}</Button>
-          <Popconfirm title="确定删除?" onConfirm={async () => { try { await admin.deleteKeyword(r.id); load() } catch {} }}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
-        </Space>
-      ),
-    },
-  ]
-
-  return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)}>添加关键词</Button>
-        <Select placeholder="行业筛选" allowClear style={{ width: 120 }} value={industryFilter || undefined} onChange={(v) => setIndustryFilter(v || '')}
-          options={[{ label: '互联网', value: '互联网' }, { label: '金融', value: '金融' }, { label: '医疗', value: '医疗' }, { label: '教育', value: '教育' }, { label: '通用', value: '通用' }]} />
-      </Space>
-      <Table rowKey="id" columns={columns} dataSource={keywords} loading={loading} pagination={{ pageSize: 50 }} size="middle" />
-      <Modal title="添加关键词" open={modalOpen} onOk={handleCreate} onCancel={() => setModalOpen(false)}>
-        <Form form={form} layout="vertical">
-          <Form.Item name="keyword" label="关键词" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="industry" label="行业" initialValue="通用"><Select options={[{ label: '互联网', value: '互联网' }, { label: '金融', value: '金融' }, { label: '医疗', value: '医疗' }, { label: '通用', value: '通用' }]} /></Form.Item>
-          <Form.Item name="category" label="类别" initialValue="hard_skill"><Select options={[{ label: '硬技能', value: 'hard_skill' }, { label: '软技能', value: 'soft_skill' }]} /></Form.Item>
-        </Form>
-      </Modal>
-    </div>
-  )
-}
-
-function ATSRulesSub() {
-  const [rules, setRules] = useState<ATSRuleItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [form] = Form.useForm()
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try { const res = await admin.getAtsRules(); setRules(res.data || []) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const handleCreate = async () => {
-    const v = await form.validateFields()
-    try { await admin.createAtsRule(v.name, v.pattern, v.severity || 'warning', v.description || ''); message.success('已创建'); setModalOpen(false); form.resetFields(); load() } catch { message.error('创建失败') }
-  }
-
-  const columns = [
-    { title: '规则名', dataIndex: 'name', key: 'name' },
-    { title: '正则', dataIndex: 'pattern', key: 'pattern', ellipsis: true, render: (v: string) => <code style={{ fontSize: 11 }}>{v}</code> },
-    { title: '级别', dataIndex: 'severity', key: 'severity', width: 80, render: (v: string) => <Tag color={v === 'error' ? 'red' : 'orange'}>{v === 'error' ? '错误' : '警告'}</Tag> },
-    { title: '状态', dataIndex: 'is_active', key: 'is_active', width: 80, render: (v: boolean) => <Badge status={v ? 'success' : 'default'} text={v ? '启用' : '停用'} /> },
-    {
-      title: '操作', key: 'action', width: 120,
-      render: (_: any, r: ATSRuleItem) => (
-        <Space size="small">
-          <Button size="small" onClick={async () => { try { await admin.updateAtsRule(r.id, { is_active: !r.is_active }); load() } catch {} }}>{r.is_active ? '停用' : '启用'}</Button>
-          <Popconfirm title="确定删除?" onConfirm={async () => { try { await admin.deleteAtsRule(r.id); load() } catch {} }}><Button size="small" danger icon={<DeleteOutlined />} /></Popconfirm>
-        </Space>
-      ),
-    },
-  ]
-
-  return (
-    <div>
-      <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)} style={{ marginBottom: 16 }}>新增规则</Button>
-      <Table rowKey="id" columns={columns} dataSource={rules} loading={loading} pagination={false} size="middle" />
-      <Modal title="新增ATS规则" open={modalOpen} onOk={handleCreate} onCancel={() => setModalOpen(false)}>
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label="规则名" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="pattern" label="正则表达式" rules={[{ required: true }]}><Input placeholder="如: <table.*?>" /></Form.Item>
-          <Form.Item name="severity" label="级别" initialValue="warning"><Select options={[{ label: '警告', value: 'warning' }, { label: '错误', value: 'error' }]} /></Form.Item>
-          <Form.Item name="description" label="描述"><TextArea rows={3} /></Form.Item>
-        </Form>
-      </Modal>
-    </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════
-//  AI模型管理 Panel
-// ═══════════════════════════════════════════════════════
-
-function AIModelPanel() {
-  return (
-    <Card>
-      <Tabs defaultActiveKey="prompts" items={[
-        { key: 'prompts', label: 'Prompt管理', children: <PromptsSub /> },
-        { key: 'models', label: '模型路由', children: <ModelsSub /> },
-        { key: 'callLogs', label: '调用日志', children: <CallLogsSub /> },
-      ]} />
-    </Card>
-  )
-}
-
-function PromptsSub() {
-  const [prompts, setPrompts] = useState<PromptItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [createModal, setCreateModal] = useState(false)
-  const [deployModal, setDeployModal] = useState(false)
-  const [rollbackModal, setRollbackModal] = useState(false)
-  const [detailModal, setDetailModal] = useState(false)
-  const [detail, setDetail] = useState<PromptDetail | null>(null)
-  const [selectedPrompt, setSelectedPrompt] = useState<PromptItem | null>(null)
-  const [form] = Form.useForm()
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try { const res = await admin.getPrompts(); setPrompts(res.data?.prompts || []) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const handleCreate = async () => {
-    const v = await form.validateFields()
-    try { await admin.createPrompt(v.name, v.scene, v.content, v.variables); message.success('已创建'); setCreateModal(false); form.resetFields(); load() } catch { message.error('创建失败') }
-  }
-
-  const handleDeploy = async () => {
-    const v = await form.validateFields()
-    if (!selectedPrompt) return
-    try { await admin.deployPrompt(selectedPrompt.id, v.gray_ratio || 0); message.success('已部署'); setDeployModal(false); load() } catch { message.error('部署失败') }
-  }
-
-  const handleRollback = async () => {
-    const v = await form.validateFields()
-    try { await admin.rollbackPrompt(v.name, v.scene, v.target_version); message.success('已回滚'); setRollbackModal(false); load() } catch { message.error('回滚失败') }
-  }
-
-  const showDetail = async (id: string) => {
-    try { const res = await admin.getPromptDetail(id); setDetail(res.data); setDetailModal(true) } catch { message.error('加载失败') }
-  }
-
-  const columns = [
-    { title: '名称', dataIndex: 'name', key: 'name', width: 130 },
-    { title: '场景', dataIndex: 'scene', key: 'scene', width: 100, render: (v: string) => <Tag>{SCENE_LABELS[v] || v}</Tag> },
-    { title: '版本', dataIndex: 'version', key: 'version', width: 70, render: (v: number) => <Tag color="blue">v{v}</Tag> },
-    { title: '状态', dataIndex: 'is_active', key: 'is_active', width: 80, render: (v: boolean) => <Badge status={v ? 'success' : 'default'} text={v ? '激活' : '未激活'} /> },
-    { title: '灰度', dataIndex: 'gray_ratio', key: 'gray_ratio', width: 80, render: (v: number) => v > 0 ? <Tag color="orange">{v}%</Tag> : '-' },
-    {
-      title: '操作', key: 'action', width: 250,
-      render: (_: any, r: PromptItem) => (
-        <Space size="small">
-          <Button size="small" icon={<EyeOutlined />} onClick={() => showDetail(r.id)}>详情</Button>
-          <Button size="small" type="primary" onClick={() => { setSelectedPrompt(r); setDeployModal(true); form.setFieldsValue({ gray_ratio: r.gray_ratio }) }}>部署</Button>
-        </Space>
-      ),
-    },
-  ]
-
-  return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button type="primary" icon={<PlusOutlined />} onClick={() => { setCreateModal(true); form.resetFields() }}>新建Prompt</Button>
-        <Button onClick={() => { setRollbackModal(true); form.resetFields() }}>版本回滚</Button>
-      </Space>
-      <Table rowKey="id" columns={columns} dataSource={prompts} loading={loading} pagination={false} size="middle" />
-
-      <Modal title="新建Prompt" open={createModal} onOk={handleCreate} onCancel={() => setCreateModal(false)} width={700}>
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input placeholder="如: work_experience_star" /></Form.Item>
-          <Form.Item name="scene" label="场景" rules={[{ required: true }]}><Select options={Object.entries(SCENE_LABELS).map(([k, v]) => ({ label: v, value: k }))} /></Form.Item>
-          <Form.Item name="content" label="Prompt内容" rules={[{ required: true }]}><TextArea rows={8} placeholder="支持变量: {{job_description}}, {{resume_section}} 等" /></Form.Item>
-          <Form.Item name="variables" label="变量(JSON)"><TextArea rows={3} placeholder='{"job_description": "岗位描述", "resume_section": "简历内容"}' /></Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal title="部署Prompt" open={deployModal} onOk={handleDeploy} onCancel={() => setDeployModal(false)}>
-        <Form form={form} layout="vertical">
-          <div style={{ marginBottom: 12 }}>部署: <Tag color="blue">{selectedPrompt?.name} v{selectedPrompt?.version}</Tag></div>
-          <Form.Item name="gray_ratio" label="灰度比例 (%)"><InputNumber min={0} max={100} style={{ width: '100%' }} placeholder="100=全量, 0=仅激活" /></Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal title="版本回滚" open={rollbackModal} onOk={handleRollback} onCancel={() => setRollbackModal(false)}>
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label="Prompt名称" rules={[{ required: true }]}><Input placeholder="如: work_experience_star" /></Form.Item>
-          <Form.Item name="scene" label="场景" rules={[{ required: true }]}><Select options={Object.entries(SCENE_LABELS).map(([k, v]) => ({ label: v, value: k }))} /></Form.Item>
-          <Form.Item name="target_version" label="目标版本" rules={[{ required: true }]}><InputNumber min={1} style={{ width: '100%' }} /></Form.Item>
-        </Form>
-      </Modal>
-
-      <Modal title="Prompt详情" open={detailModal} onCancel={() => setDetailModal(false)} footer={null} width={800}>
-        {detail ? (
-          <>
-            <Descriptions bordered size="small" column={2}>
-              <Descriptions.Item label="名称">{detail.name}</Descriptions.Item>
-              <Descriptions.Item label="场景"><Tag>{SCENE_LABELS[detail.scene] || detail.scene}</Tag></Descriptions.Item>
-              <Descriptions.Item label="版本">v{detail.version}</Descriptions.Item>
-              <Descriptions.Item label="状态"><Tag color={detail.is_active ? 'green' : 'default'}>{detail.is_active ? '激活' : '未激活'}</Tag></Descriptions.Item>
-              <Descriptions.Item label="灰度">{detail.gray_ratio}%</Descriptions.Item>
-            </Descriptions>
-            <Divider>Prompt内容</Divider>
-            <pre style={{ background: '#f5f5f5', padding: 16, borderRadius: 8, maxHeight: 300, overflow: 'auto', fontSize: 12 }}>{detail.content}</pre>
-            {detail.variables && (
-              <>
-                <Divider>变量</Divider>
-                <pre style={{ background: '#f5f5f5', padding: 16, borderRadius: 8, fontSize: 12 }}>{JSON.stringify(detail.variables, null, 2)}</pre>
-              </>
-            )}
-            <Divider>版本历史</Divider>
-            <Table rowKey="id" dataSource={detail.all_versions} size="small" pagination={false}
-              columns={[
-                { title: '版本', dataIndex: 'version', render: (v: number) => <Tag color="blue">v{v}</Tag> },
-                { title: '状态', dataIndex: 'is_active', render: (v: boolean) => v ? <Tag color="green">激活</Tag> : <Tag>未激活</Tag> },
-                { title: '灰度', dataIndex: 'gray_ratio', render: (v: number) => v > 0 ? `${v}%` : '-' },
-                { title: '时间', dataIndex: 'created_at', render: (t: string) => t ? new Date(t).toLocaleString() : '-' },
-              ]} />
-          </>
-        ) : <Empty />}
-      </Modal>
-    </div>
-  )
-}
-
-function ModelsSub() {
-  const [models, setModels] = useState<ModelConfig[]>([])
-  const [loading, setLoading] = useState(false)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try { const res = await admin.getModels(); setModels(res.data?.models || []) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const handleToggle = async (id: string, enabled: boolean) => {
-    try { await admin.updateModel(id, { is_enabled: enabled }); message.success('已更新'); load() } catch { message.error('操作失败') }
-  }
-
-  const columns = [
-    { title: '模型', dataIndex: 'display_name', key: 'display_name', width: 120 },
-    { title: '标识', dataIndex: 'model_name', key: 'model_name', width: 100 },
-    { title: '权重', dataIndex: 'weight', key: 'weight', width: 60 },
-    { title: '限流/min', dataIndex: 'rate_limit_per_minute', key: 'rate_limit_per_minute', width: 80 },
-    { title: 'Tier', dataIndex: 'tier', key: 'tier', width: 80, render: (v: string) => <Tag color={v === 'paid' ? 'gold' : 'default'}>{v}</Tag> },
-    { title: '状态', dataIndex: 'is_enabled', key: 'is_enabled', width: 80, render: (v: boolean) => <Badge status={v ? 'success' : 'error'} text={v ? '启用' : '停用'} /> },
-    { title: '连续失败', dataIndex: 'consecutive_failures', key: 'consecutive_failures', width: 80, render: (v: number) => v > 0 ? <Tag color="red">{v}</Tag> : '-' },
-    { title: '成功率', key: 'success_rate', width: 80, render: (_: any, r: ModelConfig) => <span style={{ color: (r.stats?.success_rate || 0) >= 95 ? '#52c41a' : '#ff4d4f' }}>{r.stats?.success_rate || '-'}%</span> },
-    { title: '平均延迟', key: 'avg_latency', width: 90, render: (_: any, r: ModelConfig) => `${r.stats?.avg_latency_ms || '-'}ms` },
-    {
-      title: '操作', key: 'action', width: 100,
-      render: (_: any, r: ModelConfig) => (
-        <Button size="small" onClick={() => handleToggle(r.id, !r.is_enabled)}>{r.is_enabled ? '停用' : '启用'}</Button>
-      ),
-    },
-  ]
-
-  return <Table rowKey="id" columns={columns} dataSource={models} loading={loading} pagination={false} size="middle" />
-}
-
-function CallLogsSub() {
-  const [logs, setLogs] = useState<CallLog[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
-
-  const load = useCallback(async (p = 1) => {
-    setLoading(true)
-    try { const res = await admin.getCallLogs(p, 50); setLogs(res.data?.items || []); setTotal(res.data?.total || 0); setPage(p) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const columns = [
-    { title: '用户', dataIndex: 'user_id', key: 'user_id', width: 90, ellipsis: true },
-    { title: '模型', dataIndex: 'model_name', key: 'model_name', width: 100 },
-    { title: 'Prompt', dataIndex: 'prompt_template_name', key: 'prompt_template_name', width: 100, ellipsis: true },
-    { title: '版本', dataIndex: 'prompt_version', key: 'prompt_version', width: 60, render: (v: number) => v ? `v${v}` : '-' },
-    { title: 'Token', key: 'tokens', width: 100, render: (_: any, r: CallLog) => `入${r.input_tokens || 0}/出${r.output_tokens || 0}` },
-    { title: '耗时', dataIndex: 'latency_ms', key: 'latency_ms', width: 80, render: (v: number) => v ? `${v}ms` : '-' },
-    { title: '状态', dataIndex: 'is_success', key: 'is_success', width: 70, render: (v: boolean) => v ? <Tag color="green">成功</Tag> : <Tag color="red">失败</Tag> },
-    { title: '费用', dataIndex: 'cost_usd', key: 'cost_usd', width: 80, render: (v: number) => v != null ? `$${v.toFixed(4)}` : '-' },
-    { title: '时间', dataIndex: 'created_at', key: 'created_at', width: 150, render: (t: string) => t ? new Date(t).toLocaleString() : '-' },
-  ]
-
-  return <Table rowKey="id" columns={columns} dataSource={logs} loading={loading} pagination={{ current: page, total, pageSize: 50, onChange: (p) => load(p) }} size="small" scroll={{ x: 1000 }} />
-}
-
-// ═══════════════════════════════════════════════════════
-//  任务监控 Panel
-// ═══════════════════════════════════════════════════════
-
-function MonitorPanel() {
-  const [stats, setStats] = useState<TaskStats | null>(null)
-  const [failedTasks, setFailedTasks] = useState<FailedTask[]>([])
-  const [failedTotal, setFailedTotal] = useState(0)
-  const [loading, setLoading] = useState(false)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const [sRes, fRes] = await Promise.all([admin.getTaskStats(), admin.getFailedTasks()])
-      setStats(sRes.data)
-      setFailedTasks(fRes.data?.items || [])
-      setFailedTotal(fRes.data?.total || 0)
-    } catch { message.error('加载失败') } finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  useEffect(() => {
-    const timer = setInterval(load, 15000)
-    return () => clearInterval(timer)
-  }, [load])
-
-  const modelHealthOption = stats?.model_health ? {
-    tooltip: { trigger: 'axis' },
-    legend: { data: ['成功率', '平均延迟'] },
-    grid: { left: 60, right: 60, top: 40, bottom: 50 },
-    xAxis: { type: 'category', data: Object.keys(stats.model_health), axisLabel: { rotate: 20, fontSize: 10 } },
-    yAxis: [
-      { type: 'value', name: '成功率(%)', min: 0, max: 100 },
-      { type: 'value', name: '延迟(ms)' },
-    ],
-    series: [
-      { name: '成功率', type: 'bar', data: Object.values(stats.model_health).map((m) => m.success_rate), itemStyle: { color: '#52c41a' } },
-      { name: '平均延迟', type: 'line', yAxisIndex: 1, data: Object.values(stats.model_health).map((m) => m.avg_latency_ms), itemStyle: { color: '#1890ff' } },
-    ],
-  } : null
-
-  const failColumns = [
-    { title: '用户ID', dataIndex: 'user_id', key: 'user_id', ellipsis: true },
-    { title: '模型', dataIndex: 'model_name', key: 'model_name', width: 100 },
-    { title: '错误', dataIndex: 'error_message', key: 'error_message', ellipsis: true },
-    { title: '时间', dataIndex: 'created_at', key: 'created_at', width: 150, render: (t: string) => t ? new Date(t).toLocaleString() : '-' },
-  ]
-
-  return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Button icon={<ReloadOutlined />} onClick={load}>刷新</Button>
-        <Tag color="processing">自动刷新 15s</Tag>
-      </Space>
-
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col xs={12} sm={6}><Card><Statistic title="今日总请求" value={stats?.today_total || 0} /></Card></Col>
-        <Col xs={12} sm={6}><Card><Statistic title="成功率" value={stats?.success_rate || 0} suffix="%" precision={1} valueStyle={{ color: (stats?.success_rate || 0) >= 95 ? '#52c41a' : '#ff4d4f' }} /></Card></Col>
-        <Col xs={12} sm={6}><Card><Statistic title="平均延迟" value={stats?.avg_latency_ms || 0} suffix="ms" /></Card></Col>
-        <Col xs={12} sm={6}><Card><Statistic title="今日成功" value={stats?.today_success || 0} prefix={<CheckCircleOutlined />} valueStyle={{ color: '#52c41a' }} /></Card></Col>
-      </Row>
-
-      {stats?.fail_by_reason && stats.fail_by_reason.length > 0 && (
-        <Card title="错误分类统计" style={{ marginBottom: 16 }} size="small">
-          {stats.fail_by_reason.map((f, i) => (
-            <Tag key={i} color="red" style={{ marginBottom: 8 }}>{f.reason}: {f.count}次</Tag>
-          ))}
-        </Card>
-      )}
-
-      {modelHealthOption && (
-        <Card title="模型健康度" style={{ marginBottom: 16 }}>
-          <ReactEChartsCore echarts={echarts} option={modelHealthOption} style={{ height: 300 }} />
-        </Card>
-      )}
-
-      <Card title={<><ExclamationCircleOutlined /> 最近失败任务（24h）</>}>
-        <Table rowKey="id" columns={failColumns} dataSource={failedTasks} loading={loading} pagination={{ total: failedTotal, pageSize: 50 }} size="small" />
-      </Card>
-    </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════
-//  财务管理 Panel
-// ═══════════════════════════════════════════════════════
-
-function FinancePanel() {
-  return (
-    <Tabs defaultActiveKey="orders" items={[
-      { key: 'orders', label: '订单管理', children: <OrdersSub /> },
-      { key: 'revenue', label: '营收报表', children: <RevenueSub /> },
-      { key: 'packages', label: '套餐管理', children: <PackagesSub /> },
-    ]} />
-  )
-}
-
-function OrdersSub() {
-  const [orders, setOrders] = useState<OrderItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('')
-
-  const load = useCallback(async (p = 1, s = '') => {
-    setLoading(true)
-    try { const res = await admin.getOrders(p, 20, s); setOrders(res.data?.items || []); setTotal(res.data?.total || 0); setPage(p) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const handleRefund = async (id: string) => {
-    try { await admin.refundOrder(id); message.success('退款已处理'); load(page, statusFilter) } catch { message.error('退款失败') }
-  }
-
-  const columns = [
-    { title: '订单号', dataIndex: 'order_no', key: 'order_no', width: 160, ellipsis: true },
-    { title: '用户', dataIndex: 'nickname', key: 'nickname', width: 80 },
-    { title: '套餐', dataIndex: 'package_name', key: 'package_name', width: 100 },
-    { title: '金额', dataIndex: 'amount', key: 'amount', width: 80, render: (v: number) => `¥${v}` },
-    { title: '状态', dataIndex: 'status', key: 'status', width: 80, render: (s: string) => <Tag color={ORDER_STATUS[s]?.color}>{ORDER_STATUS[s]?.label || s}</Tag> },
-    { title: '时间', dataIndex: 'created_at', key: 'created_at', width: 140, render: (t: string) => t ? new Date(t).toLocaleString() : '-' },
-    {
-      title: '操作', key: 'action', width: 80,
-      render: (_: any, r: OrderItem) => r.status === 'success' ? (
-        <Popconfirm title="确定退款?" onConfirm={() => handleRefund(r.id)}><Button size="small" danger>退款</Button></Popconfirm>
-      ) : null,
-    },
-  ]
-
-  return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Select placeholder="状态筛选" allowClear style={{ width: 120 }} onChange={(v) => { setStatusFilter(v || ''); load(1, v || '') }}
-          options={Object.entries(ORDER_STATUS).map(([k, v]) => ({ label: v.label, value: k }))} />
-      </Space>
-      <Table rowKey="id" columns={columns} dataSource={orders} loading={loading} pagination={{ current: page, total, pageSize: 20, onChange: (p) => load(p, statusFilter) }} size="middle" scroll={{ x: 800 }} />
-    </div>
-  )
-}
-
-function RevenueSub() {
-  const [revenue, setRevenue] = useState<RevenueData | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [days, setDays] = useState(30)
-
-  const load = useCallback(async (d = 30) => {
-    setLoading(true)
-    try { const res = await admin.getRevenue(d); setRevenue(res.data) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const revenueOption = revenue?.daily ? {
-    tooltip: { trigger: 'axis' },
-    grid: { left: 60, right: 30, top: 20, bottom: 50 },
-    xAxis: { type: 'category', data: revenue.daily.map((d) => d.date), axisLabel: { rotate: 30, fontSize: 10 } },
-    yAxis: { type: 'value' },
-    series: [
-      { name: '收入(元)', type: 'bar', data: revenue.daily.map((d) => d.revenue), itemStyle: { color: '#52c41a' } },
-      { name: '订单数', type: 'line', data: revenue.daily.map((d) => d.orders), itemStyle: { color: '#1890ff' } },
-    ],
-  } : null
-
-  return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Select value={days} onChange={(v) => { setDays(v); load(v) }}
-          options={[{ label: '近7天', value: 7 }, { label: '近30天', value: 30 }, { label: '近90天', value: 90 }]} />
-        <Button icon={<ReloadOutlined />} onClick={() => load(days)}>刷新</Button>
-      </Space>
-
-      <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
-        <Col sm={8}><Card><Statistic title="总收入" value={revenue?.total_revenue || 0} prefix="¥" precision={2} /></Card></Col>
-        <Col sm={8}><Card><Statistic title="退款金额" value={revenue?.refund_amount || 0} prefix="¥" precision={2} valueStyle={{ color: '#ff4d4f' }} /></Card></Col>
-        <Col sm={8}><Card><Statistic title="净收入" value={revenue?.net_revenue || 0} prefix="¥" precision={2} valueStyle={{ color: '#52c41a' }} /></Card></Col>
-      </Row>
-
-      {revenueOption && (
-        <Card title="每日收入趋势">
-          <ReactEChartsCore echarts={echarts} option={revenueOption} style={{ height: 350 }} />
-        </Card>
-      )}
-    </div>
-  )
-}
-
-function PackagesSub() {
-  const [packages, setPackages] = useState<PackageItem[]>([])
-  const [loading, setLoading] = useState(false)
-  const [modalOpen, setModalOpen] = useState(false)
-  const [form] = Form.useForm()
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try { const res = await admin.getPackages(); setPackages(res.data || []) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const handleCreate = async () => {
-    const v = await form.validateFields()
-    try { await admin.createPackage(v.name, v.package_type, v.price, v.duration_days, v.quota_amount); message.success('已创建'); setModalOpen(false); form.resetFields(); load() } catch { message.error('创建失败') }
-  }
-
-  const columns = [
-    { title: '名称', dataIndex: 'name', key: 'name' },
-    { title: '类型', dataIndex: 'package_type', key: 'package_type', render: (v: string) => <Tag>{v}</Tag> },
-    { title: '价格', dataIndex: 'price', key: 'price', render: (v: number) => `¥${v}` },
-    { title: '有效期', dataIndex: 'duration_days', key: 'duration_days', render: (v: number) => v ? `${v}天` : '用完为止' },
-    { title: '次数', dataIndex: 'quota_amount', key: 'quota_amount', render: (v: number) => v != null ? (v < 0 ? '不限量' : `${v}次`) : '-' },
-    { title: '状态', dataIndex: 'is_active', key: 'is_active', render: (v: boolean) => <Badge status={v ? 'success' : 'default'} text={v ? '上架' : '下架'} /> },
-    {
-      title: '操作', key: 'action',
-      render: (_: any, r: PackageItem) => (
-        <Button size="small" onClick={async () => { try { await admin.updatePackage(r.id, { is_active: !r.is_active }); load() } catch {} }}>{r.is_active ? '下架' : '上架'}</Button>
-      ),
-    },
-  ]
-
-  return (
-    <div>
-      <Button type="primary" icon={<PlusOutlined />} onClick={() => setModalOpen(true)} style={{ marginBottom: 16 }}>新增套餐</Button>
-      <Table rowKey="id" columns={columns} dataSource={packages} loading={loading} pagination={false} size="middle" />
-      <Modal title="新增套餐" open={modalOpen} onOk={handleCreate} onCancel={() => setModalOpen(false)}>
-        <Form form={form} layout="vertical">
-          <Form.Item name="name" label="名称" rules={[{ required: true }]}><Input /></Form.Item>
-          <Form.Item name="package_type" label="类型" rules={[{ required: true }]}><Select options={[{ label: '月度VIP', value: 'monthly_vip' }, { label: '年度VIP', value: 'yearly_vip' }, { label: '充值包', value: 'topup_10' }]} /></Form.Item>
-          <Form.Item name="price" label="价格(元)" rules={[{ required: true }]}><InputNumber min={0} step={0.01} style={{ width: '100%' }} /></Form.Item>
-          <Form.Item name="duration_days" label="有效期(天)"><InputNumber min={0} style={{ width: '100%' }} /></Form.Item>
-          <Form.Item name="quota_amount" label="次数(-1=不限量)"><InputNumber min={-1} style={{ width: '100%' }} /></Form.Item>
-        </Form>
-      </Modal>
-    </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════
-//  反馈工单 Panel
-// ═══════════════════════════════════════════════════════
-
-function FeedbackPanel() {
-  return (
-    <Tabs defaultActiveKey="feedbacks" items={[
-      { key: 'feedbacks', label: 'AI反馈', children: <FeedbacksSub /> },
-      { key: 'tickets', label: '投诉工单', children: <TicketsSub /> },
-    ]} />
-  )
-}
-
-function FeedbacksSub() {
-  const [feedbacks, setFeedbacks] = useState<FeedbackItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [minScore, setMinScore] = useState<number | undefined>()
-  const [clustering, setClustering] = useState<{ total_low: number; samples: string[] } | null>(null)
-
-  const load = useCallback(async (p = 1, ms?: number) => {
-    setLoading(true)
-    try { const res = await admin.getFeedbacks(p, 20, ms); setFeedbacks(res.data?.items || []); setTotal(res.data?.total || 0); setPage(p) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load(); loadClustering() }, [])
-
-  const loadClustering = async () => {
-    try { const res = await admin.getFeedbackClustering(7); setClustering(res.data) } catch {}
-  }
-
-  const columns = [
-    { title: '评分', dataIndex: 'score', key: 'score', width: 80, render: (v: number) => <Tag color={v >= 4 ? 'green' : v >= 3 ? 'orange' : 'red'}>{v} 星</Tag> },
-    { title: '反馈', dataIndex: 'feedback_text', key: 'feedback_text', ellipsis: true },
-    { title: '岗位', dataIndex: 'job_title', key: 'job_title', width: 120 },
-    { title: '时间', dataIndex: 'created_at', key: 'created_at', width: 140, render: (t: string) => t ? new Date(t).toLocaleString() : '-' },
-  ]
-
-  return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Select placeholder="最低评分" allowClear style={{ width: 120 }} onChange={(v) => { setMinScore(v); load(1, v) }}
-          options={[{ label: '1星', value: 1 }, { label: '2星', value: 2 }, { label: '3星', value: 3 }, { label: '4星', value: 4 }, { label: '5星', value: 5 }]} />
-      </Space>
-      {clustering && (
-        <Card size="small" style={{ marginBottom: 16 }}>
-          <div>近7天低分反馈: <Tag color="red">{clustering.total_low}条</Tag></div>
-          {clustering.samples.length > 0 && (
-            <div style={{ marginTop: 8 }}>{clustering.samples.slice(0, 5).map((s, i) => <Tag key={i} style={{ marginBottom: 4 }}>{s}</Tag>)}</div>
-          )}
-        </Card>
-      )}
-      <Table rowKey="id" columns={columns} dataSource={feedbacks} loading={loading} pagination={{ current: page, total, pageSize: 20, onChange: (p) => load(p, minScore) }} size="middle" />
-    </div>
-  )
-}
-
-function TicketsSub() {
-  const [tickets, setTickets] = useState<TicketItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [statusFilter, setStatusFilter] = useState('')
-  const [detailModal, setDetailModal] = useState(false)
-  const [detail, setDetail] = useState<TicketDetail | null>(null)
-  const [replyContent, setReplyContent] = useState('')
-
-  const load = useCallback(async (p = 1, s = '') => {
-    setLoading(true)
-    try { const res = await admin.getTickets(p, 20, s); setTickets(res.data?.items || []); setTotal(res.data?.total || 0); setPage(p) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const showDetail = async (id: string) => {
-    try { const res = await admin.getTicketDetail(id); setDetail(res.data); setDetailModal(true); setReplyContent('') } catch { message.error('加载失败') }
-  }
-
-  const handleReply = async () => {
-    if (!detail || !replyContent.trim()) return
-    try { await admin.replyTicket(detail.id, replyContent); message.success('已回复'); setReplyContent(''); showDetail(detail.id) } catch { message.error('回复失败') }
-  }
-
-  const handleStatus = async (status: string) => {
-    if (!detail) return
-    try { await admin.updateTicketStatus(detail.id, status); message.success('状态已更新'); showDetail(detail.id) } catch { message.error('操作失败') }
-  }
-
-  const columns = [
-    { title: '用户', dataIndex: 'nickname', key: 'nickname', width: 80 },
-    { title: '类型', dataIndex: 'category', key: 'category', width: 80, render: (v: string) => <Tag>{TICKET_CATEGORY[v] || v}</Tag> },
-    { title: '优先级', dataIndex: 'priority', key: 'priority', width: 70, render: (v: string) => <Tag color={v === 'high' ? 'red' : v === 'medium' ? 'orange' : 'default'}>{v}</Tag> },
-    { title: '主题', dataIndex: 'subject', key: 'subject', ellipsis: true },
-    { title: '状态', dataIndex: 'status', key: 'status', width: 80, render: (s: string) => <Tag color={s === 'open' ? 'red' : s === 'in_progress' ? 'orange' : s === 'resolved' ? 'green' : 'default'}>{s === 'open' ? '待处理' : s === 'in_progress' ? '处理中' : s === 'resolved' ? '已解决' : s === 'closed' ? '已关闭' : s}</Tag> },
-    { title: '回复', dataIndex: 'reply_count', key: 'reply_count', width: 50 },
-    { title: '时间', dataIndex: 'created_at', key: 'created_at', width: 130, render: (t: string) => t ? new Date(t).toLocaleString() : '-' },
-    {
-      title: '操作', key: 'action', width: 100,
-      render: (_: any, r: TicketItem) => <Button size="small" icon={<EyeOutlined />} onClick={() => showDetail(r.id)}>处理</Button>,
-    },
-  ]
-
-  return (
-    <div>
-      <Space style={{ marginBottom: 16 }}>
-        <Select placeholder="状态筛选" allowClear style={{ width: 120 }} onChange={(v) => { setStatusFilter(v || ''); load(1, v || '') }}
-          options={[{ label: '待处理', value: 'open' }, { label: '处理中', value: 'in_progress' }, { label: '已解决', value: 'resolved' }, { label: '已关闭', value: 'closed' }]} />
-      </Space>
-      <Table rowKey="id" columns={columns} dataSource={tickets} loading={loading} pagination={{ current: page, total, pageSize: 20, onChange: (p) => load(p, statusFilter) }} size="middle" />
-
-      <Modal title="工单详情" open={detailModal} onCancel={() => setDetailModal(false)} footer={null} width={700}>
-        {detail ? (
-          <>
-            <Descriptions bordered size="small" column={2}>
-              <Descriptions.Item label="类型"><Tag>{TICKET_CATEGORY[detail.category] || detail.category}</Tag></Descriptions.Item>
-              <Descriptions.Item label="优先级"><Tag color={detail.priority === 'high' ? 'red' : 'orange'}>{detail.priority}</Tag></Descriptions.Item>
-              <Descriptions.Item label="状态"><Tag color={detail.status === 'open' ? 'red' : 'green'}>{detail.status}</Tag></Descriptions.Item>
-              <Descriptions.Item label="主题">{detail.subject}</Descriptions.Item>
-            </Descriptions>
-            <Divider>内容</Divider>
-            <div style={{ background: '#fafafa', padding: 12, borderRadius: 8, marginBottom: 16 }}>{detail.content || '-'}</div>
-            {detail.replies && detail.replies.length > 0 && (
-              <>
-                <Divider>回复记录</Divider>
-                {detail.replies.map((r) => (
-                  <div key={r.id} style={{ padding: '8px 12px', marginBottom: 8, background: r.admin_id ? '#e6f7ff' : '#f6ffed', borderRadius: 6, borderLeft: `3px solid ${r.admin_id ? '#1890ff' : '#52c41a'}` }}>
-                    <div style={{ fontSize: 12, color: '#999', marginBottom: 4 }}>
-                      {r.admin_id ? '管理员' : '用户'} {r.is_internal ? <Tag color="orange" style={{ marginLeft: 8 }}>内部备注</Tag> : null}
-                      <span style={{ float: 'right' }}>{r.created_at ? new Date(r.created_at).toLocaleString() : ''}</span>
-                    </div>
-                    <div>{r.content}</div>
-                  </div>
-                ))}
-              </>
-            )}
-            {detail.status !== 'closed' && (
-              <>
-                <Divider>回复</Divider>
-                <TextArea rows={3} value={replyContent} onChange={(e) => setReplyContent(e.target.value)} placeholder="输入回复内容..." style={{ marginBottom: 12 }} />
-                <Space>
-                  <Button type="primary" icon={<SendOutlined />} onClick={handleReply}>发送回复</Button>
-                  {detail.status === 'open' && <Button onClick={() => handleStatus('in_progress')}>标记处理中</Button>}
-                  {detail.status !== 'resolved' && <Button onClick={() => handleStatus('resolved')}>标记已解决</Button>}
-                  <Button onClick={() => handleStatus('closed')}>关闭工单</Button>
-                </Space>
-              </>
-            )}
-          </>
-        ) : <Empty />}
-      </Modal>
-    </div>
-  )
-}
-
-// ═══════════════════════════════════════════════════════
-//  审计日志 Panel
-// ═══════════════════════════════════════════════════════
-
-function LogsPanel() {
-  const [logs, setLogs] = useState<AdminLogItem[]>([])
-  const [total, setTotal] = useState(0)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
-
-  const load = useCallback(async (p = 1) => {
-    setLoading(true)
-    try { const res = await admin.getAdminLogs(p, 50); setLogs(res.data?.items || []); setTotal(res.data?.total || 0); setPage(p) } catch {} finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load() }, [load])
-
-  const columns = [
-    { title: '管理员ID', dataIndex: 'admin_id', key: 'admin_id', width: 100, ellipsis: true },
-    { title: '操作', dataIndex: 'action', key: 'action', width: 140, render: (v: string) => <Tag>{v}</Tag> },
-    { title: '目标类型', dataIndex: 'target_type', key: 'target_type', width: 80 },
-    { title: '目标ID', dataIndex: 'target_id', key: 'target_id', width: 100, ellipsis: true },
-    { title: '详情', dataIndex: 'details', key: 'details', ellipsis: true, render: (v: any) => v ? JSON.stringify(v) : '-' },
-    { title: '时间', dataIndex: 'created_at', key: 'created_at', width: 150, render: (t: string) => t ? new Date(t).toLocaleString() : '-' },
-  ]
-
-  return (
-    <Card>
-      <Table rowKey="id" columns={columns} dataSource={logs} loading={loading} pagination={{ current: page, total, pageSize: 50, onChange: (p) => load(p) }} size="small" scroll={{ x: 800 }} />
-    </Card>
   )
 }

@@ -4,6 +4,7 @@ const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 const api = axios.create({
   baseURL: API_BASE,
+  timeout: 20000,
 })
 
 /** 将相对路径（如 uploads/...）补全为后端完整 URL，已是完整 URL 则原样返回 */
@@ -98,10 +99,6 @@ export const admin = {
   banUser: (id: string, reason: string, durationDays?: number) =>
     api.put(`/api/admin/users/${id}/ban`, { reason, duration_days: durationDays }),
   unbanUser: (id: string) => api.put(`/api/admin/users/${id}/unban`),
-  setVip: (id: string, isPaid: boolean, dailyLimit?: number, monthlyLimit?: number) =>
-    api.put(`/api/admin/users/${id}/vip`, { is_paid: isPaid, daily_limit: dailyLimit, monthly_limit: monthlyLimit }),
-  addUserQuota: (id: string, amount: number, reason = '') =>
-    api.post(`/api/admin/users/${id}/quota`, { amount, reason }),
 
   getDashboardCore: () => api.get('/api/admin/dashboard/core'),
   getDashboardIndustry: () => api.get('/api/admin/dashboard/industry'),
@@ -156,18 +153,6 @@ export const admin = {
   retryTasks: (taskIds: string[]) =>
     api.post('/api/admin/tasks/retry', taskIds),
 
-  getOrders: (page = 1, pageSize = 20, status = '', userSearch = '', startDate = '', endDate = '') =>
-    api.get('/api/admin/orders', { params: { page, page_size: pageSize, status, user_search: userSearch, start_date: startDate, end_date: endDate } }),
-  refundOrder: (id: string, reason = '') =>
-    api.post(`/api/admin/orders/${id}/refund`, { reason }),
-  getRevenue: (days = 30) => api.get('/api/admin/revenue', { params: { days } }),
-
-  getPackages: () => api.get('/api/admin/packages'),
-  createPackage: (name: string, packageType: string, price: number, durationDays?: number, quotaAmount?: number) =>
-    api.post('/api/admin/packages', { name, package_type: packageType, price, duration_days: durationDays, quota_amount: quotaAmount }),
-  updatePackage: (id: string, data: { is_active?: boolean; price?: number }) =>
-    api.put(`/api/admin/packages/${id}`, data),
-
   getFeedbacks: (page = 1, pageSize = 20, minScore?: number, maxScore?: number) =>
     api.get('/api/admin/feedbacks', { params: { page, page_size: pageSize, min_score: minScore, max_score: maxScore } }),
   getFeedbackClustering: (days = 7) =>
@@ -193,14 +178,20 @@ export const resumes = {
     return api.post('/api/resumes/upload', form)
   },
   list: () => api.get('/api/resumes/'),
+  stats: () => api.get('/api/resumes/stats'),
   get: (id: string) => api.get(`/api/resumes/${id}`),
   create: (title?: string, sourceResumeId?: string) =>
     api.post('/api/resumes/', { title: title || null, source_resume_id: sourceResumeId || null }),
   update: (id: string, title: string) =>
     api.put(`/api/resumes/${id}`, { title }),
   setPrimary: (id: string) => api.put(`/api/resumes/${id}/primary`),
+  toggleFavorite: (id: string, favorite: boolean) =>
+    api.post(`/api/resumes/${id}/favorite`, { favorite }),
   delete: (id: string) => api.delete(`/api/resumes/${id}`),
   batchDelete: (ids: string[]) => api.post('/api/resumes/batch-delete', { ids }),
+  trash: () => api.get('/api/resumes/trash'),
+  restore: (id: string) => api.post(`/api/resumes/${id}/restore`),
+  batchRestore: (ids: string[]) => api.post('/api/resumes/batch-restore', { ids }),
 }
 
 export const jobs = {
@@ -295,4 +286,14 @@ export const batch = {
 export const refine = {
   refine: (optId: string, instruction: string, targetSection?: string) =>
     api.post(`/api/optimization/${optId}/refine`, { instruction, target_section: targetSection || null }),
+}
+
+/** 直接渲染：跳过 AI 优化，将简历 JSON 直接生成 PDF */
+export const render = {
+  /** 从已解析的简历生成 PDF */
+  render: (resumeId: string, template?: string) =>
+    api.post('/api/optimize/render', { resume_id: resumeId, template: template || 'professional' }),
+  /** 从简历文本解析后直接生成 PDF */
+  renderText: (resumeText: string, template?: string) =>
+    api.post('/api/optimize/render-text', { resume_text: resumeText, template: template || 'professional' }),
 }
