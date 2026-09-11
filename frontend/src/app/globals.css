@@ -1224,13 +1224,15 @@ body {
   display: flex;
   align-items: center;
   gap: 11px;
-  width: 100%;
+  box-sizing: border-box;
+  width: calc(100% - 20px);
   text-align: left;
   border: none;
+  text-decoration: none;
   background: transparent;
   cursor: pointer;
   padding: 10px 12px;
-  margin: 2px 8px;
+  margin: 2px 10px;
   border-radius: 10px;
   font-size: 15px;
   color: var(--text-primary);
@@ -1238,14 +1240,22 @@ body {
   font-family: inherit;
 }
 
-.wb-navitem:hover {
+.wb-sidebar a {
+  text-decoration: none;
+}
+
+.wb-navitem:hover,
+.wb-navitem:focus,
+.wb-navitem:active {
   background: var(--ios-systemfill-secondary);
+  text-decoration: none;
 }
 
 .wb-navitem.active {
   background: var(--ios-systemfill);
   color: var(--ios-blue);
   font-weight: 600;
+  text-decoration: none;
 }
 
 .wb-navitem .wb-nav-icon {
