@@ -10,8 +10,11 @@ interface IosNavBarProps {
   /** 是否显示大标题（Large Title），滚动后收缩为居中标题 */
   largeTitle?: boolean
   backPath?: string
+  backLabel?: string
   onBack?: () => void
   right?: React.ReactNode
+  /** 大标题区域下方的搜索栏（iOS UISearchBar 风格） */
+  search?: React.ReactNode
   /** 滚动容器 ref；不传则监听 window 滚动 */
   scrollRef?: React.RefObject<HTMLElement>
 }
@@ -25,8 +28,10 @@ export default function IosNavBar({
   subtitle,
   largeTitle = true,
   backPath,
+  backLabel = '返回',
   onBack,
   right,
+  search,
   scrollRef,
 }: IosNavBarProps) {
   const router = useRouter()
@@ -104,17 +109,17 @@ export default function IosNavBar({
               <span style={{ fontSize: 22, lineHeight: 1, marginTop: -2 }}>‹</span>
               <span
                 style={{
-                  maxWidth: 80,
+                  maxWidth: 120,
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
                 }}
               >
-                返回
+                {backLabel}
               </span>
             </button>
           )}
-          {collapsed && (
+          {(collapsed || backPath || onBack) && (
             <span
               style={{
                 fontSize: 17,
@@ -153,6 +158,9 @@ export default function IosNavBar({
             <div style={{ fontSize: 15, color: 'var(--text-tertiary)', marginTop: 2 }}>
               {subtitle}
             </div>
+          )}
+          {search && (
+            <div style={{ marginTop: 12 }}>{search}</div>
           )}
         </div>
       )}

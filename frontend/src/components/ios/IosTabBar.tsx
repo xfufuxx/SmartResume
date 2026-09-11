@@ -15,12 +15,14 @@ interface IosTabBarProps {
   items: IosTabItem[]
   /** 强制指定选中项；不传则按当前路径匹配 */
   activeKey?: string
+  /** 毛玻璃条最大宽度（响应式居中），默认 480 */
+  maxWidth?: number
 }
 
 /**
  * iOS 底部 TabBar：毛玻璃、图标 24px、选中态主色、标签 10px、安全区。
  */
-export default function IosTabBar({ items, activeKey }: IosTabBarProps) {
+export default function IosTabBar({ items, activeKey, maxWidth = 480 }: IosTabBarProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { theme } = useTheme()
@@ -42,12 +44,15 @@ export default function IosTabBar({ items, activeKey }: IosTabBarProps) {
         borderTop: '0.5px solid var(--ios-separator)',
         paddingBottom: 'env(safe-area-inset-bottom, 0px)',
         display: 'flex',
-        maxWidth: 480,
+        maxWidth,
         margin: '0 auto',
       }}
     >
       {items.map((it) => {
-        const isActive = active === it.path || active === it.key
+        const isExact = active === it.path || active === it.key
+        const isSub =
+          it.path !== '/' && (active === it.path || active.startsWith(it.path + '/'))
+        const isActive = isExact || isSub
         return (
           <button
             key={it.key}

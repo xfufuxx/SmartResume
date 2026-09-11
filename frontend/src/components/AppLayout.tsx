@@ -1,97 +1,154 @@
 'use client'
 
 import React, { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Layout, Menu, Button, Typography, Avatar, Badge, Input, Dropdown,
-  type MenuProps,
-} from 'antd'
+import { Avatar, Badge, Button, Dropdown, type MenuProps } from 'antd'
 import {
   HomeOutlined,
   FileTextOutlined,
   FileSearchOutlined,
-  HistoryOutlined,
   UserOutlined,
   LogoutOutlined,
   BellOutlined,
   ThunderboltOutlined,
-  LeftOutlined,
   SearchOutlined,
-  MessageOutlined,
-  TrophyOutlined,
-  SnippetsOutlined,
-  DeleteOutlined,
   MoonOutlined,
   SunOutlined,
+  TrophyOutlined,
+  SnippetsOutlined,
+  MessageOutlined,
+  HistoryOutlined,
+  DeleteOutlined,
 } from '@ant-design/icons'
 import { useRouter, usePathname } from 'next/navigation'
 import { clearAuth, getToken } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
-
-const { Header, Sider, Content } = Layout
-
-interface NavItem {
-  key: string
-  label: string
-  icon: React.ReactNode
-  path: string
-}
-
-const defaultNavItems: NavItem[] = [
-  { key: 'dashboard', label: '首页', icon: <HomeOutlined />, path: '/dashboard' },
-  { key: 'home', label: '简历优化', icon: <ThunderboltOutlined />, path: '/' },
-  { key: 'resumes', label: '我的简历', icon: <FileTextOutlined />, path: '/resumes' },
-  { key: 'jobs', label: '岗位库', icon: <FileSearchOutlined />, path: '/jobs' },
-  { key: 'scoring', label: '简历评分', icon: <TrophyOutlined />, path: '/scoring' },
-  { key: 'batch', label: '批量优化', icon: <SnippetsOutlined />, path: '/batch' },
-  { key: 'interviews', label: '面试追踪', icon: <MessageOutlined />, path: '/interviews' },
-  { key: 'history', label: '历史记录', icon: <HistoryOutlined />, path: '/history' },
-  { key: 'recycle', label: '回收站', icon: <DeleteOutlined />, path: '/recycle' },
-  { key: 'profile', label: '个人中心', icon: <UserOutlined />, path: '/profile' },
-]
+import IosNavBar from '@/components/ios/IosNavBar'
+import IosTabBar, { type IosTabItem } from '@/components/ios/IosTabBar'
 
 interface AppLayoutProps {
   children: React.ReactNode
   activeKey?: string
   title?: string
   subtitle?: string
-  navItems?: NavItem[]
-  maxWidth?: number | string
+  /** 隐藏顶部导航栏与底部 TabBar（用于需全屏的页面，如登录、版本对比） */
   hideNav?: boolean
   backPath?: string
   backLabel?: string
   headerExtra?: React.ReactNode
+  /** 是否显示搜索栏，且提供了 onSearch 时渲染 iOS 搜索条 */
   searchable?: boolean
   onSearch?: (value: string) => void
+  /** 内容区最大宽度（响应式居中），默认 960 */
+  maxWidth?: number | string
+}
+
+/** 底部 TabBar 主导航（iOS 建议 ≤5 项） */
+const TAB_ITEMS: IosTabItem[] = [
+  { key: 'dashboard', label: '首页', icon: <HomeOutlined />, path: '/dashboard' },
+  { key: 'home', label: '优化', icon: <ThunderboltOutlined />, path: '/' },
+  { key: 'resumes', label: '简历', icon: <FileTextOutlined />, path: '/resumes' },
+  { key: 'jobs', label: '岗位', icon: <FileSearchOutlined />, path: '/jobs' },
+  { key: 'profile', label: '我的', icon: <UserOutlined />, path: '/profile' },
+]
+
+/** 主 Tab 之外的高级功能，通过右上角头像菜单「更多功能」进入，保证全部可达 */
+const MORE_ITEMS: IosTabItem[] = [
+  { key: 'scoring', label: '简历评分', icon: <TrophyOutlined />, path: '/scoring' },
+  { key: 'batch', label: '批量优化', icon: <SnippetsOutlined />, path: '/batch' },
+  { key: 'interviews', label: '面试追踪', icon: <MessageOutlined />, path: '/interviews' },
+  { key: 'history', label: '历史记录', icon: <HistoryOutlined />, path: '/history' },
+  { key: 'recycle', label: '回收站', icon: <DeleteOutlined />, path: '/recycle' },
+]
+
+/** iOS 风格搜索条，渲染在导航栏大标题下方 */
+function IosSearchBar({
+  onSearch,
+  placeholder = '搜索',
+}: {
+  onSearch: (value: string) => void
+  placeholder?: string
+}) {
+  const [value, setValue] = useState('')
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 8,
+        background: 'var(--ios-systemfill)',
+        borderRadius: 10,
+        padding: '9px 12px',
+      }}
+    >
+      <SearchOutlined style={{ color: 'var(--text-tertiary)', fontSize: 16 }} />
+      <input
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') onSearch(value)
+        }}
+        placeholder={placeholder}
+        className="ios-search-input"
+        aria-label={placeholder}
+        style={{
+          flex: 1,
+          border: 'none',
+          background: 'transparent',
+          outline: 'none',
+          fontSize: 15,
+          color: 'var(--text-primary)',
+          minWidth: 0,
+        }}
+      />
+      {value && (
+        <button
+          onClick={() => {
+            setValue('')
+            onSearch('')
+          }}
+          aria-label="清除"
+          className="ios-press"
+          style={{
+            border: 'none',
+            background: 'transparent',
+            color: 'var(--text-tertiary)',
+            cursor: 'pointer',
+            fontSize: 16,
+            lineHeight: 1,
+            padding: 0,
+          }}
+        >
+          ✕
+        </button>
+      )}
+    </div>
+  )
 }
 
 export default function AppLayout({
   children,
-  activeKey,
   title,
   subtitle,
-  navItems = defaultNavItems,
-  maxWidth = 1440,
   hideNav = false,
   backPath,
   backLabel = '返回',
   headerExtra,
   searchable = true,
   onSearch,
+  maxWidth = 960,
 }: AppLayoutProps) {
   const router = useRouter()
   const pathname = usePathname()
   const { theme, toggleTheme } = useTheme()
   const [token, setToken] = useState<string | null>(null)
-  const [collapsed, setCollapsed] = useState(false)
   const [navigating, setNavigating] = useState(false)
-  const [searchValue, setSearchValue] = useState('')
   const prevPathRef = useRef(pathname)
 
   useEffect(() => {
     setToken(getToken())
   }, [pathname])
 
-  // 路由切换时显示顶部进度条，给予即时反馈，避免用户误以为卡顿而重复点击
+  // 路由切换时顶部显示细进度条，给予即时反馈
   useEffect(() => {
     if (prevPathRef.current !== pathname) {
       prevPathRef.current = pathname
@@ -101,231 +158,104 @@ export default function AppLayout({
     }
   }, [pathname])
 
-  const active = useMemo(() => {
-    if (activeKey) return activeKey
-    if (pathname === '/') return 'home'
-    const item = navItems.find((n) => n.path === pathname)
-    return item?.key || ''
-  }, [activeKey, pathname, navItems])
-
-  const triggerSearch = () => {
-    onSearch?.(searchValue)
-  }
-
   const handleLogout = () => {
     clearAuth()
     router.push('/login')
   }
 
-  const userMenuItems: MenuProps['items'] = [
-    { key: 'profile', label: '个人中心', icon: <UserOutlined />, onClick: () => router.push('/profile') },
-    { type: 'divider' },
-    { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, onClick: handleLogout },
-  ]
+  const userMenuItems: MenuProps['items'] = useMemo(() => {
+    const moreGroup = MORE_ITEMS.map((it) => ({
+      key: it.key,
+      label: it.label,
+      icon: it.icon,
+      onClick: () => router.push(it.path),
+    }))
+    return [
+      { key: 'profile', label: '个人中心', icon: <UserOutlined />, onClick: () => router.push('/profile') },
+      { type: 'divider' as const },
+      ...moreGroup,
+      { type: 'divider' as const },
+      { key: 'logout', label: '退出登录', icon: <LogoutOutlined />, onClick: handleLogout },
+    ]
+  }, [router])
 
-  const logo = (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '18px 20px 14px',
-      height: 64,
-    }}>
-      <div style={{
-        width: 34, height: 34, borderRadius: 10,
-        background: 'linear-gradient(135deg, #2563EB, #3B82F6)',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        boxShadow: '0 4px 10px rgba(37, 99, 235, 0.25)',
-      }}>
-        <FileTextOutlined style={{ color: '#fff', fontSize: 18 }} />
-      </div>
-      {!collapsed && (
-        <span style={{
-          fontSize: 18, fontWeight: 700, color: 'var(--text-primary)', letterSpacing: '-0.01em',
-        }}>智能简历</span>
-      )}
-    </div>
-  )
-
-  const userAvatar = (
-    <div style={{
-      display: 'flex', alignItems: 'center', gap: 10,
-      padding: '12px 16px',
-      borderTop: '1px solid var(--border-light)',
-    }}>
-      <Avatar style={{ background: 'linear-gradient(135deg, #2563EB, #3B82F6)' }} icon={<UserOutlined />} />
-      {!collapsed && (
-        <div style={{ overflow: 'hidden' }}>
-          <div style={{ fontSize: 13, fontWeight: 600, color: 'var(--text-primary)', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-            当前用户
-          </div>
-          <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>{token ? '已登录' : '访客'}</div>
-        </div>
-      )}
-    </div>
-  )
-
-  const sider = !hideNav && (
-    <Sider
-      width={220}
-      collapsed={collapsed}
-      collapsedWidth={72}
-      trigger={null}
-      collapsible
-      style={{
-        background: 'var(--bg-sidebar)',
-        borderRight: '1px solid var(--border-light)',
-        position: 'fixed',
-        left: 0,
-        top: 0,
-        bottom: 0,
-        zIndex: 100,
-        display: 'flex',
-        flexDirection: 'column',
-      }}
-    >
-      {logo}
-      <Menu
-        mode="inline"
-        selectedKeys={[active]}
-        items={navItems.map((item) => ({
-          key: item.key,
-          icon: item.icon,
-          label: item.label,
-          onClick: () => router.push(item.path),
-        }))}
-        style={{ flex: 1, borderRight: 'none', paddingTop: 8 }}
-      />
-      {userAvatar}
-    </Sider>
-  )
-
-  const headerLeft = backPath ? (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+  const navRight = (
+    <>
+      {headerExtra}
       <Button
-        icon={<LeftOutlined />}
-        onClick={() => router.push(backPath)}
         type="text"
-        style={{ color: 'var(--text-secondary)' }}
-      >
-        {backLabel}
-      </Button>
-      <div style={{ width: 1, height: 20, background: 'var(--border-light)' }} />
-    </div>
-  ) : null
+        icon={theme === 'dark' ? <SunOutlined style={{ fontSize: 18 }} /> : <MoonOutlined style={{ fontSize: 18 }} />}
+        onClick={toggleTheme}
+        style={{ color: 'var(--text-tertiary)' }}
+        title={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
+      />
+      <Badge count={3} size="small">
+        <Button
+          type="text"
+          icon={<BellOutlined style={{ fontSize: 18 }} />}
+          style={{ color: 'var(--text-tertiary)' }}
+          onClick={() => router.push('/messages')}
+        />
+      </Badge>
+      <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
+        <Avatar
+          style={{ cursor: 'pointer', background: 'var(--primary-500)' }}
+          icon={<UserOutlined />}
+        />
+      </Dropdown>
+    </>
+  )
 
-  const pageTitle = title ? (
-    <div>
-      <Typography.Title level={4} style={{ margin: 0, fontWeight: 700, fontSize: 20, color: 'var(--text-primary)', letterSpacing: '-0.02em' }}>
-        {title}
-      </Typography.Title>
-      {subtitle && (
-        <Typography.Text style={{ color: 'var(--text-tertiary)', fontSize: 13 }}>{subtitle}</Typography.Text>
-      )}
-    </div>
-  ) : null
+  const showSearch = searchable !== false && !!onSearch
+  const frameMax = typeof maxWidth === 'number' ? maxWidth : 960
+
+  // ── 全屏模式（隐藏导航，如登录、版本对比加载态）──
+  if (hideNav) {
+    return <div style={{ minHeight: '100vh', background: 'var(--bg-body)' }}>{children}</div>
+  }
 
   return (
-    <Layout style={{ minHeight: '100vh', background: 'var(--bg-body)' }}>
-      {sider}
-      <Layout style={{
-        marginLeft: hideNav ? 0 : (collapsed ? 72 : 220),
-        transition: 'margin-left 0.2s ease',
-        minHeight: '100vh',
-        background: 'var(--bg-body)',
-      }}>
-        <Header style={{
-          height: 84,
-          background: 'var(--bg-header)',
-          borderBottom: '1px solid var(--border-light)',
-          padding: '20px 24px 0',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 16,
-          position: 'sticky',
-          top: 0,
-          zIndex: 99,
-          overflow: 'hidden',
-        }}>
-          {navigating && (
-            <div
-              style={{
-                position: 'absolute',
-                top: 0,
-                left: 0,
-                height: 3,
-                width: '100%',
-                background: 'linear-gradient(90deg, transparent, #2563EB, transparent)',
-                borderRadius: 3,
-                animation: 'route-progress 0.6s ease-in-out',
-              }}
-            />
-          )}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 16, flex: 1, minWidth: 0 }}>
-            {headerLeft}
-            {pageTitle}
-          </div>
+    <div style={{ minHeight: '100vh', background: 'var(--bg-body)', display: 'flex', flexDirection: 'column', maxWidth: frameMax, margin: '0 auto', position: 'relative' }}>
+      {/* 路由切换进度条 */}
+      {navigating && (
+        <div
+          style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            maxWidth: frameMax,
+            margin: '0 auto',
+            height: 2,
+            zIndex: 200,
+            background: 'linear-gradient(90deg, transparent, var(--primary-500), transparent)',
+            animation: 'route-progress 0.6s ease-in-out',
+          }}
+        />
+      )}
 
-          {searchable && (
-            <div style={{ width: 360, maxWidth: '40%' }}>
-              <Input
-                value={searchValue}
-                onChange={(e) => setSearchValue(e.target.value)}
-                placeholder="搜索简历、职位、模板..."
-                allowClear
-                onPressEnter={triggerSearch}
-                style={{ width: '100%' }}
-                suffix={
-                  <span
-                    role="button"
-                    aria-label="搜索"
-                    onClick={triggerSearch}
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      paddingLeft: 10,
-                      marginLeft: 8,
-                      borderLeft: '1px solid var(--border-light)',
-                      cursor: 'pointer',
-                      color: 'var(--text-tertiary)',
-                      transition: 'color 0.2s',
-                    }}
-                    onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--primary-500)' }}
-                    onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-tertiary)' }}
-                  >
-                    <SearchOutlined style={{ fontSize: 16 }} />
-                  </span>
-                }
-              />
-            </div>
-          )}
+      <IosNavBar
+        title={title || ''}
+        subtitle={subtitle}
+        backPath={backPath}
+        backLabel={backLabel}
+        largeTitle={!backPath}
+        right={navRight}
+        search={showSearch ? <IosSearchBar onSearch={onSearch!} /> : undefined}
+      />
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-            {headerExtra}
-            <Button
-              type="text"
-              icon={theme === 'dark' ? <SunOutlined style={{ fontSize: 18 }} /> : <MoonOutlined style={{ fontSize: 18 }} />}
-              onClick={toggleTheme}
-              style={{ color: 'var(--text-tertiary)' }}
-              title={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
-            />
-            <Badge count={3} size="small">
-              <Button type="text" icon={<BellOutlined style={{ fontSize: 18 }} />} style={{ color: 'var(--text-tertiary)' }} onClick={() => router.push('/messages')} />
-            </Badge>
-            <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
-              <Avatar style={{ cursor: 'pointer', background: 'linear-gradient(135deg, #2563EB, #3B82F6)' }} icon={<UserOutlined />} />
-            </Dropdown>
-          </div>
-        </Header>
-
-        <Content style={{
-          padding: 24,
-          maxWidth,
-          margin: '0 auto',
+      <main
+        style={{
+          flex: 1,
           width: '100%',
-        }}>
-          {children}
-        </Content>
-      </Layout>
-    </Layout>
+          padding: '0 16px',
+          paddingBottom: 'calc(var(--tabbar-height) + env(safe-area-inset-bottom, 0px) + 16px)',
+        }}
+      >
+        {children}
+      </main>
+
+      <IosTabBar items={TAB_ITEMS} activeKey={pathname} maxWidth={frameMax} />
+    </div>
   )
 }
