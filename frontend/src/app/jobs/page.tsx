@@ -2,21 +2,22 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import {
-  Layout, Button, Card, Typography, Spin, Row, Col, message,
+  Button, Card, Typography, Spin, Row, Col, message,
   Tag, Space, Modal, Input, Empty, Tooltip, Popconfirm, Tabs, Select, Checkbox,
 } from 'antd'
 import {
-  HomeOutlined, HistoryOutlined, FileTextOutlined, PlusOutlined,
+  PlusOutlined,
   CrownOutlined, CopyOutlined, DeleteOutlined, EditOutlined,
-  DashboardOutlined, StarOutlined, StarFilled, UndoOutlined,
+  StarOutlined, StarFilled, UndoOutlined,
   BankOutlined, UploadOutlined, HeartOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
+import AppLayout from '@/components/AppLayout'
+import AuthGate from '@/components/AuthGate'
 import { jobs, toBackendUrl } from '@/lib/api'
 import { getToken, clearAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/utils'
 
-const { Header, Content } = Layout
 const { TextArea } = Input
 
 const CATEGORIES = ['产品', '开发', '运营', '设计', '市场', '销售', '其他']
@@ -277,29 +278,17 @@ export default function JobLibrary() {
     return (parsed?.company as string) || ''
   }
 
-  if (!token) return null
+  if (!token) return <AuthGate activeKey="jobs" />
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingInline: 24 }}>
-        <Space>
-          <Typography.Title level={4} style={{ color: '#fff', margin: 0 }}>
-            <BankOutlined /> 岗位库
-          </Typography.Title>
-        </Space>
-        <Space>
-          <Button icon={<HomeOutlined />} onClick={() => router.push('/')} type="text" style={{ color: '#fff' }}>首页</Button>
-          <Button icon={<FileTextOutlined />} onClick={() => router.push('/resumes')} type="text" style={{ color: '#fff' }}>简历库</Button>
-          <Button icon={<DashboardOutlined />} onClick={() => router.push('/dashboard')} type="text" style={{ color: '#fff' }}>仪表盘</Button>
-          <Button icon={<HistoryOutlined />} onClick={() => router.push('/history')} type="text" style={{ color: '#fff' }}>历史记录</Button>
-          <Button icon={<UndoOutlined />} onClick={() => { clearAuth(); router.push('/login') }} type="text" style={{ color: '#fff' }}>退出</Button>
-        </Space>
-      </Header>
-
-      <Content style={{ padding: 24, maxWidth: 1200, margin: '0 auto', width: '100%' }}>
+    <AppLayout activeKey="jobs" title="岗位库" subtitle="管理岗位需求、收藏与回收站，快速匹配简历">
+      <div className="app-page-enter">
         {/* 顶部操作栏 */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
-          <Typography.Title level={3} style={{ margin: 0 }}>我的岗位</Typography.Title>
+        <div className="app-page-header">
+          <div className="app-page-header-left">
+            <h1>我的岗位</h1>
+            <p>上传岗位截图，收藏心仪职位，支持批量管理</p>
+          </div>
           <Space>
             {selectMode && selectedIds.length > 0 && (
               <>
@@ -413,7 +402,7 @@ export default function JobLibrary() {
                 <Button size="small" onClick={toggleSelectAll}>
                   {selectedIds.length === list.length ? '取消全选' : '全选'}
                 </Button>
-                <span style={{ marginLeft: 8, color: '#999', fontSize: 13 }}>
+                <span style={{ marginLeft: 8, color: 'var(--text-tertiary)', fontSize: 13 }}>
                   已选 {selectedIds.length} / {list.length}
                 </span>
               </div>
@@ -434,7 +423,7 @@ export default function JobLibrary() {
                   hoverable
                   onClick={() => !selectMode && openPreview(job)}
                   style={{
-                    borderColor: job.is_primary ? '#2c6fbb' : undefined,
+                    borderColor: job.is_primary ? 'var(--primary-600)' : undefined,
                     borderWidth: job.is_primary ? 2 : 1,
                   }}
                   actions={activeTab === 'trash' ? [
@@ -450,14 +439,14 @@ export default function JobLibrary() {
                     <Tooltip title={job.is_favorite ? '取消收藏' : '收藏'} key="fav">
                       <Button
                         type="text"
-                        icon={job.is_favorite ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />}
+                        icon={job.is_favorite ? <StarFilled style={{ color: 'var(--warning-500)' }} /> : <StarOutlined />}
                         onClick={(e) => { e.stopPropagation(); handleToggleFavorite(job.id) }}
                       />
                     </Tooltip>,
                     <Tooltip title="设为默认" key="primary">
                       <Button
                         type="text"
-                        icon={<CrownOutlined style={{ color: job.is_primary ? '#faad14' : '#8c8c8c' }} />}
+                        icon={<CrownOutlined style={{ color: job.is_primary ? 'var(--warning-500)' : 'var(--text-tertiary)' }} />}
                         onClick={(e) => { e.stopPropagation(); handleSetPrimary(job.id) }}
                         disabled={job.is_primary}
                       />
@@ -479,26 +468,26 @@ export default function JobLibrary() {
                     title={
                       <Space>
                         {getJobTitle(job)}
-                        {job.is_primary && <Tag color="gold">默认</Tag>}
-                        {job.is_favorite && <StarFilled style={{ color: '#faad14', fontSize: 12 }} />}
+                        {job.is_primary && <Tag style={{ color: 'var(--warning-600)', backgroundColor: 'var(--warning-50)' }}>默认</Tag>}
+                        {job.is_favorite && <StarFilled style={{ color: 'var(--warning-500)', fontSize: 12 }} />}
                       </Space>
                     }
                     description={
                       <div>
                         {getJobCompany(job) && (
-                          <div style={{ marginBottom: 4 }}>
+                          <div style={{ marginBottom: 4, color: 'var(--text-secondary)' }}>
                             <BankOutlined style={{ marginRight: 4 }} />
                             {getJobCompany(job)}
                           </div>
                         )}
                         <div style={{ marginBottom: 4 }}>
-                          {job.category && <Tag color="blue">{job.category}</Tag>}
-                          <span style={{ fontSize: 12, color: '#999' }}>
+                          {job.category && <Tag style={{ color: 'var(--primary-600)', backgroundColor: 'var(--primary-50)' }}>{job.category}</Tag>}
+                          <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                             {formatDate(job.created_at)}
                           </span>
                         </div>
                         {job.parsed_job_json && (
-                          <div style={{ fontSize: 12, color: '#666', marginTop: 4 }}>
+                          <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
                             {(job.parsed_job_json as Record<string, string>).salary_range && (
                               <div>薪资: {(job.parsed_job_json as Record<string, string>).salary_range}</div>
                             )}
@@ -537,7 +526,7 @@ export default function JobLibrary() {
                 e.target.value = ''
               }}
             />
-            <UploadOutlined style={{ fontSize: 48, color: '#2c6fbb', marginBottom: 16 }} />
+            <UploadOutlined style={{ fontSize: 48, color: 'var(--primary-600)', marginBottom: 16 }} />
             <div style={{ marginBottom: 16 }}>
               <Typography.Text type="secondary">
                 支持 PNG、JPG、JPEG、WebP 格式，最大 20MB
@@ -606,8 +595,8 @@ export default function JobLibrary() {
           {previewJob && (
             <div>
               <div style={{ marginBottom: 16 }}>
-                {previewJob.company && <Tag color="blue"><BankOutlined /> {previewJob.company}</Tag>}
-                {previewJob.category && <Tag>{previewJob.category}</Tag>}
+                {previewJob.company && <Tag style={{ color: 'var(--primary-600)', backgroundColor: 'var(--primary-50)' }}><BankOutlined /> {previewJob.company}</Tag>}
+                {previewJob.category && <Tag style={{ color: 'var(--text-secondary)', backgroundColor: 'var(--gray-100)' }}>{previewJob.category}</Tag>}
               </div>
               {previewJob.parsed_job_json && (() => {
                 const pj = previewJob.parsed_job_json as Record<string, unknown>
@@ -633,7 +622,7 @@ export default function JobLibrary() {
                         <Typography.Title level={5}>必备要求</Typography.Title>
                         <Space wrap>
                           {mustSkills.map((s: string) => (
-                            <Tag key={s} color="red">{s}</Tag>
+                            <Tag key={s} style={{ color: 'var(--error-600)', backgroundColor: 'var(--error-50)' }}>{s}</Tag>
                           ))}
                         </Space>
                       </>
@@ -643,7 +632,7 @@ export default function JobLibrary() {
                         <Typography.Title level={5} style={{ marginTop: 16 }}>加分项</Typography.Title>
                         <Space wrap>
                           {niceSkills.map((s: string) => (
-                            <Tag key={s} color="green">{s}</Tag>
+                            <Tag key={s} style={{ color: 'var(--success-600)', backgroundColor: 'var(--success-50)' }}>{s}</Tag>
                           ))}
                         </Space>
                       </>
@@ -660,7 +649,7 @@ export default function JobLibrary() {
             </div>
           )}
         </Modal>
-      </Content>
-    </Layout>
+      </div>
+    </AppLayout>
   )
 }

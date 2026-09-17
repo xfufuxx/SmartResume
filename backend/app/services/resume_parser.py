@@ -20,6 +20,7 @@ def _get_client() -> AsyncOpenAI:
 async def _safe_chat_completion(client: AsyncOpenAI, **kwargs):
     """调用 chat completion，带重试和 response_format 自动降级"""
     kwargs.setdefault("timeout", 60.0)
+    kwargs.setdefault("temperature", 0.2)  # 简历解析需稳定、可复现，默认低温
     last_error = None
     for attempt in range(3):
         try:
@@ -112,6 +113,7 @@ async def _ocr_page_with_vision(img_bytes: bytes) -> str:
                 ],
             }
         ],
+        temperature=0.2,
         max_tokens=4096,
     )
     return resp.choices[0].message.content or ""
@@ -144,6 +146,7 @@ async def extract_text_from_image(file_bytes: bytes) -> str:
                     ],
                 }
             ],
+            temperature=0.2,
             max_tokens=4096,
         )
         return resp.choices[0].message.content or ""
@@ -216,20 +219,26 @@ async def parse_resume_from_bytes(content: bytes, filename: str = "") -> dict:
             "请确保：1) 视觉模型 API 可用；2) 或在 .env 中设置 USE_LOCAL_OCR=true 并安装 PaddleOCR"
         )
 
-    client = _get_client()
-    resp = await _safe_chat_completion(
-        client,
-        model=settings.LLM_MODEL_TEXT,
-        messages=[
-            {"role": "system", "content": RESUME_PARSE_SYSTEM_PROMPT},
-            {"role": "user", "content": RESUME_PARSE_USER_PROMPT.format(raw_text=raw_text)},
-        ],
-        response_format={"type": "json_object"},
-        max_tokens=4096,
-    )
-
-    parsed = json.loads(resp.choices[0].message.content or "{}")
-    return {"raw_text": raw_text, "parsed_json": parsed}
+    try:
+        client = _get_client()
+        resp = await _safe_chat_completion(
+            client,
+            model=settings.LLM_MODEL_TEXT,
+            messages=[
+                {"role": "system", "content": RESUME_PARSE_SYSTEM_PROMPT},
+                {"role": "user", "content": RESUME_PARSE_USER_PROMPT.format(raw_text=raw_text)},
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=4096,
+        )
+        parsed = json.loads(resp.choices[0].message.content or "{}")
+        return {"raw_text": raw_text, "parsed_json": parsed}
+    except Exception as e:
+        error_msg = str(e).lower()
+        if any(kw in error_msg for kw in ["401", "invalid_key", "unauthorized", "api_key", "invalid api key"]):
+            logger.warning("LLM API Key 无效，使用 Mock 数据代替")
+            return _mock_resume_parse()
+        raise
 
 
 _MOCK_RESUME_JSON = {
@@ -262,23 +271,30 @@ _MOCK_RESUME_JSON = {
 async def parse_resume_text(text: str) -> dict:
     """直接解析简历文本（无需文件），返回 parsed_json"""
     if not has_valid_api_key():
-        return _MOCK_RESUME_JSON
+        raise ValueError("LLM_API_KEY 未配置或未生效，无法解析简历。请检查 backend/.env 中的 LLM_API_KEY。")
 
     if not text or not text.strip():
         raise ValueError("简历文本为空，无法解析")
 
-    client = _get_client()
-    resp = await _safe_chat_completion(
-        client,
-        model=settings.LLM_MODEL_TEXT,
-        messages=[
-            {"role": "system", "content": RESUME_PARSE_SYSTEM_PROMPT},
-            {"role": "user", "content": RESUME_PARSE_USER_PROMPT.format(raw_text=text)},
-        ],
-        response_format={"type": "json_object"},
-        max_tokens=4096,
-    )
-    return json.loads(resp.choices[0].message.content or "{}")
+    try:
+        client = _get_client()
+        resp = await _safe_chat_completion(
+            client,
+            model=settings.LLM_MODEL_TEXT,
+            messages=[
+                {"role": "system", "content": RESUME_PARSE_SYSTEM_PROMPT},
+                {"role": "user", "content": RESUME_PARSE_USER_PROMPT.format(raw_text=text)},
+            ],
+            response_format={"type": "json_object"},
+            max_tokens=4096,
+        )
+        return json.loads(resp.choices[0].message.content or "{}")
+    except Exception as e:
+        error_msg = str(e).lower()
+        if any(kw in error_msg for kw in ["401", "invalid_key", "unauthorized", "api_key", "invalid api key"]):
+            logger.warning("LLM API Key 无效，parse_resume_text 使用 Mock 数据代替")
+            return _MOCK_RESUME_JSON
+        raise
 
 
 def _mock_resume_parse() -> dict:

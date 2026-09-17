@@ -1,18 +1,26 @@
 import uuid
 import json
+import logging
 import asyncio
 from datetime import datetime, timedelta, timezone
+
+logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
 from app.database import get_db
 from app.core.deps import get_current_user, get_redis, RateLimiter
+from app.core.errors import app_err
 from app.models.user import User
 from app.models.resume import Resume
 from app.models.job_image import JobImage
 from app.models.optimized_resume import OptimizedResume
-from app.schemas.optimization import OptimizeRequest, OptimizeResponse, MatchAnalysis, DiffResponse, SatisfactionFeedbackRequest, QuickOptimizeRequest
+from app.schemas.optimization import (
+    OptimizeRequest, OptimizeResponse, MatchAnalysis, DiffResponse,
+    SatisfactionFeedbackRequest, QuickOptimizeRequest, RenderRequest, RenderTextRequest,
+    UpdateContentRequest,
+)
 from app.services.agent_optimizer import analyze_match, optimize_resume, generate_changes_description
 from app.services.storage import storage
 from app.services.pdf_styler import _generate_styled_or_fallback
@@ -64,7 +72,7 @@ async def optimize(
         raise HTTPException(status_code=404, detail="Job image not found")
 
     if not resume.parsed_json or not job.parsed_job_json:
-        raise HTTPException(status_code=400, detail="Resume or Job has not been parsed yet")
+        raise app_err("PARSE_BEFORE_OPTIMIZE")
 
     job_title = job.parsed_job_json.get("title", "")
     company = job.parsed_job_json.get("company", "")
@@ -288,14 +296,13 @@ async def optimize_quick(
     await redis.setex(task_key, _TASK_TTL, json.dumps({
         "status": "pending",
         "progress": "正在解析文本...",
+        "user_id": user.id,
         "created_at": datetime.now(TZ_UTC8).isoformat(),
     }))
 
-    asyncio.create_task(
-        _run_optimize_task_from_text(
-            task_id, user.id, body.resume_text, body.job_text, body.custom_instructions, body.template
-        )
-    )
+    _spawn_task(task_id, _run_optimize_task_from_text(
+        task_id, user.id, body.resume_text, body.job_text, body.custom_instructions, body.template
+    ))
 
     return {"task_id": task_id, "status": "pending"}
 
@@ -311,7 +318,7 @@ async def get_optimization(
     )
     record = result.scalar_one_or_none()
     if not record:
-        raise HTTPException(status_code=404, detail="Optimization not found")
+        raise app_err("OPTIMIZATION_NOT_FOUND")
     return _to_response(record)
 
 
@@ -343,9 +350,135 @@ async def submit_satisfaction(
     return {"detail": "评价已提交"}
 
 
+# ── 在线编辑 + 重新导出 PDF ──
+
+_ALLOWED_TEMPLATES = {
+    "professional", "simple", "modern", "compact", "elegant", "dark", "fresh", "classic",
+}
+
+
+@router.put("/{opt_id}/content", response_model=OptimizeResponse)
+async def update_optimized_content(
+    opt_id: str,
+    body: UpdateContentRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """在线微调 AI 优化结果（改摘要、增删经历要点、调整技能顺序等）。"""
+    if not body.optimized_json:
+        raise HTTPException(status_code=400, detail="内容不能为空")
+
+    result = await db.execute(
+        select(OptimizedResume).where(OptimizedResume.id == opt_id, OptimizedResume.user_id == user.id)
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="优化记录不存在")
+
+    data = dict(body.optimized_json)
+    # 保护个人信息：不允许通过编辑接口篡改姓名/联系方式等身份字段
+    if record.optimized_json and isinstance(record.optimized_json.get("personal_info"), dict):
+        data.setdefault("personal_info", record.optimized_json["personal_info"])
+    if len(json.dumps(data, ensure_ascii=False)) > 200_000:
+        raise HTTPException(status_code=413, detail="内容过长，请精简后再保存")
+
+    record.optimized_json = data
+    await db.commit()
+    return _to_response(record)
+
+
+@router.post("/{opt_id}/reexport")
+async def reexport_pdf(
+    opt_id: str,
+    template: str = Query("professional", description="模板: professional/simple/modern/compact/elegant/dark/fresh/classic"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """按当前 optimized_json 重新生成 PDF（编辑内容后同步导出版式文件）。"""
+    result = await db.execute(
+        select(OptimizedResume).where(OptimizedResume.id == opt_id, OptimizedResume.user_id == user.id)
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="优化记录不存在")
+    if not record.optimized_json:
+        raise HTTPException(status_code=400, detail="该记录没有可导出的内容")
+
+    if template not in _ALLOWED_TEMPLATES:
+        template = "professional"
+
+    from app.services.pdf_generator import generate_pdf
+
+    try:
+        pdf_bytes = await generate_pdf(record.optimized_json, f"{template}.html")
+    except Exception as e:
+        logger.error(f"[重新导出] PDF 生成失败 opt={opt_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"PDF 生成失败: {type(e).__name__}")
+
+    pdf_key = f"optimized/{user.id}/{uuid.uuid4()}.pdf"
+    new_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
+
+    old_url = record.pdf_url
+    record.pdf_url = new_url
+    await db.commit()
+
+    if old_url:
+        try:
+            await storage.delete(old_url)
+        except Exception:
+            pass  # 旧文件清理失败不影响主流程
+
+    return {"pdf_url": new_url, "template": template}
+
+
 # ── 异步优化（任务队列 + 轮询） ──
 
 _TASK_TTL = 3600  # 任务状态在 Redis 中保留 1 小时
+
+
+# ── 任务取消（前端「停止优化」）──────────────────────────────────────
+# 两级中断，保证点击停止后立刻回到可操作状态：
+#   1) 进程内 asyncio.Task 注册表：直接 cancel 正在执行的任务，中断在途的 LLM / PDF 调用；
+#   2) Redis 取消标记：跨进程兜底（多 worker 部署时，取消请求可能落在别的进程），
+#      后台任务在每个进度检查点读取该标记，命中即中断，且不再写库。
+_running_tasks: dict[str, asyncio.Task] = {}
+
+
+class _TaskCancelled(Exception):
+    """内部信号：任务被用户主动停止（需与执行失败区分开）。"""
+
+
+def _cancel_key(task_id: str) -> str:
+    return f"optimize_task_cancel:{task_id}"
+
+
+def _spawn_task(task_id: str, coro) -> None:
+    """登记并启动后台任务；任务结束（含被取消）后自动摘除登记。"""
+    task = asyncio.create_task(coro)
+    _running_tasks[task_id] = task
+    task.add_done_callback(lambda _t, _id=task_id: _running_tasks.pop(_id, None))
+
+
+async def _is_cancelled(redis: aioredis.Redis, task_id: str) -> bool:
+    """任务是否已被标记停止；Redis 异常时不阻断正常流程。"""
+    try:
+        return bool(await redis.exists(_cancel_key(task_id)))
+    except Exception:
+        return False
+
+
+async def _abort_if_cancelled(redis: aioredis.Redis, task_key: str) -> None:
+    """写库前的最后一道护栏：任务已停止则中断，避免留下半成品优化记录。"""
+    if await _is_cancelled(redis, task_key.split(":", 1)[-1]):
+        raise _TaskCancelled()
+
+
+async def _mark_task_cancelled(redis: aioredis.Redis, task_key: str) -> None:
+    """把任务状态落为 cancelled；此处不再检查取消标记，失败也不抛出。"""
+    try:
+        await _update_status_impl(redis, task_key, "cancelled", "已停止优化")
+    except Exception:
+        pass
 
 
 @router.post("/async")
@@ -372,7 +505,7 @@ async def optimize_async(
         raise HTTPException(status_code=404, detail="Job image not found")
 
     if not resume.parsed_json or not job.parsed_job_json:
-        raise HTTPException(status_code=400, detail="Resume or Job has not been parsed yet")
+        raise app_err("PARSE_BEFORE_OPTIMIZE")
 
     task_id = str(uuid.uuid4())
     task_key = f"optimize_task:{task_id}"
@@ -380,13 +513,12 @@ async def optimize_async(
     await redis.setex(task_key, _TASK_TTL, json.dumps({
         "status": "pending",
         "progress": "排队中...",
+        "user_id": user.id,
         "created_at": datetime.now(TZ_UTC8).isoformat(),
     }))
 
-    # 后台异步执行
-    asyncio.create_task(
-        _run_optimize_task(task_id, user.id, resume, job, body.custom_instructions, body.template)
-    )
+    # 后台异步执行（登记到任务表，便于「停止优化」时立即取消）
+    _spawn_task(task_id, _run_optimize_task(task_id, user.id, resume, job, body.custom_instructions, body.template))
 
     return {"task_id": task_id, "status": "pending"}
 
@@ -407,15 +539,72 @@ def _compute_diff_summary(a: OptimizedResume, b: OptimizedResume) -> str:
 async def get_optimize_status(
     task_id: str,
     redis: aioredis.Redis = Depends(get_redis),
+    user: User = Depends(get_current_user),
 ):
-    """查询异步优化任务状态"""
+    """查询异步优化任务状态（需登录，且只能查看本人任务，防止越权读取他人简历 PII）"""
     task_key = f"optimize_task:{task_id}"
     data = await redis.get(task_key)
     if not data:
         raise HTTPException(status_code=404, detail="任务不存在或已过期")
 
     task_info = json.loads(data)
+    # 越权防护：任务归属（pending 时写顶层 user_id，完成后结果里也带 user_id）须与当前用户一致
+    owner = task_info.get("user_id") or (task_info.get("result") or {}).get("user_id")
+    if owner is not None and owner != user.id:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
     return task_info
+
+
+@router.post("/async/{task_id}/cancel")
+async def cancel_optimize_task(
+    task_id: str,
+    redis: aioredis.Redis = Depends(get_redis),
+    user: User = Depends(get_current_user),
+):
+    """停止进行中的异步任务（AI 优化 / 一键优化 / PDF 渲染）。
+
+    行为：
+    - 置 Redis 取消标记（跨进程有效）并取消本进程内正在执行的任务，立即中断在途调用；
+    - 后台任务随后把状态落为 cancelled，且不再写库（不会留下半成品记录）；
+    - 幂等：任务已结束（completed/failed）时返回 cancelled=False，不报错。
+    """
+    task_key = f"optimize_task:{task_id}"
+    data = await redis.get(task_key)
+    if not data:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+
+    info = json.loads(data)
+    owner = info.get("user_id") or (info.get("result") or {}).get("user_id")
+    if owner is not None and owner != user.id:
+        raise HTTPException(status_code=404, detail="任务不存在或已过期")
+
+    status = info.get("status")
+    if status in ("completed", "failed"):
+        return {"task_id": task_id, "status": status, "cancelled": False}
+
+    # ① 取消标记（跨进程兜底） ② 取消本进程内任务（立即中断在途 LLM / PDF 调用）
+    await redis.setex(_cancel_key(task_id), _TASK_TTL, "1")
+    task = _running_tasks.get(task_id)
+    if task is not None and not task.done():
+        task.cancel()
+
+    # 等后台任务自己收尾写入 cancelled，避免与它的收尾写入互相覆盖
+    for _ in range(20):
+        fresh = await redis.get(task_key)
+        if not fresh:
+            break
+        if json.loads(fresh).get("status") == "cancelled":
+            break
+        await asyncio.sleep(0.05)
+
+    fresh = await redis.get(task_key)
+    current = json.loads(fresh).get("status") if fresh else "cancelled"
+    if current not in ("completed", "failed", "cancelled"):
+        # 任务不在本进程（多 worker）或已异常退出：由本接口兜底落状态
+        await _mark_task_cancelled(redis, task_key)
+        current = "cancelled"
+
+    return {"task_id": task_id, "status": current, "cancelled": current == "cancelled"}
 
 
 async def _run_optimize_task(
@@ -465,6 +654,16 @@ async def _run_optimize_task(
         pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
         pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
 
+        # 写库前最后护栏：已停止则不落库，并回收刚上传的 PDF，避免留下半成品记录与孤儿文件
+        try:
+            await _abort_if_cancelled(redis, task_key)
+        except _TaskCancelled:
+            try:
+                await storage.delete(pdf_key)
+            except Exception:
+                pass
+            raise
+
         # 保存到数据库
         job_title = job.parsed_job_json.get("title", "")
         company = job.parsed_job_json.get("company", "")
@@ -494,6 +693,13 @@ async def _run_optimize_task(
 
         await _update_status_impl(redis, task_key, "completed", "优化完成", result=response.model_dump(mode="json"))
 
+    except _TaskCancelled:
+        # 命中取消标记：用户在检查点之间点了停止
+        await _mark_task_cancelled(redis, task_key)
+    except asyncio.CancelledError:
+        # 进程内任务被直接取消（中断在途 LLM / PDF 调用）：落状态后继续上抛，保持“已取消”语义
+        await _mark_task_cancelled(redis, task_key)
+        raise
     except Exception as e:
         try:
             await _update_status_impl(redis, task_key, "failed", f"优化失败: {str(e)[:200]}")
@@ -566,7 +772,15 @@ async def _run_optimize_task_from_text(
         pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
         pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
 
-        # 7. 保存到数据库
+        # 7. 保存到数据库（写库前最后护栏：已停止则不落库，并回收刚上传的 PDF）
+        try:
+            await _abort_if_cancelled(redis, task_key)
+        except _TaskCancelled:
+            try:
+                await storage.delete(pdf_key)
+            except Exception:
+                pass
+            raise
         async with async_session_factory() as db:
             opt_record = OptimizedResume(
                 user_id=user_id,
@@ -596,6 +810,13 @@ async def _run_optimize_task_from_text(
 
         await _update_status_impl(redis, task_key, "completed", "优化完成", result=response.model_dump(mode="json"))
 
+    except _TaskCancelled:
+        # 命中取消标记：用户在检查点之间点了停止
+        await _mark_task_cancelled(redis, task_key)
+    except asyncio.CancelledError:
+        # 进程内任务被直接取消（中断在途 LLM / PDF 调用）：落状态后继续上抛，保持“已取消”语义
+        await _mark_task_cancelled(redis, task_key)
+        raise
     except Exception as e:
         try:
             await _update_status_impl(redis, task_key, "failed", f"优化失败: {str(e)[:200]}")
@@ -610,6 +831,10 @@ async def _run_optimize_task_from_text(
 
 
 async def _update_status_impl(redis: aioredis.Redis, task_key: str, status: str, progress: str, **extra):
+    # 取消护栏：任务被停止后，后续任何 "processing" 进度写入都转为中断信号，
+    # 使后台任务在下一个检查点立刻退出，不再继续消耗 LLM 与写库
+    if status == "processing" and await _is_cancelled(redis, task_key.split(":", 1)[-1]):
+        raise _TaskCancelled()
     existing = await redis.get(task_key)
     if not existing:
         import logging
@@ -635,6 +860,226 @@ def _guess_category(title: str) -> str:
     if any(w in t for w in ["市场", "marketing", "销售"]):
         return "市场"
     return "其他"
+
+
+# ── 直接渲染（跳过 AI 优化，仅格式转化） ──
+
+@router.post("/render")
+async def render_resume(
+    body: RenderRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    redis: aioredis.Redis = Depends(get_redis),
+    _rl: None = Depends(_optimize_limiter),
+):
+    """跳过 AI 优化，直接将简历解析结果渲染为 PDF。
+
+    用于测试 PDF 生成管线是否正常，不依赖 LLM 优化。
+    """
+    resume_result = await db.execute(
+        select(Resume).where(Resume.id == body.resume_id, Resume.user_id == user.id)
+    )
+    resume = resume_result.scalar_one_or_none()
+    if not resume:
+        raise HTTPException(status_code=404, detail="Resume not found")
+    if not resume.parsed_json:
+        raise HTTPException(status_code=400, detail="Resume has not been parsed yet")
+
+    task_id = str(uuid.uuid4())
+    task_key = f"optimize_task:{task_id}"
+
+    await redis.setex(task_key, _TASK_TTL, json.dumps({
+        "status": "pending",
+        "progress": "正在准备渲染...",
+        "user_id": user.id,
+        "created_at": datetime.now(TZ_UTC8).isoformat(),
+    }))
+
+    template = body.template or "professional"
+    _spawn_task(task_id, _run_render_task(task_id, user.id, resume, template))
+
+    return {"task_id": task_id, "status": "pending"}
+
+
+@router.post("/render-text")
+async def render_resume_text(
+    body: RenderTextRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+    redis: aioredis.Redis = Depends(get_redis),
+    _rl: None = Depends(_optimize_limiter),
+):
+    """跳过 AI 优化，解析简历文本后直接渲染为 PDF。
+
+    用于测试：从个人中心保存的文本直接生成简历 PDF。
+    """
+    if not body.resume_text or not body.resume_text.strip():
+        raise HTTPException(status_code=400, detail="简历文本不能为空")
+
+    task_id = str(uuid.uuid4())
+    task_key = f"optimize_task:{task_id}"
+
+    await redis.setex(task_key, _TASK_TTL, json.dumps({
+        "status": "pending",
+        "progress": "正在解析文本...",
+        "user_id": user.id,
+        "created_at": datetime.now(TZ_UTC8).isoformat(),
+    }))
+
+    template = body.template or "professional"
+    _spawn_task(task_id, _run_render_text_task(task_id, user.id, body.resume_text, template))
+
+    return {"task_id": task_id, "status": "pending"}
+
+
+async def _run_render_task(
+    task_id: str,
+    user_id: str,
+    resume: Resume,
+    template: str,
+):
+    """后台执行直接渲染任务（从已解析的简历 JSON）"""
+    from app.database import async_session_factory
+    from app.config import settings as app_config
+    from app.services.pdf_generator import generate_pdf
+
+    task_key = f"optimize_task:{task_id}"
+    redis = None
+
+    try:
+        redis = aioredis.from_url(app_config.REDIS_URL, decode_responses=True)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"渲染任务 {task_id} 无法连接 Redis: {e}")
+        return
+
+    try:
+        parsed = resume.parsed_json
+        name = (parsed.get("personal_info") or {}).get("name", "")
+
+        logger.info(f"[渲染任务] 开始渲染: template={template}, template_name={template}.html, name={name}")
+
+        await _update_status_impl(redis, task_key, "processing", "正在生成 PDF...")
+
+        template_name = f"{template}.html"
+        logger.info(f"[渲染任务] 调用 generate_pdf: template_name={template_name}")
+        pdf_bytes = await generate_pdf(parsed, template_name)
+        logger.info(f"[渲染任务] generate_pdf 返回: {len(pdf_bytes)} bytes")
+        pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
+        pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
+
+        async with async_session_factory() as db:
+            opt_record = OptimizedResume(
+                user_id=user_id,
+                resume_id=resume.id,
+                original_json=parsed,
+                optimized_json=parsed,  # 未优化，原样输出
+                match_score=None,
+                pdf_url=pdf_url,
+                changes_description="（直接渲染模式，未进行 AI 优化）",
+                job_title=name or "简历",
+                category="其他",
+                status="completed",
+            )
+            db.add(opt_record)
+            await db.flush()
+            await db.refresh(opt_record)
+            await db.commit()
+
+            response = _to_response(opt_record)
+
+        await _update_status_impl(redis, task_key, "completed", "渲染完成", result=response.model_dump(mode="json"))
+
+    except _TaskCancelled:
+        await _mark_task_cancelled(redis, task_key)
+    except asyncio.CancelledError:
+        await _mark_task_cancelled(redis, task_key)
+        raise
+    except Exception as e:
+        try:
+            await _update_status_impl(redis, task_key, "failed", f"渲染失败: {str(e)[:200]}")
+        except Exception:
+            pass
+    finally:
+        if redis is not None:
+            try:
+                await redis.close()
+            except Exception:
+                pass
+
+
+async def _run_render_text_task(
+    task_id: str,
+    user_id: str,
+    resume_text: str,
+    template: str,
+):
+    """后台执行直接渲染任务（从文本解析后生成 PDF）"""
+    from app.database import async_session_factory
+    from app.config import settings as app_config
+    from app.services.resume_parser import parse_resume_text
+    from app.services.pdf_generator import generate_pdf
+
+    task_key = f"optimize_task:{task_id}"
+    redis = None
+
+    try:
+        redis = aioredis.from_url(app_config.REDIS_URL, decode_responses=True)
+    except Exception as e:
+        import logging
+        logging.getLogger(__name__).error(f"渲染任务 {task_id} 无法连接 Redis: {e}")
+        return
+
+    try:
+        await _update_status_impl(redis, task_key, "processing", "正在解析简历文本...")
+        parsed = await parse_resume_text(resume_text)
+
+        name = (parsed.get("personal_info") or {}).get("name", "")
+
+        await _update_status_impl(redis, task_key, "processing", "正在生成 PDF...")
+
+        template_name = f"{template}.html"
+        pdf_bytes = await generate_pdf(parsed, template_name)
+        pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
+        pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
+
+        async with async_session_factory() as db:
+            opt_record = OptimizedResume(
+                user_id=user_id,
+                original_json=parsed,
+                optimized_json=parsed,  # 未优化，原样输出
+                match_score=None,
+                pdf_url=pdf_url,
+                changes_description="（直接渲染模式，未进行 AI 优化）",
+                job_title=name or "简历",
+                category="其他",
+                status="completed",
+            )
+            db.add(opt_record)
+            await db.flush()
+            await db.refresh(opt_record)
+            await db.commit()
+
+            response = _to_response(opt_record)
+
+        await _update_status_impl(redis, task_key, "completed", "渲染完成", result=response.model_dump(mode="json"))
+
+    except _TaskCancelled:
+        await _mark_task_cancelled(redis, task_key)
+    except asyncio.CancelledError:
+        await _mark_task_cancelled(redis, task_key)
+        raise
+    except Exception as e:
+        try:
+            await _update_status_impl(redis, task_key, "failed", f"渲染失败: {str(e)[:200]}")
+        except Exception:
+            pass
+    finally:
+        if redis is not None:
+            try:
+                await redis.close()
+            except Exception:
+                pass
 
 
 # ── 模板测试（跳过 LLM，直接渲染 PDF） ──
@@ -700,6 +1145,7 @@ _MOCK_RESUME_DATA = {
 async def test_template(
     template: str = Query("professional", description="模板名称: professional, simple, modern, compact, elegant, dark, fresh, classic"),
     body: dict | None = None,
+    user: User = Depends(get_current_user),  # 防止未登录被刷爆渲染；上线前应改为 admin 鉴权或下线
 ):
     """测试模板渲染（跳过 LLM 优化，直接用数据生成 PDF）
 

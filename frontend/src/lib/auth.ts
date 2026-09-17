@@ -1,8 +1,9 @@
 const AUTH_KEYS = ['token', 'refreshToken', 'user', 'deviceId']
 
 /**
- * 获取当前 token，同时校验 JWT 是否过期
- * 过期或无效则自动清除认证状态并返回 null
+ * 获取当前 token，同时校验 JWT 是否过期。
+ * 过期或无效则自动清除认证状态并返回 null（与改动前行为一致）。
+ * 双 token 的自动刷新由 api.ts 拦截器在收到真实 401 时处理。
  */
 export function getToken(): string | null {
   if (typeof window === 'undefined') return null

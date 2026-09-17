@@ -2,22 +2,21 @@
 
 import React, { useEffect, useState, useCallback } from 'react'
 import {
-  Layout, Button, Card, Typography, Spin, message, Space, Tag,
+  Button, Card, Typography, Spin, message, Space, Tag,
   Row, Col, Input, Select, Tabs, Popconfirm, Empty, Badge, Tooltip,
 } from 'antd'
 import {
-  LogoutOutlined, HomeOutlined, DeleteOutlined, FileTextOutlined,
+  DeleteOutlined, FileTextOutlined,
   PictureOutlined, ThunderboltOutlined, StarOutlined, StarFilled,
   RestOutlined, DiffOutlined, SearchOutlined, UndoOutlined,
-  DashboardOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { optimize } from '@/lib/api'
 import { getToken, clearAuth } from '@/lib/auth'
 import { formatDate } from '@/lib/utils'
 import type { OptimizeResult } from '@/types'
-
-const { Header, Content } = Layout
+import AppLayout from '@/components/AppLayout'
+import AuthGate from '@/components/AuthGate'
 
 export default function HistoryPage() {
   const router = useRouter()
@@ -122,17 +121,13 @@ export default function HistoryPage() {
     router.push('/login')
   }, [router])
 
-  if (!token) return null
+  if (!token) return <AuthGate activeKey="history" />
 
   const renderCard = (r: OptimizeResult, isTrash = false) => (
     <Card
       key={r.id}
       size="small"
       hoverable
-      style={{
-        borderColor: selected.includes(r.id) ? '#2c6fbb' : undefined,
-        opacity: isTrash ? 0.7 : 1,
-      }}
       onClick={(e) => {
         if ((e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('.anticon')) return
         if (!isTrash) handleToggleSelect(r.id)
@@ -147,7 +142,7 @@ export default function HistoryPage() {
             ]
           : [
               <Tooltip title={r.is_favorite ? '取消收藏' : '收藏'} key="fav">
-                <Button type="link" icon={r.is_favorite ? <StarFilled style={{ color: '#faad14' }} /> : <StarOutlined />} onClick={() => toggleFavorite(r.id)} />
+                <Button type="link" icon={r.is_favorite ? <StarFilled style={{ color: '#F59E0B' }} /> : <StarOutlined />} onClick={() => toggleFavorite(r.id)} />
               </Tooltip>,
               <Tooltip title="查看详情" key="detail">
                 <Button type="link" onClick={() => router.push(`/history/${r.id}`)}>查看</Button>
@@ -160,11 +155,11 @@ export default function HistoryPage() {
     >
       <Row gutter={8} align="middle">
         <Col flex="48px">
-          <div style={{ width: 48, height: 48, borderRadius: 8, overflow: 'hidden', background: '#f0f0f0', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <div className="app-list-avatar" style={{ width: 48, height: 48, borderRadius: 'var(--radius-md)', overflow: 'hidden' }}>
             {r.thumbnail_url ? (
               <img src={r.thumbnail_url} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
             ) : (
-              <FileTextOutlined style={{ fontSize: 24, color: '#bbb' }} />
+              <FileTextOutlined style={{ fontSize: 24, color: 'var(--text-tertiary)' }} />
             )}
           </div>
         </Col>
@@ -172,9 +167,20 @@ export default function HistoryPage() {
           <Typography.Text strong ellipsis>{r.job_title || '未命名岗位'}</Typography.Text>
           <div>
             <Space size={4} wrap>
-              {r.company && <Tag color="blue">{r.company}</Tag>}
-              {r.category && <Tag>{r.category}</Tag>}
-              {r.match_score != null && <Tag color={r.match_score >= 70 ? 'green' : 'orange'}>{r.match_score} 分</Tag>}
+              {r.company && (
+                <Tag style={{ background: 'var(--primary-50)', color: 'var(--primary-600)' }}>{r.company}</Tag>
+              )}
+              {r.category && (
+                <Tag style={{ background: 'var(--gray-100)', color: 'var(--text-secondary)' }}>{r.category}</Tag>
+              )}
+              {r.match_score != null && (
+                <Tag style={{
+                  background: r.match_score >= 70 ? 'var(--success-50)' : 'var(--warning-50)',
+                  color: r.match_score >= 70 ? 'var(--success-600)' : 'var(--warning-600)',
+                }}>
+                  {r.match_score} 分
+                </Tag>
+              )}
               {r.created_at && <Typography.Text type="secondary" style={{ fontSize: 12 }}>{formatDate(r.created_at)}</Typography.Text>}
             </Space>
           </div>
@@ -226,7 +232,7 @@ export default function HistoryPage() {
     },
     {
       key: 'favorites',
-      label: <span><StarFilled style={{ color: '#faad14' }} /> 收藏夹 <Badge count={favorites.length} size="small" /></span>,
+      label: <span><StarFilled style={{ color: '#F59E0B' }} /> 收藏夹 <Badge count={favorites.length} size="small" /></span>,
       children: (
         favorites.length === 0 ? (
           <Empty description="暂无收藏内容，点击星星图标收藏" />
@@ -253,40 +259,23 @@ export default function HistoryPage() {
   ]
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingInline: 24 }}>
-        <Typography.Title level={4} style={{ color: '#fff', margin: 0 }}>
-          历史记录
-        </Typography.Title>
-        <Space>
-          <Button icon={<DashboardOutlined />} onClick={() => router.push('/dashboard')} type="text" style={{ color: '#fff' }}>
-            仪表盘
-          </Button>
-          <Button icon={<FileTextOutlined />} onClick={() => router.push('/resumes')} type="text" style={{ color: '#fff' }}>
-            简历库
-          </Button>
-          <Button icon={<HomeOutlined />} onClick={() => router.push('/')} type="text" style={{ color: '#fff' }}>
-            首页
-          </Button>
-          <Button icon={<LogoutOutlined />} onClick={handleLogout} type="text" style={{ color: '#fff' }}>
-            退出
-          </Button>
-        </Space>
-      </Header>
-
-      <Content style={{ padding: 24, maxWidth: 1200, margin: '0 auto', width: '100%' }}>
-        <Card>
-          <Tabs
-            defaultActiveKey="all"
-            items={tabItems}
-            onChange={(key) => {
-              if (key === 'favorites') fetchFavorites()
-              else if (key === 'trash') fetchTrash()
-              else fetchAll()
-            }}
-          />
-        </Card>
-      </Content>
-    </Layout>
+    <AppLayout
+      activeKey="history"
+      title="历史记录"
+      subtitle="查看并管理简历优化历史、收藏与回收站"
+      searchable={false}
+    >
+      <div className="app-page-enter">
+        <Tabs
+          defaultActiveKey="all"
+          items={tabItems}
+          onChange={(key) => {
+            if (key === 'favorites') fetchFavorites()
+            else if (key === 'trash') fetchTrash()
+            else fetchAll()
+          }}
+        />
+      </div>
+    </AppLayout>
   )
 }

@@ -27,10 +27,10 @@ export default function AdminLoginPage() {
   }
 
   return (
-    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: '#001529', padding: 24 }}>
-      <Card style={{ width: 400, boxShadow: '0 4px 24px rgba(0,0,0,0.3)' }}>
+    <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'var(--bg-body)', padding: 24 }}>
+      <Card style={{ width: 400, borderRadius: 'var(--radius-2xl)', border: '1px solid var(--border-light)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-lg)' }}>
         <div style={{ textAlign: 'center', marginBottom: 24 }}>
-          <Typography.Title level={3} style={{ margin: 0, color: '#001529' }}>管理后台</Typography.Title>
+          <Typography.Title level={3} style={{ margin: 0, color: 'var(--text-primary)' }}>管理后台</Typography.Title>
           <Typography.Text type="secondary">请使用管理员账号登录</Typography.Text>
         </div>
 
@@ -42,7 +42,7 @@ export default function AdminLoginPage() {
             <Input.Password prefix={<LockOutlined />} placeholder="密码" />
           </Form.Item>
           <Form.Item>
-            <Button type="primary" htmlType="submit" loading={loading} block style={{ background: '#001529', borderColor: '#001529' }}>
+            <Button type="primary" htmlType="submit" loading={loading} block>
               登录管理后台
             </Button>
           </Form.Item>
@@ -51,7 +51,7 @@ export default function AdminLoginPage() {
           </div>
         </Form>
 
-        <div style={{ marginTop: 16, padding: 12, background: '#f5f5f5', borderRadius: 8, fontSize: 12, color: '#999' }}>
+        <div style={{ marginTop: 16, padding: 12, background: 'var(--gray-100)', borderRadius: 'var(--radius-md)', fontSize: 12, color: 'var(--text-tertiary)' }}>
           <div>默认管理员: <strong>superadmin</strong></div>
           <div>默认密码: <strong>admin123</strong></div>
           <div style={{ marginTop: 4 }}>首次使用请在数据库 `admins` 表中创建管理员后登录</div>

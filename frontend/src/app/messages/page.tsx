@@ -18,6 +18,7 @@ import { getToken } from '@/lib/auth'
 import { formatDate } from '@/lib/utils'
 import type { MessageItem } from '@/types'
 import AppLayout from '@/components/AppLayout'
+import AuthGate from '@/components/AuthGate'
 
 const { Text } = Typography
 
@@ -270,13 +271,7 @@ export default function MessagesPage() {
     { label: '未读', value: 'unread' },
   ]
 
-  if (!token) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: 'var(--bg-body)' }}>
-        <Spin size="large" />
-      </div>
-    )
-  }
+  if (!token) return <AuthGate activeKey="messages" />
 
   return (
     <AppLayout

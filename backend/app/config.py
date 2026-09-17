@@ -20,15 +20,22 @@ class Settings(BaseSettings):
     S3_ENDPOINT: Optional[str] = None
     S3_REGION: str = "us-east-1"
 
+    # 大模型：千问（阿里云百炼）OpenAI 兼容端点。
+    # 实际取值以 backend/.env 为准，这里的默认值仅作为 .env 缺失时的兜底。
+    # 文本与视觉共用同一个 base_url —— 两者必须来自同一服务端点。
     LLM_API_KEY: Optional[str] = None
-    LLM_MODEL_VISION: str = "gpt-4o"
-    LLM_MODEL_TEXT: str = "gpt-4o-mini"
-    LLM_API_BASE: Optional[str] = None
+    LLM_MODEL_VISION: str = "qwen3.7-plus"
+    LLM_MODEL_TEXT: str = "qwen3.7-plus"
+    LLM_API_BASE: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
 
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
 
     MAX_UPLOAD_SIZE: int = 20 * 1024 * 1024
+
+    # 文件访问签名 URL 有效期（秒）。通过签名代理 /api/files/{key} 下发，
+    # 替代原先公开挂载的 /uploads 静态目录，避免 PII 简历原件被直连泄露。
+    FILE_URL_TTL: int = 60 * 60 * 24 * 30  # 30 天
 
     BACKEND_URL: str = "http://localhost:8000"
     CORS_ORIGINS: str = "http://localhost:3000,http://127.0.0.1:3000"

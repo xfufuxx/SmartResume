@@ -20,21 +20,23 @@ export default function ErrorPage({
       justifyContent: 'center',
       alignItems: 'center',
       minHeight: '100vh',
-      background: '#f5f5f5',
+      background: 'var(--bg-body)',
     }}>
-      <Result
-        status="error"
-        title="页面加载失败"
-        subTitle={error.message || '发生了未知错误，请稍后重试'}
-        extra={[
-          <Button type="primary" key="retry" onClick={reset}>
-            重试
-          </Button>,
-          <Button key="home" onClick={() => { window.location.href = '/' }}>
-            返回首页
-          </Button>,
-        ]}
-      />
+      <div style={{ padding: '32px 48px', borderRadius: 'var(--radius-2xl)', border: '1px solid var(--border-light)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-lg)' }}>
+        <Result
+          status="error"
+          title="页面加载失败"
+          subTitle={error.message || '发生了未知错误，请稍后重试'}
+          extra={[
+            <Button type="primary" key="retry" onClick={reset}>
+              重试
+            </Button>,
+            <Button key="home" onClick={() => { window.location.href = '/' }}>
+              返回首页
+            </Button>,
+          ]}
+        />
+      </div>
     </div>
   )
 }

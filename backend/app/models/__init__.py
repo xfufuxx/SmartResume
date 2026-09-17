@@ -9,6 +9,7 @@ from app.models.optimized_resume import OptimizedResume
 from app.models.verification_code import VerificationCode
 from app.models.feedback import Feedback
 from app.models.batch_optimization import BatchOptimization, BatchJobTask
+from app.models.interview import InterviewSession, InterviewQuestion
 
 __all__ = [
     "User", "UserDevice", "Message", "AuditLog", "ResumeTemplate", "UserQuota",
@@ -16,4 +17,5 @@ __all__ = [
     "IndustryKeyword", "ATSRule", "Order", "SupportTicket", "TicketReply", "QuotaPackage",
     "Resume", "JobImage", "OptimizedResume", "VerificationCode", "Feedback",
     "BatchOptimization", "BatchJobTask",
+    "InterviewSession", "InterviewQuestion",
 ]

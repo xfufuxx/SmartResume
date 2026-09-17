@@ -21,8 +21,17 @@ class ResumeResponse(BaseModel):
     parsed_json: Optional[dict] = None
     raw_text: Optional[str] = None
     is_primary: bool = False
+    target_position: Optional[str] = None
+    target_company: Optional[str] = None
+    version: int = 1
+    status: str = "draft"
+    match_rate: Optional[int] = None
+    score: Optional[int] = None
+    is_favorite: bool = False
+    thumbnail_url: Optional[str] = None
     deleted_at: Optional[datetime] = None
     created_at: datetime
+    updated_at: Optional[datetime] = None
 
     model_config = {"from_attributes": True}
 
@@ -46,3 +55,16 @@ class ResumeUpdateRequest(BaseModel):
 
 class ResumeBatchDeleteRequest(BaseModel):
     ids: list[str]
+
+
+class ResumeStats(BaseModel):
+    """「我的简历」概览统计（右侧环形图数据）"""
+    total: int = 0
+    optimized: int = 0
+    draft: int = 0
+    unoptimized: int = 0
+    favorite: int = 0
+
+
+class FavoriteRequest(BaseModel):
+    favorite: bool = True

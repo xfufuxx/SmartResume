@@ -6,6 +6,7 @@
 """
 
 import io
+import os
 import base64
 import logging
 from dataclasses import dataclass
@@ -592,6 +593,10 @@ def html_to_pdf(html: str, base_url: str | None = None) -> bytes:
 
     优势：支持完整现代 CSS（flexbox、grid、@page）、无系统依赖。
 
+    注意：使用临时文件 + page.goto('file:///...') 而非 page.set_content()，
+    因为 set_content() 的页面 origin 是 about:blank，Chromium 会阻止加载
+    file:/// 本地资源（如 @font-face 中的字体文件），导致中文字体无法渲染。
+
     Args:
         html: 完整的 HTML 字符串
         base_url: 用于解析相对路径（如 @font-face 中的 url()）的基础 URL
@@ -599,7 +604,7 @@ def html_to_pdf(html: str, base_url: str | None = None) -> bytes:
     Returns:
         PDF 字节流
     """
-    # 使用同步 API（playwright 支持 sync 和 async）
+    import tempfile
     from playwright.sync_api import sync_playwright
 
     # 注入 base_url 以便解析相对路径
@@ -612,22 +617,38 @@ def html_to_pdf(html: str, base_url: str | None = None) -> bytes:
             count=1,
         )
 
-    with sync_playwright() as p:
-        browser = p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox"]
-        )
-        try:
-            page = browser.new_page()
-            page.set_content(html, wait_until="networkidle")
-            pdf = page.pdf(
-                format="A4",
-                print_background=True,
-                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+    # 写入临时文件，使用 file:// 协议加载，确保本地字体资源可正常加载
+    with tempfile.NamedTemporaryFile(
+        suffix=".html", delete=False, mode="w", encoding="utf-8"
+    ) as f:
+        f.write(html)
+        temp_path = f.name
+
+    try:
+        file_url = f"file:///{temp_path.replace(chr(92), '/')}"
+        logger.info(f"[html_to_pdf] 加载临时文件: {file_url}")
+
+        with sync_playwright() as p:
+            browser = p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"]
             )
-            return pdf
-        finally:
-            browser.close()
+            try:
+                page = browser.new_page()
+                page.goto(file_url, wait_until="networkidle")
+                pdf = page.pdf(
+                    format="A4",
+                    print_background=True,
+                    margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+                )
+                return pdf
+            finally:
+                browser.close()
+    finally:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
 
 
 async def html_to_pdf_async(html: str, base_url: str | None = None) -> bytes:
@@ -637,6 +658,10 @@ async def html_to_pdf_async(html: str, base_url: str | None = None) -> bytes:
     异步版本，可在 async 上下文中直接 await，避免 Windows 上
     sync_playwright 在非主线程中触发 NotImplementedError 的问题。
 
+    注意：使用临时文件 + page.goto('file:///...') 而非 page.set_content()，
+    因为 set_content() 的页面 origin 是 about:blank，Chromium 会阻止加载
+    file:/// 本地资源（如 @font-face 中的字体文件），导致中文字体无法渲染。
+
     Args:
         html: 完整的 HTML 字符串
         base_url: 用于解析相对路径（如 @font-face 中的 url()）的基础 URL
@@ -644,6 +669,7 @@ async def html_to_pdf_async(html: str, base_url: str | None = None) -> bytes:
     Returns:
         PDF 字节流
     """
+    import tempfile
     from playwright.async_api import async_playwright
 
     if base_url:
@@ -655,22 +681,38 @@ async def html_to_pdf_async(html: str, base_url: str | None = None) -> bytes:
             count=1,
         )
 
-    async with async_playwright() as p:
-        browser = await p.chromium.launch(
-            headless=True,
-            args=["--no-sandbox", "--disable-setuid-sandbox"]
-        )
-        try:
-            page = await browser.new_page()
-            await page.set_content(html, wait_until="networkidle")
-            pdf = await page.pdf(
-                format="A4",
-                print_background=True,
-                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+    # 写入临时文件，使用 file:// 协议加载，确保本地字体资源可正常加载
+    with tempfile.NamedTemporaryFile(
+        suffix=".html", delete=False, mode="w", encoding="utf-8"
+    ) as f:
+        f.write(html)
+        temp_path = f.name
+
+    try:
+        file_url = f"file:///{temp_path.replace(chr(92), '/')}"
+        logger.info(f"[html_to_pdf_async] 加载临时文件: {file_url}")
+
+        async with async_playwright() as p:
+            browser = await p.chromium.launch(
+                headless=True,
+                args=["--no-sandbox", "--disable-setuid-sandbox"]
             )
-            return pdf
-        finally:
-            await browser.close()
+            try:
+                page = await browser.new_page()
+                await page.goto(file_url, wait_until="networkidle")
+                pdf = await page.pdf(
+                    format="A4",
+                    print_background=True,
+                    margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+                )
+                return pdf
+            finally:
+                await browser.close()
+    finally:
+        try:
+            os.unlink(temp_path)
+        except OSError:
+            pass
 
 
 def render_resume(

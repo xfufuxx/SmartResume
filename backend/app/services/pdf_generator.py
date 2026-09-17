@@ -353,13 +353,27 @@ async def generate_pdf(resume_json: dict, template_name: str = "professional.htm
     except Exception as e:
         logger.error(f"[PDF生成] Playwright 异步渲染失败: {type(e).__name__}: {e}", exc_info=True)
 
+    # 策略 1b：Playwright 同步 API（在线程池中执行）
+    try:
+        import asyncio
+        result = await asyncio.to_thread(generate_pdf_sync, resume_json, template_name)
+        logger.info(f"[PDF生成] Playwright 同步成功: {len(result)} bytes")
+        return result
+    except Exception as e:
+        logger.error(f"[PDF生成] Playwright 同步也失败: {type(e).__name__}: {e}", exc_info=True)
+
     # 策略 2：WeasyPrint
     if settings.USE_WEASYPRINT:
         try:
             from weasyprint import HTML
-            return HTML(string=html, base_url=TEMPLATE_DIR).write_pdf()
-        except (ImportError, OSError):
-            pass
+            result = HTML(string=html, base_url=TEMPLATE_DIR).write_pdf()
+            logger.info(f"[PDF生成] WeasyPrint 成功: {len(result)} bytes")
+            return result
+        except (ImportError, OSError) as e:
+            logger.warning(f"[PDF生成] WeasyPrint 不可用: {e}")
+        except Exception as e:
+            logger.error(f"[PDF生成] WeasyPrint 渲染失败: {type(e).__name__}: {e}", exc_info=True)
 
-    # 策略 3：ReportLab 回退
+    # 策略 3：ReportLab 回退（模板无关，仅作为最后手段）
+    logger.warning("[PDF生成] 所有渲染策略均失败，使用 ReportLab 回退（非模板渲染）")
     return _build_fallback_pdf(resume_json)

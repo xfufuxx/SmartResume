@@ -38,6 +38,7 @@ test_*.png
 # AI logs
 .deep-copilot/
 .claude/
+.workbuddy/
 
 # Alembic
 backend/alembic/versions/*.pyc

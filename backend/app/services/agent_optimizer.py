@@ -19,6 +19,7 @@ def _get_client() -> AsyncOpenAI:
 async def _call_with_retry(client, **kwargs):
     """带指数退避重试的 LLM 调用，自动处理 response_format 不兼容"""
     kwargs.setdefault("timeout", 120.0)
+    kwargs.setdefault("temperature", 0.2)  # 匹配/优化/改写需稳定输出，默认低温
     for attempt in range(MAX_RETRIES):
         try:
             return await client.chat.completions.create(**kwargs)
@@ -97,7 +98,7 @@ async def optimize_resume(resume_json: dict, job_json: dict, strategy: dict, cus
 
 async def generate_changes_description(resume_json: dict, optimized_json: dict) -> str:
     if not has_valid_api_key():
-        return "- 个人总结：增加了与岗位匹配的关键词\n- 工作经历：调整了项目描述，突出高并发经验\n- 技能列表：优化了技能排序和分组"
+        raise ValueError("LLM_API_KEY 未配置或未生效，无法生成修改说明。请检查 backend/.env 中的 LLM_API_KEY。")
 
     resp = await _call_with_retry(
         _get_client(),

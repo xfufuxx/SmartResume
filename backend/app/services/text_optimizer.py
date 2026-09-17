@@ -3,12 +3,12 @@
 
 职责：
 1. 识别哪些字段需要优化（保护字段白名单）
-2. 将需要优化的文本片段分批发送给 MiMo 模型
+2. 将需要优化的文本片段分批发送给大模型（settings.LLM_MODEL_TEXT）
 3. 将优化结果映射回原位置（block_index → new_text）
 
 设计原则：
 - 姓名、联系方式、教育背景：保护不优化，只做格式修正
-- 个人总结、工作经历、项目描述、技能：发送给 MiMo 优化
+- 个人总结、工作经历、项目描述、技能：发送给大模型优化
 - 保持上下文：将同一字段类型的多个块合并发送，保留上下文连贯性
 """
 
@@ -76,7 +76,7 @@ async def optimize_text_blocks(
     策略：
     1. 区分保护字段和优化字段
     2. 保护字段：原样返回
-    3. 优化字段：分批发送给 MiMo，返回优化后的文本
+    3. 优化字段：分批发送给大模型，返回优化后的文本
     4. 结果映射回 {block_index: new_text}
 
     Args:
@@ -122,9 +122,9 @@ async def optimize_text_blocks(
 
             input_text = "\n\n".join(input_parts)
 
-            # 调用 MiMo
+            # 调用大模型（settings.LLM_MODEL_TEXT）
             try:
-                optimized = await _call_mimo_optimize(
+                optimized = await _call_llm_optimize(
                     input_text=input_text,
                     job_json=job_json,
                     custom_instructions=custom_instructions,
@@ -138,7 +138,7 @@ async def optimize_text_blocks(
                     else:
                         # 模型未返回该块，保留原文
                         result[block.block_index] = block.text
-                        logger.warning(f"MiMo 未返回 {key} 的优化结果，保留原文")
+                        logger.warning(f"大模型未返回 {key} 的优化结果，保留原文")
             except Exception as e:
                 logger.error(f"优化失败 (field={field_type}, batch={batch_start}): {e}")
                 # 失败时保留原文
@@ -148,13 +148,13 @@ async def optimize_text_blocks(
     return result
 
 
-async def _call_mimo_optimize(
+async def _call_llm_optimize(
     input_text: str,
     job_json: dict,
     custom_instructions: Optional[str] = None,
 ) -> dict[str, str]:
     """
-    调用 MiMo 模型优化文本（带指数退避重试）。
+    调用大模型优化文本（带指数退避重试）。
 
     Args:
         input_text: 格式化的输入文本（包含 BLOCK_N 标记）
@@ -196,7 +196,7 @@ async def _call_mimo_optimize(
                 match = re.search(r'\{[\s\S]*\}', content)
                 if match:
                     return json.loads(match.group())
-                raise ValueError(f"MiMo 返回的不是有效 JSON: {content[:200]}")
+                raise ValueError(f"大模型返回的不是有效 JSON: {content[:200]}")
         except Exception as e:
             error_msg = str(e).lower()
             if "response_format" in error_msg or "json_object" in error_msg:
@@ -220,7 +220,7 @@ async def _call_mimo_optimize(
                         continue
                     raise
             if attempt < MAX_RETRIES - 1:
-                logger.warning(f"MiMo 调用失败 (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
+                logger.warning(f"大模型调用失败 (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
                 await asyncio.sleep(1 * (attempt + 1))
             else:
                 raise
@@ -272,7 +272,7 @@ async def optimize_image_blocks(
         input_text = "\n\n".join(input_parts)
 
         try:
-            optimized = await _call_mimo_optimize(
+            optimized = await _call_llm_optimize(
                 input_text=input_text,
                 job_json=job_json,
                 custom_instructions=custom_instructions,

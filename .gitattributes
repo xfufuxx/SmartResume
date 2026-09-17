@@ -1,0 +1,5 @@
+# Windows 脚本必须 CRLF —— 其它行尾会破坏 cmd.exe 解析（吞掉下一行首字符）
+# 详见 .workbuddy/memory/MEMORY.md「Windows 脚本（.bat / .cmd）—— 铁律与坑」
+*.bat text eol=crlf
+*.cmd text eol=crlf
+*.ps1 text eol=crlf
