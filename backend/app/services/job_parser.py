@@ -20,6 +20,7 @@ def _get_client() -> AsyncOpenAI:
 async def _safe_chat_completion(client: AsyncOpenAI, **kwargs):
     """调用 chat completion，带重试和 response_format 自动降级"""
     kwargs.setdefault("timeout", 60.0)
+    kwargs.setdefault("temperature", 0.2)
     last_error = None
     for attempt in range(3):
         try:
@@ -41,7 +42,7 @@ async def _safe_chat_completion(client: AsyncOpenAI, **kwargs):
 
 async def parse_job_from_bytes(content: bytes, filename: str = "", use_ocr_fallback: bool = False) -> dict:
     if not has_valid_api_key():
-        return _mock_job_parse()
+        raise ValueError("LLM_API_KEY 未配置或未生效，无法解析岗位。请检查 backend/.env 中的 LLM_API_KEY。")
 
     b64 = base64.b64encode(content).decode("utf-8")
     ext = filename.split(".")[-1].lower() if filename else "png"
@@ -163,7 +164,7 @@ _MOCK_JOB_JSON = {
 async def parse_job_text(text: str) -> dict:
     """直接解析岗位文本（无需文件），返回 parsed_job_json"""
     if not has_valid_api_key():
-        return _MOCK_JOB_JSON
+        raise ValueError("LLM_API_KEY 未配置或未生效，无法解析岗位。请检查 backend/.env 中的 LLM_API_KEY。")
 
     if not text or not text.strip():
         raise ValueError("岗位文本为空，无法解析")

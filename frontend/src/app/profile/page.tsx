@@ -2,23 +2,23 @@
 
 import React, { useEffect, useState } from 'react'
 import {
-  Layout, Button, Card, Typography, Spin, message, Tabs, Row, Col,
+  Button, Card, Typography, Spin, message, Tabs, Row, Col,
   Form, Input, Select, Upload, Avatar, List, Tag, Space, Popconfirm,
-  Modal, Divider, Empty, Badge, Statistic, Table,
+  Modal, Divider, Empty, Badge,
 } from 'antd'
 import {
-  LogoutOutlined, HomeOutlined, UserOutlined, SecurityScanOutlined,
-  BellOutlined, DashboardOutlined, FileTextOutlined, HistoryOutlined,
-  DeleteOutlined, ExportOutlined, UploadOutlined, PhoneOutlined,
+  UserOutlined, SecurityScanOutlined,
+  BellOutlined, FileTextOutlined,
+  PhoneOutlined, ExportOutlined,
   MailOutlined, EnvironmentOutlined, AimOutlined, DollarOutlined,
   WarningOutlined, LockOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
+import AppLayout from '@/components/AppLayout'
+import AuthGate from '@/components/AuthGate'
 import { user, auth, messages as msgApi } from '@/lib/api'
 import { getToken, clearAuth } from '@/lib/auth'
 import type { UserProfile, UserDevice, MessageItem } from '@/types'
-
-const { Header, Content } = Layout
 
 const CAREER_OPTIONS = [
   { label: '在校生', value: 'student' },
@@ -218,22 +218,15 @@ export default function ProfilePage() {
     }
   }
 
-  if (!token || !profile) return <Spin style={{ display: 'block', margin: '40px auto' }} />
+  if (!token || !profile) return <AuthGate activeKey="profile" />
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingInline: 24 }}>
-        <Typography.Title level={4} style={{ color: '#fff', margin: 0 }}><UserOutlined /> 个人中心</Typography.Title>
-        <Space>
-          <Button icon={<DashboardOutlined />} onClick={() => router.push('/dashboard')} type="text" style={{ color: '#fff' }}>仪表盘</Button>
-          <Button icon={<FileTextOutlined />} onClick={() => router.push('/resumes')} type="text" style={{ color: '#fff' }}>简历库</Button>
-          <Button icon={<HistoryOutlined />} onClick={() => router.push('/history')} type="text" style={{ color: '#fff' }}>历史记录</Button>
-          <Button icon={<HomeOutlined />} onClick={() => router.push('/')} type="text" style={{ color: '#fff' }}>首页</Button>
-          <Button icon={<LogoutOutlined />} onClick={() => { clearAuth(); router.push('/login') }} type="text" style={{ color: '#fff' }}>退出</Button>
-        </Space>
-      </Header>
-
-      <Content style={{ padding: 24, maxWidth: 1000, margin: '0 auto', width: '100%' }}>
+    <AppLayout
+      activeKey="profile"
+      title="个人中心"
+      subtitle="管理账号资料、求职意向与安全设置"
+    >
+      <div className="app-page-enter">
         <Row gutter={[24, 24]}>
           <Col span={24}>
             <Card>
@@ -246,7 +239,12 @@ export default function ProfilePage() {
                   <Space>
                     <Tag icon={<MailOutlined />}>{profile.email}</Tag>
                     {profile.phone && <Tag icon={<PhoneOutlined />}>{profile.phone}</Tag>}
-                    <Tag color={profile.status === 'active' ? 'green' : 'red'}>{profile.status === 'active' ? '正常' : profile.status}</Tag>
+                    <Tag style={{
+                      background: profile.status === 'active' ? 'var(--success-50)' : 'var(--error-50)',
+                      color: profile.status === 'active' ? 'var(--success-600)' : 'var(--error-600)',
+                    }}>
+                      {profile.status === 'active' ? '正常' : profile.status}
+                    </Tag>
                   </Space>
                 </div>
               </div>
@@ -350,12 +348,12 @@ export default function ProfilePage() {
                                   <Space>
                                     {d.platform === 'web' ? '💻' : d.platform === 'ios' ? '📱' : d.platform === 'android' ? '📱' : '🖥️'}
                                     {d.device_name || '未知设备'}
-                                    {d.is_current && <Tag color="blue">当前</Tag>}
-                                    {d.is_revoked && <Tag color="red">已下线</Tag>}
+                                    {d.is_current && <Tag style={{ background: 'var(--primary-50)', color: 'var(--primary-600)' }}>当前</Tag>}
+                                    {d.is_revoked && <Tag style={{ background: 'var(--error-50)', color: 'var(--error-600)' }}>已下线</Tag>}
                                   </Space>
                                 }
                                 description={
-                                  <span style={{ fontSize: 12, color: '#999' }}>
+                                  <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
                                     {d.ip_address} · {d.last_active ? new Date(d.last_active).toLocaleString() : '-'}
                                   </span>
                                 }
@@ -388,7 +386,7 @@ export default function ProfilePage() {
                       dataSource={messageList}
                       renderItem={(msg) => (
                         <List.Item
-                          style={{ background: msg.is_read ? undefined : '#f6ffed' }}
+                          style={{ background: msg.is_read ? undefined : 'var(--success-50)' }}
                           actions={[
                             !msg.is_read && (
                               <Button key="read" size="small" type="link"
@@ -407,7 +405,7 @@ export default function ProfilePage() {
                             description={
                               <div>
                                 <div>{msg.content || '-'}</div>
-                                <span style={{ fontSize: 11, color: '#999' }}>
+                                <span style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>
                                   {msg.created_at ? new Date(msg.created_at).toLocaleString() : ''}
                                 </span>
                               </div>
@@ -504,7 +502,7 @@ export default function ProfilePage() {
 
         {/* 注销确认弹窗 */}
         <Modal
-          title={<><WarningOutlined style={{ color: '#ff4d4f' }} /> 注销账号</>}
+          title={<><WarningOutlined style={{ color: '#EF4444' }} /> 注销账号</>}
           open={deleteModalOpen}
           onCancel={() => setDeleteModalOpen(false)}
           onOk={handleDeleteAccount}
@@ -538,7 +536,7 @@ export default function ProfilePage() {
             placeholder={editField === 'resume_text' ? '请输入简历信息...' : '请输入岗位信息...'}
           />
         </Modal>
-      </Content>
-    </Layout>
+      </div>
+    </AppLayout>
   )
 }

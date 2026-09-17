@@ -1,0 +1,16 @@
+# 密钥与本地环境（含真实 LLM_API_KEY，禁止入库）
+.env
+.env.*
+!.env.example
+
+# 上传文件与生成产物（可能含用户简历 PII，禁止入库）
+uploads/
+*.pdf
+
+# Python 缓存与虚拟环境
+__pycache__/
+*.pyc
+.venv/
+venv/
+*.egg-info/
+.pytest_cache/

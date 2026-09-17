@@ -12,14 +12,25 @@ import redis.asyncio as aioredis
 
 bearer_scheme = HTTPBearer()
 
+# 模块级单例：避免「每请求新建 + 关闭连接」带来的额外 RTT 与连接抖动
+_redis_client: "aioredis.Redis | None" = None
+
+
+def _get_redis_client() -> "aioredis.Redis":
+    global _redis_client
+    if _redis_client is None:
+        _redis_client = aioredis.from_url(
+            settings.REDIS_URL,
+            decode_responses=True,
+            max_connections=50,
+            socket_keepalive=True,
+        )
+    return _redis_client
+
 
 async def get_redis():
-    """获取 Redis 连接"""
-    client = aioredis.from_url(settings.REDIS_URL, decode_responses=True)
-    try:
-        yield client
-    finally:
-        await client.close()
+    """获取 Redis 连接（单例，请求结束不关闭）"""
+    yield _get_redis_client()
 
 
 class RateLimiter:

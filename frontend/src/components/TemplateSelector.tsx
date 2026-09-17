@@ -38,12 +38,13 @@ function MiniPreview({ preview }: { preview: TemplateOption['preview'] }) {
       style={{
         width: '100%',
         height: 120,
-        borderRadius: 6,
+        borderRadius: 12,
         overflow: 'hidden',
-        border: '1px solid #e8e8e8',
+        border: '1px solid rgba(0, 0, 0, 0.06)',
         backgroundColor: preview.bg,
         display: 'flex',
         flexDirection: 'column',
+        boxShadow: '0 2px 8px rgba(0, 0, 0, 0.04)',
       }}
     >
       {/* 模拟布局 */}
@@ -123,10 +124,10 @@ export default function TemplateSelector({
       open={open}
       onCancel={onClose}
       footer={null}
-      width={780}
-      bodyStyle={{ padding: '16px 20px' }}
+      width={800}
+      styles={{ body: { padding: '16px 24px 24px' } }}
     >
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 16 }}>
+      <Typography.Paragraph style={{ marginBottom: 20, color: '#6B7280', fontSize: 14 }}>
         选择一种模板风格，生成优化后的简历将使用该样式排版。点击卡片即可选中。
       </Typography.Paragraph>
 
@@ -140,20 +141,48 @@ export default function TemplateSelector({
                 size="small"
                 style={{
                   cursor: 'pointer',
-                  borderColor: isSelected ? opt.preview.primary : undefined,
-                  borderWidth: isSelected ? 2 : 1,
-                  boxShadow: isSelected ? `0 0 0 2px ${opt.preview.primary}33` : undefined,
+                  borderRadius: 16,
+                  border: isSelected
+                    ? `2px solid ${opt.preview.primary}`
+                    : '1px solid rgba(0, 0, 0, 0.05)',
+                  background: isSelected
+                    ? `linear-gradient(135deg, ${opt.preview.primary}08, ${opt.preview.secondary}08)`
+                    : 'rgba(255, 255, 255, 0.85)',
+                  boxShadow: isSelected
+                    ? `0 8px 24px ${opt.preview.primary}22, 0 0 0 1px ${opt.preview.primary}33`
+                    : '0 4px 12px rgba(0, 0, 0, 0.06)',
+                  transition: 'background 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
                 }}
-                bodyStyle={{ padding: 10 }}
+                styles={{ body: { padding: 12 } }}
                 onClick={() => { onSelect(opt.key); onClose() }}
               >
                 <MiniPreview preview={opt.preview} />
-                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-                  {opt.icon}
-                  <Typography.Text strong style={{ fontSize: 13 }}>{opt.label}</Typography.Text>
-                  {isSelected && <Tag color="blue" style={{ marginLeft: 'auto', fontSize: 10 }}>已选</Tag>}
+                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <span style={{
+                    width: 28, height: 28, borderRadius: 7,
+                    background: isSelected ? opt.preview.primary : '#E5E7EB',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                    transition: 'background 0.3s, color 0.3s',
+                  }}>
+                    {React.cloneElement(opt.icon as React.ReactElement, {
+                      style: { color: isSelected ? '#fff' : '#6B7280', fontSize: 14 }
+                    })}
+                  </span>
+                  <Typography.Text strong style={{ fontSize: 13, color: '#111827' }}>{opt.label}</Typography.Text>
+                  {isSelected && (
+                    <Tag color="blue" style={{
+                      marginLeft: 'auto', fontSize: 10,
+                      borderRadius: 6, padding: '1px 8px',
+                      border: 'none',
+                      background: `${opt.preview.primary}15`,
+                      color: opt.preview.primary,
+                    }}>已选</Tag>
+                  )}
                 </div>
-                <Typography.Text type="secondary" style={{ fontSize: 11, display: 'block', marginTop: 4 }}>
+                <Typography.Text style={{
+                  fontSize: 11, display: 'block', marginTop: 6,
+                  color: '#6B7280', lineHeight: 1.5,
+                }}>
                   {opt.preview.desc}
                 </Typography.Text>
               </Card>

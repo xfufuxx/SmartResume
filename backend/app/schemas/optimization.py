@@ -25,6 +25,18 @@ class QuickOptimizeRequest(BaseModel):
     template: Optional[str] = "professional"  # professional | simple
 
 
+class RenderRequest(BaseModel):
+    """直接渲染：跳过 AI 优化，将简历 JSON 直接生成 PDF"""
+    resume_id: str
+    template: Optional[str] = "professional"
+
+
+class RenderTextRequest(BaseModel):
+    """直接渲染（文本）：解析简历文本后直接生成 PDF，跳过 AI 优化"""
+    resume_text: str
+    template: Optional[str] = "professional"
+
+
 class OptimizeResponse(BaseModel):
     id: str
     resume_id: Optional[str] = None
@@ -53,6 +65,11 @@ class OptimizeResponse(BaseModel):
 class SatisfactionFeedbackRequest(BaseModel):
     satisfaction_score: int
     feedback_text: Optional[str] = None
+
+
+class UpdateContentRequest(BaseModel):
+    """在线编辑优化结果：整体替换 optimized_json（前端保证结构与解析结果一致）。"""
+    optimized_json: dict
 
 
 class DiffRequest(BaseModel):

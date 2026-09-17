@@ -3,6 +3,8 @@ from app.config import settings
 
 _PLACEHOLDER_KEYS = {
     "sk-your-openai-api-key",
+    "sk-your-llm-api-key-here",
+    "sk-your-qwen-api-key",
     "your-api-key",
     "change-me",
     "",

@@ -1,6 +1,6 @@
 'use client'
 
-import React from 'react'
+import React, { useMemo } from 'react'
 import { ConfigProvider, theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import AntdRegistry from '@/lib/AntdRegistry'
@@ -11,11 +11,10 @@ function ThemedConfig({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme()
   const isDark = theme === 'dark'
 
-  return (
-    <ConfigProvider
-      locale={zhCN}
-      theme={{
-        algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
+  // 用 useMemo 固化 theme 对象引用：避免每次渲染重建导致 ConfigProvider 重算派生算法并重渲整棵子树
+  const antdThemeObj = useMemo(
+    () => ({
+      algorithm: isDark ? antdTheme.darkAlgorithm : antdTheme.defaultAlgorithm,
         token: {
           colorPrimary: '#007AFF',
           colorInfo: '#007AFF',
@@ -73,8 +72,12 @@ function ThemedConfig({ children }: { children: React.ReactNode }) {
             optionSelectedBg: isDark ? 'rgba(10,132,255,0.20)' : 'rgba(0,122,255,0.08)',
           },
         },
-      }}
-    >
+      }),
+    [isDark],
+  )
+
+  return (
+    <ConfigProvider locale={zhCN} theme={antdThemeObj}>
       {children}
     </ConfigProvider>
   )

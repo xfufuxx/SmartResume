@@ -5,7 +5,7 @@ import {
   Layout, Button, Card, Typography, Spin, message, Tabs, Row, Col,
   Table, Tag, Space, Statistic, Select, Input, Modal, Empty, Popconfirm,
   Form, InputNumber, Radio, Badge, Descriptions, Divider, Tooltip, Progress,
-  Avatar, DatePicker, Dropdown,
+  Avatar, DatePicker, Dropdown, Segmented,
 } from 'antd'
 import type { TableColumnsType, MenuProps } from 'antd'
 import {
@@ -25,7 +25,7 @@ import {
   ClusterOutlined, WarningOutlined, DatabaseOutlined,
   DesktopOutlined, MobileOutlined, TabletOutlined,
   GlobalOutlined, CarryOutOutlined, CloseCircleOutlined,
-  PauseCircleOutlined, PlayCircleOutlined,
+  PauseCircleOutlined, PlayCircleOutlined, SunOutlined, MoonOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import ReactEChartsCore from 'echarts-for-react/lib/core'
@@ -44,6 +44,8 @@ import type {
   ATSRuleItem, FeedbackItem,
   TicketItem, TicketDetail, AdminLogItem, QuotaConfig,
 } from '@/types'
+import { useTheme } from '@/lib/theme'
+import AuthGate from '@/components/AuthGate'
 
 echarts.use([LineChart, BarChart, PieChart, GridComponent, TooltipComponent, LegendComponent, TitleComponent, CanvasRenderer])
 
@@ -483,14 +485,12 @@ function SettingsPanel() {
 
 export default function AdminPage() {
   const router = useRouter()
+  const { theme, setTheme } = useTheme()
   const [token, setToken] = useState<string | null>(null)
   const [collapsed, setCollapsed] = useState(false)
   const [activeMenu, setActiveMenu] = useState('dashboard')
 
   useEffect(() => {
-    if (typeof document !== 'undefined') {
-      document.documentElement.setAttribute('data-theme', 'dark')
-    }
     const t = getToken()
     const adminData = typeof window !== 'undefined' ? localStorage.getItem('admin') : null
     if (!t || !adminData) { router.push('/admin/login'); return }
@@ -511,13 +511,7 @@ export default function AdminPage() {
     }
   }
 
-  if (!token) {
-    return (
-      <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '100vh', background: cssVar('--bg-body') }}>
-        <Spin size="large" tip="正在加载..." />
-      </div>
-    )
-  }
+  if (!token) return <AuthGate activeKey="admin" />
 
   return (
     <Layout style={{ minHeight: '100vh', background: cssVar('--bg-body') }}>
@@ -620,6 +614,14 @@ export default function AdminPage() {
             </Typography.Title>
           </div>
           <Space>
+            <Segmented
+              value={theme}
+              onChange={(val) => setTheme(val as any)}
+              options={[
+                { label: (<span><SunOutlined /> 亮色</span>), value: 'light' },
+                { label: (<span><MoonOutlined /> 暗色</span>), value: 'dark' },
+              ]}
+            />
             <Button icon={<HomeOutlined />} onClick={() => router.push('/')} type="text" style={{ color: cssVar('--text-secondary') }}>首页</Button>
             <Button icon={<DashboardOutlined />} onClick={() => router.push('/dashboard')} type="text" style={{ color: cssVar('--text-secondary') }}>仪表盘</Button>
             <Badge count={3} size="small">
@@ -646,7 +648,7 @@ const DASHBOARD_KPIS = [
   { label: '活跃用户', value: 8560, delta: 2.52, icon: <UserOutlined />, iconBg: cssVar('--success-50'), iconColor: cssVar('--success-500') },
   { label: '生成任务总数', value: 132890, delta: 0.97, icon: <ThunderboltOutlined />, iconBg: cssVar('--warning-50'), iconColor: cssVar('--warning-500') },
   { label: '今日任务数', value: 6432, delta: 15.45, icon: <CarryOutOutlined />, iconBg: cssVar('--error-50'), iconColor: cssVar('--error-500') },
-  { label: '系统剩余额度', value: 1256320, delta: 1.91, suffix: '次', icon: <DatabaseOutlined />, iconBg: '#CCFBF1', iconColor: cssVar('--teal-500') },
+  { label: '系统剩余额度', value: 1256320, delta: 1.91, suffix: '次', icon: <DatabaseOutlined />, iconBg: cssVar('--primary-50'), iconColor: cssVar('--teal-500') },
 ]
 
 const TASK_TYPE_DATA = [
@@ -690,6 +692,12 @@ const SOURCE_DATA = [
   { value: 6.87, name: '其他' },
 ]
 
+// 确定性伪随机：用于图表 mock 数据，避免渲染期 Math.random 导致每次重渲数据抖动（也防止水合不一致）
+function jitter(seed: number, amp: number): number {
+  const x = Math.sin(seed * 12.9898) * 43758.5453
+  return (x - Math.floor(x)) * amp
+}
+
 function generateDates(days: number): string[] {
   const dates: string[] = []
   const today = new Date()
@@ -710,6 +718,38 @@ function DashboardPanel() {
   const [satisfaction, setSatisfaction] = useState<SatisfactionTrend[]>([])
   const [loading, setLoading] = useState(true)
   const [timeRange, setTimeRange] = useState(7)
+  const { theme } = useTheme()
+
+  // Canvas 不解析 CSS 变量，这里跟随主题给出真实色值，保证暗色/亮色下图表文字、边框、背景均清晰可读
+  const chartColors = useMemo(() => theme === 'dark' ? {
+    textPrimary: '#FFFFFF',
+    textSecondary: 'rgba(235,235,245,0.60)',
+    textTertiary: 'rgba(235,235,245,0.30)',
+    borderLight: 'rgba(84,84,88,0.60)',
+    bgCard: '#1C1C1E',
+    primary: '#0A84FF',
+    primary50: 'rgba(10,132,255,0.13)',
+    primary200: '#66B2FF',
+    success: '#30D158',
+    warning: '#FF9F0A',
+    purple: '#BF5AF2',
+    teal: '#64D2FF',
+    gray: '#8E8E93',
+  } : {
+    textPrimary: '#000000',
+    textSecondary: 'rgba(60,60,67,0.60)',
+    textTertiary: 'rgba(60,60,67,0.30)',
+    borderLight: 'rgba(60,60,67,0.29)',
+    bgCard: '#FFFFFF',
+    primary: '#007AFF',
+    primary50: '#E9F2FF',
+    primary200: '#99C2FF',
+    success: '#34C759',
+    warning: '#FF9500',
+    purple: '#AF52DE',
+    teal: '#5AC8FA',
+    gray: '#8E8E93',
+  }, [theme])
 
   const loadData = useCallback(async () => {
     try {
@@ -737,100 +777,100 @@ function DashboardPanel() {
   const dates = useMemo(() => generateDates(timeRange), [timeRange])
 
   const userGrowthOption: ChartOption = useMemo(() => ({
-    tooltip: { trigger: 'axis', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
-    legend: { data: ['新增用户', '活跃用户'], textStyle: { color: cssVar('--text-secondary') }, bottom: 0 },
+    tooltip: { trigger: 'axis', backgroundColor: chartColors.bgCard, borderColor: chartColors.borderLight, textStyle: { color: chartColors.textSecondary } },
+    legend: { data: ['新增用户', '活跃用户'], textStyle: { color: chartColors.textSecondary }, bottom: 0 },
     grid: { left: 16, right: 16, top: 24, bottom: 32, containLabel: true },
     xAxis: {
       type: 'category', boundaryGap: false, data: dates,
-      axisLine: { lineStyle: { color: cssVar('--border-light') } },
-      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+      axisLine: { lineStyle: { color: chartColors.borderLight } },
+      axisLabel: { color: chartColors.textTertiary, fontSize: 11 },
     },
     yAxis: {
-      type: 'value', splitLine: { lineStyle: { color: cssVar('--border-light'), type: 'dashed' } },
-      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+      type: 'value', splitLine: { lineStyle: { color: chartColors.borderLight, type: 'dashed' } },
+      axisLabel: { color: chartColors.textTertiary, fontSize: 11 },
     },
     series: [
       {
         name: '新增用户', type: 'line', smooth: true, symbol: 'circle', symbolSize: 6,
         data: dates.map((_, i) => 3000 + Math.sin(i * 0.8) * 1500 + i * 120 + Math.random() * 500),
-        itemStyle: { color: cssVar('--primary-500') },
+        itemStyle: { color: chartColors.primary },
         lineStyle: { width: 3 },
         areaStyle: { color: new (echarts as any).graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: `${resolveCssVar('--primary-500', '#3b82f6')}66` }, { offset: 1, color: `${resolveCssVar('--primary-500', '#3b82f6')}08` }]) },
       },
       {
         name: '活跃用户', type: 'line', smooth: true, symbol: 'circle', symbolSize: 6,
         data: dates.map((_, i) => 5000 + Math.cos(i * 0.7) * 1200 + i * 80 + Math.random() * 400),
-        itemStyle: { color: cssVar('--teal-500') },
+        itemStyle: { color: chartColors.teal },
         lineStyle: { width: 3 },
         areaStyle: { color: new (echarts as any).graphic.LinearGradient(0, 0, 0, 1, [{ offset: 0, color: `${resolveCssVar('--teal-500', '#14b8a6')}66` }, { offset: 1, color: `${resolveCssVar('--teal-500', '#14b8a6')}08` }]) },
       },
     ],
-  }), [dates])
+  }), [dates, theme])
 
   const taskTypeOption: ChartOption = useMemo(() => ({
-    tooltip: { trigger: 'item', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
-    color: [cssVar('--primary-500'), cssVar('--success-500'), cssVar('--warning-500'), cssVar('--purple-500'), cssVar('--teal-500'), cssVar('--gray-500')],
-    legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: cssVar('--text-secondary'), fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
+    tooltip: { trigger: 'item', backgroundColor: chartColors.bgCard, borderColor: chartColors.borderLight, textStyle: { color: chartColors.textSecondary } },
+    color: [chartColors.primary, chartColors.success, chartColors.warning, chartColors.purple, chartColors.teal, chartColors.gray],
+    legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: chartColors.textSecondary, fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
     series: [{
       type: 'pie', radius: ['55%', '80%'], center: ['35%', '50%'],
       data: TASK_TYPE_DATA,
-      label: { show: true, position: 'center', formatter: '{total|132,890}\n{text|总任务数}', rich: { total: { fontSize: 20, fontWeight: 700, color: cssVar('--text-primary') }, text: { fontSize: 12, color: cssVar('--text-tertiary') } } },
+      label: { show: true, position: 'center', formatter: '{total|132,890}\n{text|总任务数}', rich: { total: { fontSize: 20, fontWeight: 700, color: chartColors.textPrimary }, text: { fontSize: 12, color: chartColors.textTertiary } } },
       labelLine: { show: false },
       emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: 'rgba(0,0,0,0.5)' } },
     }],
-  }), [])
+  }), [theme])
 
   const systemStatusOption: ChartOption = null
 
   const taskTrendOption: ChartOption = useMemo(() => ({
-    tooltip: { trigger: 'axis', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
-    legend: { data: ['简历优化', '简历评分', '面试追踪', '批量优化', '其他'], textStyle: { color: cssVar('--text-secondary') }, bottom: 0 },
+    tooltip: { trigger: 'axis', backgroundColor: chartColors.bgCard, borderColor: chartColors.borderLight, textStyle: { color: chartColors.textSecondary } },
+    legend: { data: ['简历优化', '简历评分', '面试追踪', '批量优化', '其他'], textStyle: { color: chartColors.textSecondary }, bottom: 0 },
     grid: { left: 16, right: 16, top: 24, bottom: 32, containLabel: true },
     xAxis: {
       type: 'category', boundaryGap: false, data: dates,
-      axisLine: { lineStyle: { color: cssVar('--border-light') } },
-      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+      axisLine: { lineStyle: { color: chartColors.borderLight } },
+      axisLabel: { color: chartColors.textTertiary, fontSize: 11 },
     },
     yAxis: {
-      type: 'value', splitLine: { lineStyle: { color: cssVar('--border-light'), type: 'dashed' } },
-      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+      type: 'value', splitLine: { lineStyle: { color: chartColors.borderLight, type: 'dashed' } },
+      axisLabel: { color: chartColors.textTertiary, fontSize: 11 },
     },
     series: [
-      { name: '简历优化', type: 'line', smooth: true, data: dates.map((_, i) => 8000 + Math.sin(i) * 2000 + Math.random() * 800), itemStyle: { color: cssVar('--primary-500') } },
-      { name: '简历评分', type: 'line', smooth: true, data: dates.map((_, i) => 6000 + Math.cos(i) * 1500 + Math.random() * 600), itemStyle: { color: cssVar('--success-500') } },
-      { name: '面试追踪', type: 'line', smooth: true, data: dates.map((_, i) => 4000 + Math.sin(i + 1) * 1000 + Math.random() * 500), itemStyle: { color: cssVar('--warning-500') } },
-      { name: '批量优化', type: 'line', smooth: true, data: dates.map((_, i) => 3000 + Math.cos(i + 2) * 800 + Math.random() * 400), itemStyle: { color: cssVar('--purple-500') } },
-      { name: '其他', type: 'line', smooth: true, data: dates.map((_, i) => 2000 + Math.sin(i + 3) * 500 + Math.random() * 300), itemStyle: { color: cssVar('--gray-500') } },
+      { name: '简历优化', type: 'line', smooth: true, data: dates.map((_, i) => 8000 + Math.sin(i) * 2000 + jitter(i, 800)), itemStyle: { color: chartColors.primary } },
+      { name: '简历评分', type: 'line', smooth: true, data: dates.map((_, i) => 6000 + Math.cos(i) * 1500 + jitter(i, 600)), itemStyle: { color: chartColors.success } },
+      { name: '面试追踪', type: 'line', smooth: true, data: dates.map((_, i) => 4000 + Math.sin(i + 1) * 1000 + jitter(i, 500)), itemStyle: { color: chartColors.warning } },
+      { name: '批量优化', type: 'line', smooth: true, data: dates.map((_, i) => 3000 + Math.cos(i + 2) * 800 + jitter(i, 400)), itemStyle: { color: chartColors.purple } },
+      { name: '其他', type: 'line', smooth: true, data: dates.map((_, i) => 2000 + Math.sin(i + 3) * 500 + jitter(i, 300)), itemStyle: { color: chartColors.gray } },
     ],
-  }), [dates])
+  }), [dates, theme])
 
   const provinceOption: ChartOption = useMemo(() => ({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: chartColors.bgCard, borderColor: chartColors.borderLight, textStyle: { color: chartColors.textSecondary } },
     grid: { left: 16, right: 80, top: 16, bottom: 16, containLabel: true },
     xAxis: {
-      type: 'value', splitLine: { lineStyle: { color: cssVar('--border-light'), type: 'dashed' } },
-      axisLabel: { color: cssVar('--text-tertiary'), fontSize: 11 },
+      type: 'value', splitLine: { lineStyle: { color: chartColors.borderLight, type: 'dashed' } },
+      axisLabel: { color: chartColors.textTertiary, fontSize: 11 },
     },
     yAxis: {
       type: 'category', data: PROVINCE_DATA.map((d) => d.name).reverse(),
-      axisLine: { lineStyle: { color: cssVar('--border-light') } },
-      axisLabel: { color: cssVar('--text-secondary'), fontSize: 11 },
+      axisLine: { lineStyle: { color: chartColors.borderLight } },
+      axisLabel: { color: chartColors.textSecondary, fontSize: 11 },
     },
     visualMap: {
       orient: 'vertical', right: 0, top: 'center', min: 0, max: 4000,
-      text: ['高', '低'], textStyle: { color: cssVar('--text-tertiary') },
-      inRange: { color: [cssVar('--primary-50'), cssVar('--primary-500')] },
+      text: ['高', '低'], textStyle: { color: chartColors.textTertiary },
+      inRange: { color: [chartColors.primary50, chartColors.primary] },
       itemWidth: 12, itemHeight: 80,
     },
     series: [{
       type: 'bar', data: PROVINCE_DATA.map((d) => d.value).reverse(),
       itemStyle: { borderRadius: [0, 4, 4, 0], color: new (echarts as any).graphic.LinearGradient(1, 0, 0, 0, [{ offset: 0, color: resolveCssVar('--primary-500', '#3b82f6') }, { offset: 1, color: resolveCssVar('--primary-200', '#bfdbfe') }]) },
-      label: { show: true, position: 'right', color: cssVar('--text-secondary'), fontSize: 11 },
+      label: { show: true, position: 'right', color: chartColors.textSecondary, fontSize: 11 },
     }],
-  }), [])
+  }), [theme])
 
   const featureOption: ChartOption = useMemo(() => ({
-    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
+    tooltip: { trigger: 'axis', axisPointer: { type: 'shadow' }, backgroundColor: chartColors.bgCard, borderColor: chartColors.borderLight, textStyle: { color: chartColors.textSecondary } },
     grid: { left: 16, right: 64, top: 8, bottom: 8, containLabel: true },
     xAxis: {
       type: 'value', splitLine: { show: false },
@@ -839,39 +879,39 @@ function DashboardPanel() {
     yAxis: {
       type: 'category', data: FEATURE_TOP_DATA.map((d) => d.name).reverse(),
       axisLine: { show: false }, axisTick: { show: false },
-      axisLabel: { color: cssVar('--text-secondary'), fontSize: 12 },
+      axisLabel: { color: chartColors.textSecondary, fontSize: 12 },
     },
     series: [{
       type: 'bar', data: FEATURE_TOP_DATA.map((d) => d.value).reverse(),
-      itemStyle: { borderRadius: 4, color: cssVar('--primary-500') },
-      label: { show: true, position: 'right', color: cssVar('--text-secondary'), fontSize: 11, formatter: '{c}' },
+      itemStyle: { borderRadius: 4, color: chartColors.primary },
+      label: { show: true, position: 'right', color: chartColors.textSecondary, fontSize: 11, formatter: '{c}' },
       barWidth: 14,
     }],
-  }), [])
+  }), [theme])
 
   const deviceOption: ChartOption = useMemo(() => ({
-    tooltip: { trigger: 'item', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
-    color: [cssVar('--primary-500'), cssVar('--success-500'), cssVar('--warning-500')],
-    legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: cssVar('--text-secondary'), fontSize: 12 }, itemWidth: 10, itemHeight: 10 },
+    tooltip: { trigger: 'item', backgroundColor: chartColors.bgCard, borderColor: chartColors.borderLight, textStyle: { color: chartColors.textSecondary } },
+    color: [chartColors.primary, chartColors.success, chartColors.warning],
+    legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: chartColors.textSecondary, fontSize: 12 }, itemWidth: 10, itemHeight: 10 },
     series: [{
       type: 'pie', radius: ['55%', '80%'], center: ['35%', '50%'],
       data: DEVICE_DATA,
-      label: { show: true, position: 'center', formatter: '{total|28,560}\n{text|总数}', rich: { total: { fontSize: 18, fontWeight: 700, color: cssVar('--text-primary') }, text: { fontSize: 11, color: cssVar('--text-tertiary') } } },
+      label: { show: true, position: 'center', formatter: '{total|28,560}\n{text|总数}', rich: { total: { fontSize: 18, fontWeight: 700, color: chartColors.textPrimary }, text: { fontSize: 11, color: chartColors.textTertiary } } },
       labelLine: { show: false },
     }],
-  }), [])
+  }), [theme])
 
   const sourceOption: ChartOption = useMemo(() => ({
-    tooltip: { trigger: 'item', backgroundColor: cssVar('--bg-card'), borderColor: cssVar('--border-light'), textStyle: { color: cssVar('--text-secondary') } },
-    color: [cssVar('--primary-500'), cssVar('--success-500'), cssVar('--warning-500'), cssVar('--purple-500'), cssVar('--gray-500')],
-    legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: cssVar('--text-secondary'), fontSize: 12 }, itemWidth: 10, itemHeight: 10 },
+    tooltip: { trigger: 'item', backgroundColor: chartColors.bgCard, borderColor: chartColors.borderLight, textStyle: { color: chartColors.textSecondary } },
+    color: [chartColors.primary, chartColors.success, chartColors.warning, chartColors.purple, chartColors.gray],
+    legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: chartColors.textSecondary, fontSize: 12 }, itemWidth: 10, itemHeight: 10 },
     series: [{
       type: 'pie', radius: ['55%', '80%'], center: ['35%', '50%'],
       data: SOURCE_DATA,
-      label: { show: true, position: 'center', formatter: '{total|100%}\n{text|来源}', rich: { total: { fontSize: 18, fontWeight: 700, color: cssVar('--text-primary') }, text: { fontSize: 11, color: cssVar('--text-tertiary') } } },
+      label: { show: true, position: 'center', formatter: '{total|100%}\n{text|来源}', rich: { total: { fontSize: 18, fontWeight: 700, color: chartColors.textPrimary }, text: { fontSize: 11, color: chartColors.textTertiary } } },
       labelLine: { show: false },
     }],
-  }), [])
+  }), [theme])
 
   if (loading) return <Spin size="large" style={{ display: 'block', textAlign: 'center', padding: 60 }} />
 

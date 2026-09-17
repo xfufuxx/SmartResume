@@ -1,21 +1,17 @@
 'use client'
 
-import React, { useEffect, useState, useCallback } from 'react'
+import React, { useEffect, useState } from 'react'
 import {
-  Layout, Button, Card, Typography, Spin, message, Space,
-  Row, Col, Divider, Tag, Progress, Descriptions, Empty,
+  Card, Typography, Spin, message, Space,
+  Row, Col, Tag, Descriptions, Empty,
 } from 'antd'
-import {
-  LogoutOutlined, HomeOutlined, HistoryOutlined, ArrowLeftOutlined,
-  DashboardOutlined, FileTextOutlined,
-} from '@ant-design/icons'
 import { useRouter, useSearchParams } from 'next/navigation'
 import { optimize } from '@/lib/api'
-import { getToken, clearAuth } from '@/lib/auth'
+import { getToken } from '@/lib/auth'
 import { formatDate } from '@/lib/utils'
-import type { OptimizeResult, ResumeParseResult, DiffResponse } from '@/types'
-
-const { Header, Content } = Layout
+import type { ResumeParseResult, DiffResponse } from '@/types'
+import AppLayout from '@/components/AppLayout'
+import AuthGate from '@/components/AuthGate'
 
 function SideBySideCard({ label, data, color }: { label: string; data: ResumeParseResult | null; color: string }) {
   if (!data) return <Empty description="无数据" />
@@ -24,7 +20,7 @@ function SideBySideCard({ label, data, color }: { label: string; data: ResumePar
       {data.summary && (
         <div style={{ marginBottom: 12 }}>
           <Typography.Text type="secondary">个人总结</Typography.Text>
-          <div style={{ background: '#f6f8fa', padding: 8, borderRadius: 6, marginTop: 4 }}>{data.summary}</div>
+          <div style={{ background: 'var(--gray-100)', padding: 8, borderRadius: 6, marginTop: 4, fontSize: 13 }}>{data.summary}</div>
         </div>
       )}
       {data.skills && data.skills.length > 0 && (
@@ -41,7 +37,7 @@ function SideBySideCard({ label, data, color }: { label: string; data: ResumePar
           {data.experience.map((exp, i) => (
             <Card size="small" key={i} style={{ marginTop: 4 }}>
               <Typography.Text strong>{exp.title} @ {exp.company}</Typography.Text>
-              <div style={{ color: '#999', fontSize: 12 }}>{exp.start} - {exp.end}</div>
+              <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>{exp.start} - {exp.end}</div>
               <ul style={{ paddingLeft: 20, marginTop: 4, marginBottom: 0 }}>
                 {(exp.points || []).map((p, j) => <li key={j} style={{ fontSize: 13 }}>{p}</li>)}
               </ul>
@@ -53,7 +49,7 @@ function SideBySideCard({ label, data, color }: { label: string; data: ResumePar
         <div style={{ marginTop: 12 }}>
           <Typography.Text type="secondary">教育背景</Typography.Text>
           {data.education.map((edu, i) => (
-            <div key={i}>{edu.school} - {edu.major} {edu.degree}</div>
+            <div key={i} style={{ fontSize: 13, color: 'var(--text-secondary)' }}>{edu.school} - {edu.major} {edu.degree}</div>
           ))}
         </div>
       )}
@@ -87,33 +83,25 @@ export default function DiffPage() {
     }).finally(() => setLoading(false))
   }, [token, id1, id2])
 
-  const handleLogout = useCallback(() => {
-    clearAuth()
-    router.push('/login')
-  }, [router])
-
-  if (!token) return null
+  if (!token) return <AuthGate activeKey="history" />
 
   if (loading) {
     return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Content style={{ display: 'flex', justifyContent: 'center', alignItems: 'center' }}>
+      <AppLayout activeKey="history" hideNav>
+        <div className="app-empty-state" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
           <Spin size="large" tip="加载中..." />
-        </Content>
-      </Layout>
+        </div>
+      </AppLayout>
     )
   }
 
   if (!data) {
     return (
-      <Layout style={{ minHeight: '100vh' }}>
-        <Header style={{ display: 'flex', alignItems: 'center', paddingInline: 24 }}>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => router.back()} type="text" style={{ color: '#fff' }}>返回</Button>
-        </Header>
-        <Content style={{ padding: 24, textAlign: 'center' }}>
+      <AppLayout activeKey="history" hideNav backPath="/history" backLabel="返回历史" title="版本对比" subtitle="无法加载对比数据">
+        <div className="app-empty-state">
           <Empty description="无法加载对比数据" />
-        </Content>
-      </Layout>
+        </div>
+      </AppLayout>
     )
   }
 
@@ -121,29 +109,11 @@ export default function DiffPage() {
   const b = data.record_b
 
   return (
-    <Layout style={{ minHeight: '100vh' }}>
-      <Header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingInline: 24 }}>
-        <Space>
-          <Button icon={<ArrowLeftOutlined />} onClick={() => router.push('/history')} type="text" style={{ color: '#fff' }}>
-            返回历史
-          </Button>
-          <Typography.Title level={5} style={{ color: '#fff', margin: 0 }}>
-            版本对比
-          </Typography.Title>
-        </Space>
-        <Space>
-          <Button icon={<DashboardOutlined />} onClick={() => router.push('/dashboard')} type="text" style={{ color: '#fff' }}>仪表盘</Button>
-          <Button icon={<FileTextOutlined />} onClick={() => router.push('/resumes')} type="text" style={{ color: '#fff' }}>简历库</Button>
-          <Button icon={<HistoryOutlined />} onClick={() => router.push('/history')} type="text" style={{ color: '#fff' }}>历史记录</Button>
-          <Button icon={<HomeOutlined />} onClick={() => router.push('/')} type="text" style={{ color: '#fff' }}>首页</Button>
-          <Button icon={<LogoutOutlined />} onClick={handleLogout} type="text" style={{ color: '#fff' }}>退出</Button>
-        </Space>
-      </Header>
-
-      <Content style={{ padding: 24, maxWidth: 1400, margin: '0 auto', width: '100%' }}>
+    <AppLayout activeKey="history" backPath="/history" backLabel="返回历史" title="版本对比" subtitle={`${a.job_title || ''} @ ${a.company || ''} vs ${b.job_title || ''} @ ${b.company || ''}`}>
+      <div className="app-page-enter">
         <Card style={{ marginBottom: 16 }}>
-          <Typography.Title level={5}>差异摘要</Typography.Title>
-          <div style={{ fontSize: 14, color: '#666' }}>
+          <Typography.Title level={5} className="app-section-title">差异摘要</Typography.Title>
+          <div style={{ fontSize: 14, color: 'var(--text-secondary)' }}>
             {data.diff_summary}
           </div>
           <Row gutter={16} style={{ marginTop: 12 }}>
@@ -166,13 +136,13 @@ export default function DiffPage() {
 
         <Row gutter={16}>
           <Col xs={24} md={12}>
-            <SideBySideCard label="版本 A" data={a.optimized_json || null} color="#999" />
+            <SideBySideCard label="版本 A" data={a.optimized_json || null} color="var(--text-tertiary)" />
           </Col>
           <Col xs={24} md={12}>
-            <SideBySideCard label="版本 B" data={b.optimized_json || null} color="#2c6fbb" />
+            <SideBySideCard label="版本 B" data={b.optimized_json || null} color="var(--primary-600)" />
           </Col>
         </Row>
-      </Content>
-    </Layout>
+      </div>
+    </AppLayout>
   )
 }

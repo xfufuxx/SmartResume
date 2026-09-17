@@ -8,18 +8,20 @@ export default function NotFound() {
       justifyContent: 'center',
       alignItems: 'center',
       minHeight: '100vh',
-      background: '#f5f5f5',
+      background: 'var(--bg-body)',
     }}>
-      <Result
-        status="404"
-        title="页面不存在"
-        subTitle="您访问的页面不存在或已被移除"
-        extra={
-          <Link href="/">
-            <Button type="primary">返回首页</Button>
-          </Link>
-        }
-      />
+      <div style={{ padding: '32px 48px', borderRadius: 'var(--radius-2xl)', border: '1px solid var(--border-light)', background: 'var(--bg-card)', boxShadow: 'var(--shadow-lg)' }}>
+        <Result
+          status="404"
+          title={<span style={{ color: 'var(--text-primary)' }}>页面不存在</span>}
+          subTitle={<span style={{ color: 'var(--text-tertiary)' }}>您访问的页面不存在或已被移除</span>}
+          extra={
+            <Link href="/">
+              <Button type="primary">返回首页</Button>
+            </Link>
+          }
+        />
+      </div>
     </div>
   )
 }

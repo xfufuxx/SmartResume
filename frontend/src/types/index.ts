@@ -460,3 +460,171 @@ export interface RefineResult {
   refined_text: string
   refine_count: number
 }
+
+// ── 个人数据洞察（首页真实统计）──
+export interface InsightCounts {
+  resumes: number
+  jobs: number
+  optimizations: number
+  favorites: number
+  unparsed_resumes: number
+  unparsed_jobs: number
+}
+
+export interface InsightMatch {
+  avg: number
+  best: number
+  latest: number
+  improvement: number
+  sample_size: number
+}
+
+export interface InsightTrendPoint {
+  date: string
+  count: number
+  avg_score: number | null
+}
+
+export interface InsightActivity {
+  type: 'resume' | 'job' | 'optimize'
+  title: string
+  desc: string
+  match_score?: number | null
+  ref_id?: string
+  created_at: string
+}
+
+export interface InsightActionItem {
+  level: 'primary' | 'warning' | 'info'
+  title: string
+  desc: string
+  action: string
+  link: string
+}
+
+export interface InsightOverview {
+  counts: InsightCounts
+  match: InsightMatch
+  trend: InsightTrendPoint[]
+  categories: Array<{ name: string; value: number }>
+  recent_activities: InsightActivity[]
+  action_items: InsightActionItem[]
+  unread_messages: number
+  generated_at: string
+}
+
+// ── AI 面试预测 ──
+export interface InterviewQuestion {
+  id: string
+  session_id: string
+  order_index: number
+  category?: string | null
+  difficulty?: string | null
+  question: string
+  intent?: string | null
+  answer_outline: string[]
+  sample_answer?: string | null
+  is_bookmarked: boolean
+  note?: string | null
+}
+
+export interface InterviewSessionItem {
+  id: string
+  resume_id?: string | null
+  job_image_id?: string | null
+  job_title?: string | null
+  company?: string | null
+  status: 'pending' | 'processing' | 'completed' | 'failed'
+  error_message?: string | null
+  overall_advice?: string | null
+  question_count: number
+  created_at?: string | null
+}
+
+export interface InterviewSessionDetail extends InterviewSessionItem {
+  questions: InterviewQuestion[]
+}
+
+// ── 岗位匹配罗盘 ──
+export interface MatchRankItem {
+  job_id: string
+  title: string
+  company: string
+  category: string
+  match_rate: number
+  missing_keywords: string[]
+  is_favorite: boolean
+}
+
+export interface MatchRankResult {
+  resume_id: string
+  resume_title: string
+  total_jobs: number
+  matched_jobs: number
+  skipped_jobs: number
+  best_rate: number
+  avg_rate: number
+  items: MatchRankItem[]
+}
+
+// ── 全局搜索 ──
+export interface SearchResultItem {
+  id: string
+  title: string
+  company?: string
+  snippet?: string
+  match_score?: number | null
+  created_at?: string | null
+}
+
+export interface SearchResult {
+  query: string
+  resumes: SearchResultItem[]
+  jobs: SearchResultItem[]
+  optimizations: SearchResultItem[]
+  total: number
+}
+
+// ── ATS 体检 ──
+export interface AtsIssue {
+  level: 'error' | 'warn' | 'info'
+  message: string
+}
+
+export interface AtsCheckResult {
+  score: number
+  passed: boolean
+  issues: AtsIssue[]
+  suggestions: string[]
+  keyword_coverage?: { covered: string[]; missing: string[] } | null
+}
+
+// ── 简历分析聚合（优化主页右侧面板 + 底部指标卡）──
+export interface AnalysisDimensions {
+  ats_score: number
+  /** 岗位关键词在简历中的覆盖率（0-100，百分比） */
+  keyword_density: number
+  keyword_match: number
+  /** 可读性（0-10） */
+  readability: number
+  /** 影响力评分（0-10） */
+  impact: number
+}
+
+export interface AnalysisSuggestion {
+  title: string
+  desc: string
+  detail: string
+}
+
+export interface ResumeAnalysis {
+  match_rate: number
+  job_keywords: string[]
+  skill_tags: string[]
+  matched_keywords: string[]
+  missing_keywords: string[]
+  dimensions: AnalysisDimensions
+  total_score: number
+  ats: { score: number; passed: boolean; issues: AtsIssue[] }
+  suggestions: AnalysisSuggestion[]
+}

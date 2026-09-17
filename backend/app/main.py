@@ -1,22 +1,27 @@
 import os, sys, asyncio
 
-# Windows 下必须使用 SelectorEventLoop 才能支持子进程（Playwright 需要）
+# Windows 下必须使用 ProactorEventLoop 才能支持子进程（Playwright 需要）
 if sys.platform == "win32":
-    asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
+    asyncio.set_event_loop_policy(asyncio.WindowsProactorEventLoopPolicy())
 
 from contextlib import asynccontextmanager
+import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
 from app.config import settings
 from app.api import auth, resumes, jobs, optimization, scoring, feedback, matching, batch, refine, user, messages, admin
+from app.api import files, export, ats
+from app.api import insights, interview, search, analysis
+from app.core.log_filter import install_sensitive_log_filter
 
-# 确保 uploads 目录存在（模块加载时创建，避免 StaticFiles 挂载失败）
+# 确保 uploads 目录存在（模块加载时创建）
 os.makedirs("uploads", exist_ok=True)
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
+    # 全局安装日志脱敏过滤器：防止姓名/电话/邮箱等 PII 原文写入日志
+    install_sensitive_log_filter()
     from app.database import engine, Base
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
@@ -29,8 +34,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-# 挂载本地文件存储目录，使浏览器可以访问上传的文件和生成的 PDF
-app.mount("/uploads", StaticFiles(directory="uploads"), name="uploads")
+# 注意：不再以 StaticFiles 公开挂载 /uploads，避免简历 PII 被直连下载（PIPL 红线）。
+# 文件访问统一走签名 URL 代理 /api/files/{key}（见 app/api/files.py）。
 
 app.add_middleware(
     CORSMiddleware,
@@ -52,6 +57,13 @@ app.include_router(matching.router, prefix="/api/match", tags=["Matching"])
 app.include_router(batch.router, prefix="/api", tags=["Batch"])
 app.include_router(refine.router, prefix="/api", tags=["Refine"])
 app.include_router(admin.router, prefix="/api/admin", tags=["Admin"])
+app.include_router(files.router, tags=["Files"])
+app.include_router(export.router, tags=["Export"])
+app.include_router(ats.router, tags=["ATS"])
+app.include_router(insights.router, tags=["Insights"])
+app.include_router(interview.router, tags=["Interview"])
+app.include_router(search.router, tags=["Search"])
+app.include_router(analysis.router, tags=["Analysis"])
 
 
 @app.get("/health")

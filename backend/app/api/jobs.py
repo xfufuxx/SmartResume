@@ -8,6 +8,8 @@ from sqlalchemy import select, or_
 from app.database import get_db
 from app.core.deps import get_current_user
 from app.config import settings
+from app.core.errors import app_err
+from app.core.file_security import validate_file_magic
 from app.models.user import User
 from app.models.job_image import JobImage
 from app.schemas.job import JobImageResponse, JobUpdateRequest, JobBatchActionRequest
@@ -49,11 +51,14 @@ async def upload_job_image(
 ):
     ext = file.filename.split(".")[-1].lower() if file.filename else "unknown"
     if ext not in ("png", "jpg", "jpeg", "webp"):
-        raise HTTPException(status_code=400, detail="Only image files are supported")
+        raise app_err("FILE_TYPE_INVALID")
 
     content = await file.read()
     if len(content) > settings.MAX_UPLOAD_SIZE:
-        raise HTTPException(status_code=400, detail="File size exceeds 20MB limit")
+        raise app_err("FILE_TOO_LARGE")
+
+    # 真实文件类型校验（防「改扩展名上传恶意文件」）
+    validate_file_magic(content, ext)
 
     filename = file.filename or f"job.{ext}"
 
@@ -64,10 +69,10 @@ async def upload_job_image(
         result = await parse_job_from_bytes(content, filename, use_ocr_fallback=use_ocr)
     except ValueError as e:
         logger.error(f"岗位图片解析失败: {e}")
-        raise HTTPException(status_code=400, detail=str(e))
+        raise app_err("JOB_PARSE_FAILED")
     except Exception as e:
         logger.error(f"岗位图片解析异常: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"岗位解析服务异常: {type(e).__name__}")
+        raise app_err("JOB_PARSE_FAILED")
 
     parsed = result.get("parsed_job_json") or {}
     title = parsed.get("title", "")
@@ -294,7 +299,7 @@ async def get_job_image(
     )
     job = result.scalar_one_or_none()
     if not job:
-        raise HTTPException(status_code=404, detail="Job image not found")
+        raise app_err("JOB_NOT_FOUND")
     return job
 
 
@@ -471,7 +476,7 @@ async def delete_job_image(
     )
     job = result.scalar_one_or_none()
     if not job:
-        raise HTTPException(status_code=404, detail="Job image not found")
+        raise app_err("JOB_NOT_FOUND")
 
     if job.image_url:
         await storage.delete(job.image_url)
