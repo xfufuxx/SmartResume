@@ -50,6 +50,19 @@ class Settings(BaseSettings):
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
 
+    # ── 真实投递（阶段1：邮件直投）──
+    DELIVERY_ENABLED: bool = True          # 总开关（关闭时投递一律走 manual 记录模式）
+    DELIVERY_DAILY_LIMIT: int = 20         # 每用户每日真实投递上限（反骚扰/反滥用）
+    DELIVERY_FROM_NAME: str = "智能简历求职助手"  # 邮件里的发件人显示名
+
+    # ── 阶段2：IMAP 回执轮询（收退信/HR 自动回复）──
+    # 使用与 SMTP 同一邮箱账号的 IMAP 收件；未配置时 /email/sync 返回 enabled:false。
+    IMAP_HOST: str = "imap.qq.com"
+    IMAP_PORT: int = 993
+    IMAP_USER: str = ""
+    IMAP_PASSWORD: str = ""
+    IMAP_FOLDER: str = "INBOX"
+
     class Config:
         env_file = ".env"
         extra = "ignore"

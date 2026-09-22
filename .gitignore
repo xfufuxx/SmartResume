@@ -18,6 +18,9 @@ uploads/
 node_modules/
 .next/
 frontend/.next/
+.next-broken-*/
+frontend/.next-broken-*/
+*.tsbuildinfo
 
 # IDE
 .vscode/

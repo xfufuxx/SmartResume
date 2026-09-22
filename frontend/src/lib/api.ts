@@ -1,5 +1,7 @@
 import axios from 'axios'
 
+import type { InterviewTrackPayload, ApplicationPayload, CommunicationPayload } from '@/types'
+
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
 const api = axios.create({
@@ -292,10 +294,34 @@ export const jobs = {
     form.append('file', file)
     return api.post(`/api/jobs/upload?use_ocr=${useOcr}`, form)
   },
+  /** 手动创建职位（填写字段，无需图片） */
+  create: (data: {
+    title: string
+    company?: string
+    category?: string
+    user_remark?: string
+    image_url?: string
+    parsed_job_json?: Record<string, unknown>
+  }) => api.post('/api/jobs/create', data),
+  /** 上传职位图片：仅识别解析、不入库，返回结构化职位数据供预览确认 */
+  parseImage: (file: File, useOcr = false) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post(`/api/jobs/parse-image?use_ocr=${useOcr}`, form)
+  },
+  /** 批量创建职位（导入确认后落库） */
+  batchCreate: (jobs: Array<{
+    title: string
+    company?: string
+    category?: string
+    user_remark?: string
+    image_url?: string
+    parsed_job_json?: Record<string, unknown>
+  }>) => api.post('/api/jobs/batch-create', { jobs }),
   list: (q = '', category = '') =>
     api.get('/api/jobs/', { params: { q, category } }),
   get: (id: string) => api.get(`/api/jobs/${id}`),
-  update: (id: string, data: { title?: string; company?: string; category?: string; user_remark?: string }) =>
+  update: (id: string, data: { title?: string; company?: string; category?: string; status?: string; user_remark?: string }) =>
     api.put(`/api/jobs/${id}`, data),
   setPrimary: (id: string) => api.put(`/api/jobs/${id}/primary`),
   toggleFavorite: (id: string) => api.post(`/api/jobs/${id}/favorite`),
@@ -368,13 +394,6 @@ export const matching = {
     api.post('/api/match/rank', { resume_id: resumeId, limit: limit ?? null }),
 }
 
-export const feedback = {
-  create: (optimizationRecordId: string, outcome: string) =>
-    api.post('/api/feedback/', { optimization_record_id: optimizationRecordId, outcome }),
-  list: () => api.get('/api/feedback/'),
-  stats: () => api.get('/api/feedback/stats'),
-}
-
 export const batch = {
   optimize: (sourceResumeId: string, jobIds: string[]) =>
     api.post('/api/batch-optimize', { source_resume_id: sourceResumeId, job_ids: jobIds }),
@@ -416,6 +435,97 @@ export const interview = {
   saveNote: (questionId: string, note: string) =>
     api.put(`/api/interview/questions/${questionId}/note`, { note }),
   listBookmarks: (limit = 50) => api.get('/api/interview/bookmarks', { params: { limit } }),
+}
+
+/** 面试追踪：记录的字段全部由用户手动录入（项目不具备投递能力，不做任何自动派生） */
+export const interviewTracks = {
+  options: () => api.get('/api/interview-tracks/options'),
+  list: (params?: { status?: string; keyword?: string; start?: string; end?: string }) =>
+    api.get('/api/interview-tracks/', { params }),
+  stats: () => api.get('/api/interview-tracks/stats'),
+  create: (payload: InterviewTrackPayload) => api.post('/api/interview-tracks/', payload),
+  update: (id: string, payload: InterviewTrackPayload) =>
+    api.put(`/api/interview-tracks/${id}`, payload),
+  remove: (id: string) => api.delete(`/api/interview-tracks/${id}`),
+}
+
+/** 岗位投递申请：用户向指定岗位发起投递（关联存储 + 状态记录 + 防重复 + 阶段1 邮件直投） */
+export const applications = {
+  options: () => api.get('/api/applications/options'),
+  list: (params?: { status?: string; keyword?: string }) =>
+    api.get('/api/applications/', { params }),
+  stats: () => api.get('/api/applications/stats'),
+  create: (payload: ApplicationPayload) => api.post('/api/applications/', payload),
+  update: (id: string, payload: ApplicationPayload) =>
+    api.put(`/api/applications/${id}`, payload),
+  remove: (id: string) => api.delete(`/api/applications/${id}`),
+  check: (jobId: string) => api.get(`/api/applications/check/${jobId}`),
+  appliedJobIds: () => api.get('/api/applications/applied-job-ids'),
+  /** 投递弹窗：HR 邮箱探测 + 通道可用性/额度 */
+  contactHint: (jobId: string) => api.get(`/api/applications/contact-hint/${jobId}`),
+  /** 投递轨迹时间线 */
+  deliveryEvents: (id: string) => api.get(`/api/applications/${id}/delivery-events`),
+  /** 重发失败的邮件投递 */
+  resend: (id: string) => api.post(`/api/applications/${id}/resend`),
+  /** 批量投递（阶段2）：多岗位共用简历/附言/授权，逐个限频调度 */
+  batch: (payload: {
+    job_image_ids: string[]
+    resume_id?: string | null
+    cover_letter?: string | null
+    recipient_emails?: Record<string, string>
+    consent_given?: boolean
+  }) => api.post('/api/applications/batch', payload),
+  /** 轮询 IMAP 收件箱：退信→bounced+suppression，回复→沟通时间线 */
+  syncEmail: () => api.post('/api/applications/email/sync'),
+  /** 邮件不发送名单（suppression）管理 */
+  suppressions: {
+    list: () => api.get('/api/applications/suppressions'),
+    add: (email: string, detail?: string) =>
+      api.post('/api/applications/suppressions', { email, detail }),
+    remove: (id: string) => api.delete(`/api/applications/suppressions/${id}`),
+  },
+  /** ── 阶段3：官网表单半自动投递 ── */
+  /** 只读探测官网投递页：robots 核查 + 表单字段识别（不提交任何数据） */
+  probeForm: (url: string) => api.post('/api/applications/form/probe', { url }),
+  /** 打开预填浏览器（headed）：系统只预填，提交需用户在页面中手动确认 */
+  prefillForm: (id: string, opts?: { headless?: boolean; keep_open_seconds?: number }) =>
+    api.post(`/api/applications/${id}/form/prefill`, opts ?? {}),
+  /** 用户在官网人工确认后的结果回填：submitted / failed */
+  reportFormResult: (id: string, result: 'submitted' | 'failed', detail?: string) =>
+    api.post(`/api/applications/${id}/form/result`, { result, detail }),
+  /** ── 阶段4：平台引导投递（一键准备包） ── */
+  /** 一键准备包：平台识别 + 深链 + 简历纯文本（最后一步由用户在官方平台完成） */
+  guidePack: (jobId: string, resumeId?: string | null) =>
+    api.get(`/api/applications/guide-pack/${jobId}`, {
+      params: resumeId ? { resume_id: resumeId } : undefined,
+    }),
+  /** 记录「用户点击打开平台岗位页」事件（时间线留痕） */
+  guideOpened: (id: string) => api.post(`/api/applications/${id}/guide/opened`),
+  /** 用户在官方平台完成/放弃投递后的结果回填：submitted / failed */
+  reportGuideResult: (id: string, result: 'submitted' | 'failed', detail?: string) =>
+    api.post(`/api/applications/${id}/guide/result`, { result, detail }),
+}
+
+/** 邮件模板管理（阶段2）：投递附言默认模板 + 用户自定义 */
+export const emailTemplates = {
+  list: () => api.get('/api/email-templates/'),
+  create: (payload: { name: string; body: string; is_default?: boolean }) =>
+    api.post('/api/email-templates/', payload),
+  update: (id: string, payload: { name?: string; body?: string; is_default?: boolean }) =>
+    api.put(`/api/email-templates/${id}`, payload),
+  remove: (id: string) => api.delete(`/api/email-templates/${id}`),
+}
+
+/** 面试追踪 - 沟通消息：用户与某家公司就某次投递的往来（与全局通知中心 /messages 相互独立） */
+export const communications = {
+  options: () => api.get('/api/communications/options'),
+  list: (params?: { application_id?: string; company?: string; keyword?: string; direction?: string }) =>
+    api.get('/api/communications/', { params }),
+  stats: () => api.get('/api/communications/stats'),
+  create: (payload: CommunicationPayload) => api.post('/api/communications/', payload),
+  update: (id: string, payload: CommunicationPayload) =>
+    api.put(`/api/communications/${id}`, payload),
+  remove: (id: string) => api.delete(`/api/communications/${id}`),
 }
 
 /** 全局搜索：跨简历 / 岗位 / 优化记录 */

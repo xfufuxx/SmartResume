@@ -418,27 +418,6 @@ export interface TrendingJob {
   change_percent?: number
 }
 
-export interface FeedbackRecord {
-  id: string
-  user_id: string
-  optimization_record_id: string
-  outcome: string
-  created_at: string
-}
-
-export interface FeedbackStats {
-  total_applications: number
-  interview_rate: number
-  offer_rate: number
-  outcome_breakdown: Record<string, number>
-  version_comparison: Array<{
-    resume_id: string
-    total_applications: number
-    interview_rate: number
-    offer_rate: number
-  }>
-}
-
 export interface MatchResult {
   match_rate: number
   missing_keywords: string[]
@@ -627,4 +606,241 @@ export interface ResumeAnalysis {
   total_score: number
   ats: { score: number; passed: boolean; issues: AtsIssue[] }
   suggestions: AnalysisSuggestion[]
+}/* ── 面试追踪：记录全部由用户手动录入（项目不具备投递能力，不自动派生） ── */
+export type InterviewTrackStatus = 'scheduled' | 'awaiting' | 'passed' | 'offer' | 'rejected'
+
+export interface InterviewTrack {
+  id: string
+  user_id: string
+  company: string
+  position: string
+  location: string | null
+  stage: string | null
+  mode: string | null
+  interviewer: string | null
+  interview_time: string | null
+  status: InterviewTrackStatus
+  result: string | null
+  resume_id: string | null
+  job_image_id: string | null
+  created_at: string | null
+  updated_at: string | null
 }
+
+/** 新建 / 编辑面试记录时提交给后端的表单体 */
+export type InterviewTrackPayload = Omit<
+  InterviewTrack,
+  'id' | 'user_id' | 'created_at' | 'updated_at'
+>
+
+export interface InterviewTrackStats {
+  total: number
+  by_status: Record<string, number>
+  by_stage: Record<string, number>
+  offer_rate: number
+  pass_rate: number
+  upcoming_7d: number
+}
+
+/* ── 岗位投递申请：用户向指定岗位发起的一次投递（与岗位关联存储，防重复） ── */
+export type ApplicationStatus = 'submitted' | 'viewed' | 'interview' | 'offer' | 'rejected'
+
+/** 外部投递通道：email=邮件直投（真实发送）；manual=记录模式（引导用户去官方渠道）；form=官网表单半自动投递；guide=平台引导投递 */
+export type DeliveryChannel = 'email' | 'manual' | 'form' | 'guide'
+/** 外部投递状态（与 status 站内流程状态相互独立） */
+export type DeliveryStatus = 'pending' | 'sent' | 'failed' | 'bounced' | 'not_applicable'
+/** 投递事件类型（delivery_events 流水） */
+export type DeliveryEventType =
+  | 'queued' | 'sent' | 'failed' | 'bounced' | 'replied'
+  | 'form_prefilled' | 'form_submitted' | 'form_failed'
+  | 'guide_opened' | 'guide_submitted' | 'guide_failed'
+
+export interface Application {
+  id: string
+  user_id: string
+  job_image_id: string
+  resume_id: string | null
+  applicant_name: string
+  email: string
+  phone: string
+  expected_salary: string | null
+  available_from: string | null
+  cover_letter: string | null
+  status: ApplicationStatus
+  // ── 真实触达（阶段1：邮件直投；阶段3：官网表单）──
+  channel: DeliveryChannel | null
+  apply_url: string | null
+  recipient_email: string | null
+  delivery_status: DeliveryStatus | null
+  sent_at: string | null
+  provider_message_id: string | null
+  consent_at: string | null
+  job_title: string | null
+  job_company: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+/** 新建 / 更新投递时提交给后端的表单体（招聘软件式：仅岗位 + 选填简历/附言，联系方式由后端从资料带出） */
+export interface ApplicationPayload {
+  job_image_id: string
+  resume_id?: string | null
+  cover_letter?: string | null
+  status?: ApplicationStatus
+  /** HR 接收邮箱（非空 = 邮件直投通道） */
+  recipient_email?: string | null
+  /** 官网投递入口 URL（非空且授权 = 官网表单半自动通道；guide 通道传平台深链） */
+  apply_url?: string | null
+  /** 显式通道选择（guide=平台引导投递；不传则按 email>form 自动决策） */
+  channel_hint?: 'guide' | null
+  /** 用户对本次对外投递的明示同意（PIPL 单独同意，邮件直投必为 true） */
+  consent_given?: boolean
+}
+
+/** 投递事件流水（投递轨迹时间线） */
+export interface DeliveryEvent {
+  id: string
+  application_id: string
+  event_type: DeliveryEventType
+  detail: string | null
+  occurred_at: string | null
+}
+
+/** 投递弹窗打开时的 HR 邮箱探测结果与通道可用性 */
+export interface DeliveryContactHint {
+  email: string | null
+  email_source: string | null
+  /** JD 中探测到的官网投递入口（阶段3，可人工修改） */
+  apply_url: string | null
+  smtp_configured: boolean
+  delivery_enabled: boolean
+  daily_limit: number
+  sent_today: number
+}
+
+/* ── 阶段3：官网表单半自动投递 ── */
+
+/** 探测到的单个表单字段 */
+export interface FormProbeField {
+  selector: string
+  kind: 'name' | 'email' | 'phone' | 'cover_letter' | 'resume_file' | 'other'
+  input_type: string
+  label: string | null
+}
+
+/** 官网投递页探测结果（robots 核查 + 表单结构，只读不提交） */
+export interface FormProbeResult {
+  ok: boolean
+  url: string
+  robots_allowed: boolean
+  robots_detail: string | null
+  form_detected: boolean
+  fields: FormProbeField[]
+  site_title: string | null
+  detail: string | null
+}
+
+export interface ApplicationStats {
+  total: number
+  by_status: Record<string, number>
+}
+
+/* ── 阶段4：平台引导投递（一键准备包） ── */
+
+/** 一键准备包：平台识别 + 深链 + 简历纯文本（最后一步投递由用户在官方平台完成） */
+export interface GuidePack {
+  platform_key: 'boss' | 'zhilian' | '51job' | 'liepin' | 'lagou' | 'linkedin'
+  platform_name: string
+  deep_link: string
+  /** job_url=JD内平台链接 / platform_search=平台搜索页 */
+  link_source: 'job_url' | 'platform_search'
+  job_title: string | null
+  job_company: string | null
+  resume_title: string | null
+  resume_text: string
+}
+
+// ── 阶段2：回执闭环 / 批量投递 / 邮件模板 / suppression 名单 ──
+
+/** 邮件回执同步结果（IMAP 轮询） */
+export interface EmailSyncResult {
+  enabled: boolean
+  scanned: number
+  matched?: number
+  bounces: number
+  replies: number
+  suppressed_new?: number
+  message: string
+}
+
+/** 批量投递单岗位结果 */
+export interface BatchResultItem {
+  job_image_id: string
+  application_id: string | null
+  ok: boolean
+  code: number
+  detail: string
+}
+
+/** 批量投递汇总结果 */
+export interface BatchApplicationResult {
+  created: number
+  skipped: number
+  failed_quota: number
+  items: BatchResultItem[]
+}
+
+/** 邮件模板（投递附言模板，支持 {job_title}/{company}/{applicant_name} 占位符） */
+export interface EmailTemplate {
+  id: string
+  name: string
+  body: string
+  is_default: boolean
+  created_at: string | null
+  updated_at: string | null
+}
+
+/** 邮件不发送名单条目（退信自动加入 / 手动加入） */
+export interface SuppressionEntry {
+  id: string
+  email: string
+  reason: 'bounce' | 'manual'
+  detail: string | null
+  created_at: string | null
+}
+
+// ── 面试追踪 - 沟通消息：用户与某家公司就某次投递的往来（与全局通知中心 /messages 相互独立）──
+export type CommunicationDirection = 'out' | 'in'
+export type CommunicationChannel = 'phone' | 'email' | 'wechat' | 'other'
+
+export interface Communication {
+  id: string
+  user_id: string
+  application_id: string | null
+  company: string
+  position: string | null
+  direction: CommunicationDirection
+  channel: CommunicationChannel
+  content: string
+  contact_at: string | null
+  created_at: string | null
+  updated_at: string | null
+}
+
+/** 新建 / 更新沟通时提交给后端的表单体 */
+export interface CommunicationPayload {
+  application_id?: string | null
+  company?: string | null
+  position?: string | null
+  direction: CommunicationDirection
+  channel: CommunicationChannel
+  content: string
+  contact_at?: string | null
+}
+
+export interface CommunicationStats {
+  total: number
+  by_direction: Record<string, number>
+  by_channel: Record<string, number>
+}
+

@@ -44,6 +44,34 @@ def verify_signed_key(key: str, exp: int, sig: str) -> bool:
     return hmac.compare_digest(expected, sig)
 
 
+def resign_file_url(url: str | None) -> str | None:
+    """把存储的文件地址统一重签为有效的签名代理 URL（刷新过期时间）。
+
+    兼容三种历史形态：
+    - 完整签名 URL（{BACKEND_URL}/api/files/{key}?exp=&sig=）→ 提取 key 重签；
+    - 旧版静态路径（.../uploads/{key}）→ 提取 key 走签名代理；
+    - 相对路径（uploads/{key} 或裸 key，如演示种子数据）→ 直接重签。
+    无法识别时原样返回。
+    """
+    if not url:
+        return url
+    if url.startswith("http"):
+        path = urlparse(url).path
+        if "/api/files/" in path:
+            key = path.split("/api/files/", 1)[-1]
+        elif "/uploads/" in path:
+            key = path.split("/uploads/", 1)[-1]
+        else:
+            return url
+    elif url.startswith("uploads/"):
+        key = url[len("uploads/"):]
+    elif url.startswith("/"):
+        key = url.lstrip("/")
+    else:
+        key = url
+    return _sign_key(key)
+
+
 class StorageService:
     def __init__(self):
         self.s3_client = None
