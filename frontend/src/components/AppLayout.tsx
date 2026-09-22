@@ -66,7 +66,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { key: 'dashboard', label: '首页', icon: <HomeOutlined />, path: '/dashboard' },
       { key: 'home', label: '优化', icon: <ThunderboltOutlined />, path: '/' },
       { key: 'resumes', label: '简历', icon: <FileTextOutlined />, path: '/resumes' },
-      { key: 'jobs', label: '岗位', icon: <FileSearchOutlined />, path: '/jobs' },
+      { key: 'jobs', label: '岗位库', icon: <FileSearchOutlined />, path: '/jobs' },
       { key: 'profile', label: '我的', icon: <UserOutlined />, path: '/profile' },
     ],
   },
@@ -93,7 +93,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
 /** 搜索结果分组配色与跳转路径 */
 const SEARCH_GROUPS = [
   { key: 'resumes' as const, label: '简历', path: (id: string) => `/resumes` },
-  { key: 'jobs' as const, label: '岗位', path: (id: string) => `/jobs` },
+  { key: 'jobs' as const, label: '岗位库', path: (id: string) => `/jobs` },
   { key: 'optimizations' as const, label: '优化记录', path: (id: string) => `/history/${id}` },
 ]
 

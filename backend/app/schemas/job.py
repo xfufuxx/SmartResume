@@ -38,6 +38,7 @@ class JobImageResponse(BaseModel):
     is_primary: bool = False
     is_favorite: bool = False
     user_remark: Optional[str] = None
+    status: str = "投递中"
     deleted_at: Optional[datetime] = None
     created_at: datetime
 
@@ -48,7 +49,24 @@ class JobUpdateRequest(BaseModel):
     title: Optional[str] = None
     company: Optional[str] = None
     category: Optional[str] = None
+    status: Optional[str] = None
     user_remark: Optional[str] = None
+
+
+class JobCreateRequest(BaseModel):
+    """手动创建职位（无需图片）：前端填写字段直接入库"""
+    title: str
+    company: Optional[str] = None
+    category: Optional[str] = None
+    status: Optional[str] = None
+    user_remark: Optional[str] = None
+    image_url: Optional[str] = None
+    parsed_job_json: Optional[dict] = None
+
+
+class JobBatchCreateRequest(BaseModel):
+    """批量创建职位（用于导入职位确认后落库）"""
+    jobs: list[JobCreateRequest]
 
 
 class JobBatchActionRequest(BaseModel):

@@ -10,7 +10,7 @@ import {
   PlusOutlined, CrownOutlined, CopyOutlined, DeleteOutlined, EditOutlined,
   EyeOutlined, StarOutlined, StarFilled, MoreOutlined, AppstoreOutlined,
   BarsOutlined, ThunderboltOutlined, TrophyOutlined, FireOutlined,
-  FileTextOutlined, BulbOutlined, ClockCircleOutlined,
+  FileTextOutlined, BulbOutlined, ClockCircleOutlined, DownloadOutlined, RollbackOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { resumes, toBackendUrl } from '@/lib/api'
@@ -31,6 +31,14 @@ const STATUS_MAP: Record<string, { text: string; color: string; bg: string }> = 
 
 const SCORE_COLOR = (score?: number | null) =>
   !score ? '#CBD5E1' : score >= 75 ? '#10B981' : score >= 60 ? '#F59E0B' : '#EF4444'
+
+// 回收站保留期（与后端 TRASH_RETENTION_DAYS 保持一致），到期自动彻底清除
+const TRASH_RETENTION_DAYS = 7
+const trashDaysLeft = (deletedAt?: string | null) => {
+  if (!deletedAt) return TRASH_RETENTION_DAYS
+  const ms = new Date(deletedAt).getTime() + TRASH_RETENTION_DAYS * 86400000 - Date.now()
+  return Math.max(0, Math.ceil(ms / 86400000))
+}
 
 const SUGGESTIONS = [
   { icon: <BulbOutlined />, title: '优化简历可提升面试机会', desc: '根据职位要求针对性优化内容' },
@@ -65,6 +73,13 @@ export default function ResumeLibrary() {
   const [editTitle, setEditTitle] = useState('')
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
   const [previewResume, setPreviewResume] = useState<ResumeRecord | null>(null)
+  const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null)
+  const [previewLoading, setPreviewLoading] = useState(false)
+  const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  // 回收站
+  const [trashList, setTrashList] = useState<ResumeRecord[]>([])
+  const [trashLoading, setTrashLoading] = useState(false)
 
   // 批量管理
   const [selectMode, setSelectMode] = useState(false)
@@ -109,6 +124,24 @@ export default function ResumeLibrary() {
     loadStats()
   }, [token, loadList, loadStats])
 
+  // 切到回收站 Tab 时加载软删除列表
+  const loadTrash = useCallback(async () => {
+    setTrashLoading(true)
+    try {
+      const res = await resumes.trash()
+      setTrashList(res.data || [])
+    } catch {
+      message.error('加载回收站失败')
+    } finally {
+      setTrashLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!token) return
+    if (activeTab === 'recycle') loadTrash()
+  }, [token, activeTab, loadTrash])
+
   // 筛选 + 搜索 + 排序后的派生列表
   const filteredList = useMemo(() => {
     let result = [...list]
@@ -122,7 +155,8 @@ export default function ResumeLibrary() {
         .filter((r) => r.updated_at || r.created_at)
         .sort((a, b) => (b.updated_at || b.created_at).localeCompare(a.updated_at || a.created_at))
     } else if (activeTab === 'recycle') {
-      result = [] // 回收站需后端补充软删除列表接口，此处预留
+      // 回收站：展示软删除列表（后端 GET /api/resumes/trash）
+      result = [...trashList]
     }
 
     if (searchKeyword.trim()) {
@@ -151,7 +185,7 @@ export default function ResumeLibrary() {
     }
 
     return result
-  }, [list, activeTab, searchKeyword, typeFilter, statusFilter, sortBy])
+  }, [list, trashList, activeTab, searchKeyword, typeFilter, statusFilter, sortBy])
 
   const paginatedList = useMemo(() => {
     const start = (page - 1) * pageSize
@@ -235,6 +269,18 @@ export default function ResumeLibrary() {
     }
   }, [editId, editTitle, loadList])
 
+  const handleRestore = useCallback(async (id: string) => {
+    try {
+      await resumes.restore(id)
+      setTrashList((prev) => prev.filter((r) => r.id !== id))
+      message.success('简历已恢复')
+      loadList()
+      loadStats()
+    } catch {
+      message.error('恢复失败')
+    }
+  }, [loadList, loadStats])
+
   const handleUpload = useCallback(async (file: File) => {
     try {
       await resumes.upload(file)
@@ -246,9 +292,71 @@ export default function ResumeLibrary() {
     }
   }, [loadList, loadStats])
 
-  const handlePreview = useCallback((resume: ResumeRecord) => {
+  const handlePreview = useCallback(async (resume: ResumeRecord) => {
+    const url = toBackendUrl(resume.original_file_url)
+    const type = (resume.file_type || '').toLowerCase()
+    // 浏览器无法直接渲染 Word，展示解析内容
+    if (type === 'docx' || !url) {
+      setPreviewResume(resume)
+      setPreviewModalOpen(true)
+      return
+    }
+    // PDF / 图片：页面内弹窗展示。fetch blob 后用 <embed>/<img> 内嵌渲染，
+    // 不做文件导航——避免被浏览器「下载 PDF 而非打开」设置处理成自动下载
     setPreviewResume(resume)
+    setPreviewBlobUrl(null)
     setPreviewModalOpen(true)
+    setPreviewLoading(true)
+    try {
+      const resp = await fetch(url)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      setPreviewBlobUrl(URL.createObjectURL(await resp.blob()))
+    } catch {
+      message.error('文件加载失败，链接可能已过期，请刷新页面后重试')
+      setPreviewModalOpen(false)
+      setPreviewResume(null)
+    } finally {
+      setPreviewLoading(false)
+    }
+  }, [])
+
+  const closePreview = useCallback(() => {
+    setPreviewModalOpen(false)
+    setPreviewResume(null)
+    if (previewBlobUrl) {
+      URL.revokeObjectURL(previewBlobUrl)
+      setPreviewBlobUrl(null)
+    }
+  }, [previewBlobUrl])
+
+  const handleDownload = useCallback(async (resume: ResumeRecord) => {
+    const url = toBackendUrl(resume.original_file_url)
+    if (!url) {
+      message.warning('该简历没有可下载的原始文件')
+      return
+    }
+    setDownloadingId(resume.id)
+    try {
+      // 直接下载签名 URL 的内容并以简历标题命名（跨域直链的 download 属性无效，故走 blob）
+      const resp = await fetch(url)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      const blob = await resp.blob()
+      const ext = (resume.file_type || 'pdf').toLowerCase()
+      const safeName = (resume.title || '简历').replace(/[\\/:*?"<>|]/g, '_')
+      const blobUrl = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = blobUrl
+      a.download = `${safeName}.${ext}`
+      document.body.appendChild(a)
+      a.click()
+      a.remove()
+      URL.revokeObjectURL(blobUrl)
+      message.success('简历已开始下载')
+    } catch {
+      message.error('下载失败，链接可能已过期，请刷新页面后重试')
+    } finally {
+      setDownloadingId(null)
+    }
   }, [])
 
   const toggleSelectMode = useCallback(() => {
@@ -313,14 +421,25 @@ export default function ResumeLibrary() {
   const renderResumeCard = (resume: ResumeRecord) => {
     const status = STATUS_MAP[resume.status || 'draft'] || STATUS_MAP.draft
     const targetText = [resume.target_position, resume.target_company].filter(Boolean).join(' @ ') || '未设置目标职位'
-    return (
-      <Card
-        hoverable
-        key={resume.id}
-        style={{ borderRadius: 12, overflow: 'hidden', position: 'relative', height: '100%' }}
-        actions={[
+    const isTrash = activeTab === 'recycle'
+    const actions = isTrash
+      ? [
           <Tooltip title="预览" key="preview">
             <Button type="text" icon={<EyeOutlined />} onClick={() => handlePreview(resume)} />
+          </Tooltip>,
+          <Tooltip title="下载" key="download">
+            <Button type="text" icon={<DownloadOutlined spin={downloadingId === resume.id} />} onClick={() => handleDownload(resume)} />
+          </Tooltip>,
+          <Tooltip title="恢复到我的简历" key="restore">
+            <Button type="text" icon={<RollbackOutlined />} onClick={() => handleRestore(resume.id)} />
+          </Tooltip>,
+        ]
+      : [
+          <Tooltip title="预览" key="preview">
+            <Button type="text" icon={<EyeOutlined />} onClick={() => handlePreview(resume)} />
+          </Tooltip>,
+          <Tooltip title="下载" key="download">
+            <Button type="text" icon={<DownloadOutlined spin={downloadingId === resume.id} />} onClick={() => handleDownload(resume)} />
           </Tooltip>,
           <Tooltip title="设为默认" key="primary">
             <Button
@@ -341,44 +460,27 @@ export default function ResumeLibrary() {
               <Button type="text" danger icon={<DeleteOutlined />} />
             </Tooltip>
           </Popconfirm>,
-        ]}
+        ]
+    return (
+      <Card
+        hoverable
+        className="resume-card"
+        key={resume.id}
+        style={{ borderRadius: 12, overflow: 'hidden', position: 'relative', height: '100%' }}
+        actions={actions}
       >
-        {selectMode && (
+        {selectMode && !isTrash && (
           <Checkbox
             checked={selectedIds.includes(resume.id)}
             onChange={() => toggleSelect(resume.id)}
             style={{ position: 'absolute', top: 12, left: 12, zIndex: 2 }}
           />
         )}
-        {/* 右上角：收藏 + 更多 */}
-        <div style={{ position: 'absolute', top: 8, right: 8, zIndex: 2, display: 'flex', alignItems: 'center' }}>
-          <Button
-            type="text"
-            size="small"
-            icon={resume.is_favorite ? <StarFilled style={{ color: '#F59E0B' }} /> : <StarOutlined style={{ color: '#94A3B8' }} />}
-            onClick={() => handleToggleFavorite(resume)}
-          />
-          <Dropdown
-            menu={{
-              items: [
-                { key: 'preview', label: '预览', icon: <EyeOutlined />, onClick: () => handlePreview(resume) },
-                { key: 'primary', label: '设为默认', icon: <CrownOutlined />, onClick: () => handleSetPrimary(resume.id) },
-                { key: 'copy', label: '复制', icon: <CopyOutlined />, onClick: () => handleCopy(resume.id) },
-                { key: 'edit', label: '重命名', icon: <EditOutlined />, onClick: () => handleEdit(resume.id, resume.title || '') },
-                { type: 'divider' },
-                { key: 'delete', label: '删除', danger: true, icon: <DeleteOutlined />, onClick: () => handleDelete(resume.id) },
-              ],
-            }}
-            trigger={['click']}
-          >
-            <Button type="text" size="small" icon={<MoreOutlined style={{ color: '#94A3B8' }} />} />
-          </Dropdown>
-        </div>
 
-        <div style={{ display: 'flex', gap: 16, alignItems: 'flex-start', paddingTop: 4 }}>
+        <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', flexWrap: 'wrap', rowGap: 10 }}>
           {/* 缩略图 / 图标占位 */}
           <div style={{
-            width: 64, height: 80, borderRadius: 8, flexShrink: 0,
+            width: 60, height: 76, borderRadius: 10, flexShrink: 0, alignSelf: 'center',
             background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
             color: '#2563EB', fontSize: 24,
@@ -386,36 +488,85 @@ export default function ResumeLibrary() {
             <FileTextOutlined />
           </div>
 
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <Text strong ellipsis={{ tooltip: resume.title }} style={{ fontSize: 15, display: 'block' }}>
+          <div style={{ flex: 1, minWidth: 160, alignSelf: 'center' }}>
+            <Text strong ellipsis={{ tooltip: resume.title }} style={{ fontSize: 15, display: 'block', paddingRight: 4 }}>
               {resume.title || resume.id.slice(0, 8) + '...'}
               {resume.version && resume.version > 1 ? ` v${resume.version}` : ''}
             </Text>
-            <div style={{ fontSize: 12, color: '#64748B', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 12, color: '#64748B', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {targetText}
             </div>
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <Tag style={{ color: status.color, background: status.bg, border: 'none', margin: 0 }}>{status.text}</Tag>
+              <Tag style={{ color: status.color, background: status.bg, border: 'none', margin: 0, borderRadius: 6 }}>{status.text}</Tag>
+              {resume.is_primary && !isTrash && <Tag color="gold" style={{ margin: 0, borderRadius: 6 }}>默认</Tag>}
+              {isTrash && (
+                <Tooltip title={`保留期剩余 ${trashDaysLeft(resume.deleted_at)} 天，到期将自动彻底清除`}>
+                  <Tag color="warning" style={{ margin: 0, borderRadius: 6 }}>
+                    {trashDaysLeft(resume.deleted_at)} 天后清除
+                  </Tag>
+                </Tooltip>
+              )}
             </div>
-            <div style={{ marginTop: 10, fontSize: 12, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 12 }}>
-              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+            <div style={{ marginTop: 9, fontSize: 12, color: '#94A3B8', display: 'flex', alignItems: 'center', gap: 10, whiteSpace: 'nowrap', overflow: 'hidden' }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4, whiteSpace: 'nowrap' }}>
                 <ClockCircleOutlined /> {resume.updated_at || resume.created_at ? formatDate(resume.updated_at || resume.created_at) : '-'}
               </span>
               {typeof resume.match_rate === 'number' && (
-                <span style={{ color: '#2563EB' }}>匹配度 {resume.match_rate}%</span>
+                <span style={{ color: '#2563EB', whiteSpace: 'nowrap', flexShrink: 0 }}>匹配度 {resume.match_rate}%</span>
               )}
             </div>
           </div>
 
-          {/* 评分圆环 */}
-          <Progress
-            type="circle"
-            size={48}
-            percent={resume.score ?? undefined}
-            format={() => resume.score ?? '-'}
-            strokeColor={SCORE_COLOR(resume.score)}
-            style={{ flexShrink: 0 }}
-          />
+          {/* 右侧：评分环 + 收藏/更多（文档流内排列，绝不重叠；卡片过窄时整块换行） */}
+          <div style={{ flexShrink: 0, display: 'flex', alignItems: 'center', gap: 10, marginLeft: 'auto' }}>
+            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+              <Progress
+                type="circle"
+                size={48}
+                percent={resume.score ?? undefined}
+                format={() => resume.score ?? '-'}
+                strokeColor={SCORE_COLOR(resume.score)}
+              />
+              <span style={{ fontSize: 11, color: '#94A3B8' }}>评分</span>
+            </div>
+            <Divider type="vertical" style={{ height: 52, margin: 0 }} />
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {isTrash ? (
+                <Tooltip title="恢复到我的简历">
+                  <Button type="text" size="small" icon={<RollbackOutlined style={{ color: '#10B981' }} />} onClick={() => handleRestore(resume.id)} />
+                </Tooltip>
+              ) : (
+                <Button
+                  type="text"
+                  size="small"
+                  icon={resume.is_favorite ? <StarFilled style={{ color: '#F59E0B' }} /> : <StarOutlined style={{ color: '#94A3B8' }} />}
+                  onClick={() => handleToggleFavorite(resume)}
+                />
+              )}
+              <Dropdown
+                menu={{
+                  items: isTrash
+                    ? [
+                        { key: 'preview', label: '预览', icon: <EyeOutlined />, onClick: () => handlePreview(resume) },
+                        { key: 'download', label: '下载', icon: <DownloadOutlined />, onClick: () => handleDownload(resume) },
+                        { key: 'restore', label: '恢复', icon: <RollbackOutlined />, onClick: () => handleRestore(resume.id) },
+                      ]
+                    : [
+                        { key: 'preview', label: '预览', icon: <EyeOutlined />, onClick: () => handlePreview(resume) },
+                        { key: 'download', label: '下载', icon: <DownloadOutlined />, onClick: () => handleDownload(resume) },
+                        { key: 'primary', label: '设为默认', icon: <CrownOutlined />, onClick: () => handleSetPrimary(resume.id) },
+                        { key: 'copy', label: '复制', icon: <CopyOutlined />, onClick: () => handleCopy(resume.id) },
+                        { key: 'edit', label: '重命名', icon: <EditOutlined />, onClick: () => handleEdit(resume.id, resume.title || '') },
+                        { type: 'divider' },
+                        { key: 'delete', label: '删除', danger: true, icon: <DeleteOutlined />, onClick: () => handleDelete(resume.id) },
+                      ],
+                }}
+                trigger={['click']}
+              >
+                <Button type="text" size="small" icon={<MoreOutlined style={{ color: '#94A3B8' }} />} />
+              </Dropdown>
+            </div>
+          </div>
         </div>
       </Card>
     )
@@ -448,6 +599,7 @@ export default function ResumeLibrary() {
               {[resume.target_position, resume.target_company].filter(Boolean).join(' @ ') || '未设置目标职位'}
               {' · '}{resume.file_type?.toUpperCase()}
               {' · '}{resume.updated_at || resume.created_at ? formatDate(resume.updated_at || resume.created_at) : ''}
+              {activeTab === 'recycle' && ` · ${trashDaysLeft(resume.deleted_at)} 天后自动清除`}
             </div>
           </div>
           {typeof resume.match_rate === 'number' && (
@@ -457,20 +609,29 @@ export default function ResumeLibrary() {
             </div>
           )}
           <Progress type="circle" size={44} percent={resume.score ?? undefined} format={() => resume.score ?? '-'} strokeColor={SCORE_COLOR(resume.score)} />
-          <Space>
-            <Tooltip title="收藏">
-              <Button
-                type="text"
-                icon={resume.is_favorite ? <StarFilled style={{ color: '#F59E0B' }} /> : <StarOutlined style={{ color: '#94A3B8' }} />}
-                onClick={() => handleToggleFavorite(resume)}
-              />
-            </Tooltip>
-            <Tooltip title="预览"><Button type="text" icon={<EyeOutlined />} onClick={() => handlePreview(resume)} /></Tooltip>
-            <Tooltip title="设为默认"><Button type="text" icon={<CrownOutlined style={{ color: resume.is_primary ? '#F59E0B' : '#94A3B8' }} />} onClick={() => handleSetPrimary(resume.id)} disabled={resume.is_primary} /></Tooltip>
-            <Popconfirm title="确定移入回收站？" onConfirm={() => handleDelete(resume.id)} okText="删除" cancelText="取消">
-              <Button type="text" danger icon={<DeleteOutlined />} />
-            </Popconfirm>
-          </Space>
+          {activeTab === 'recycle' ? (
+            <Space>
+              <Tooltip title="预览"><Button type="text" icon={<EyeOutlined />} onClick={() => handlePreview(resume)} /></Tooltip>
+              <Tooltip title="下载"><Button type="text" icon={<DownloadOutlined spin={downloadingId === resume.id} />} onClick={() => handleDownload(resume)} /></Tooltip>
+              <Button icon={<RollbackOutlined />} onClick={() => handleRestore(resume.id)}>恢复</Button>
+            </Space>
+          ) : (
+            <Space>
+              <Tooltip title="收藏">
+                <Button
+                  type="text"
+                  icon={resume.is_favorite ? <StarFilled style={{ color: '#F59E0B' }} /> : <StarOutlined style={{ color: '#94A3B8' }} />}
+                  onClick={() => handleToggleFavorite(resume)}
+                />
+              </Tooltip>
+              <Tooltip title="预览"><Button type="text" icon={<EyeOutlined />} onClick={() => handlePreview(resume)} /></Tooltip>
+              <Tooltip title="下载"><Button type="text" icon={<DownloadOutlined spin={downloadingId === resume.id} />} onClick={() => handleDownload(resume)} /></Tooltip>
+              <Tooltip title="设为默认"><Button type="text" icon={<CrownOutlined style={{ color: resume.is_primary ? '#F59E0B' : '#94A3B8' }} />} onClick={() => handleSetPrimary(resume.id)} disabled={resume.is_primary} /></Tooltip>
+              <Popconfirm title="确定移入回收站？" onConfirm={() => handleDelete(resume.id)} okText="删除" cancelText="取消">
+                <Button type="text" danger icon={<DeleteOutlined />} />
+              </Popconfirm>
+            </Space>
+          )}
         </div>
       </Card>
     )
@@ -496,7 +657,7 @@ export default function ResumeLibrary() {
                 <Button danger loading={batchDeleting}>批量删除（{selectedIds.length}）</Button>
               </Popconfirm>
             )}
-            {list.length > 0 && <Button onClick={toggleSelectMode}>{selectMode ? '取消选择' : '批量管理'}</Button>}
+            {activeTab !== 'recycle' && list.length > 0 && <Button onClick={toggleSelectMode}>{selectMode ? '取消选择' : '批量管理'}</Button>}
             <input
               type="file" id="upload-resume" accept=".pdf,.docx,.png,.jpg,.jpeg"
               style={{ display: 'none' }}
@@ -508,7 +669,7 @@ export default function ResumeLibrary() {
           </Space>
         </div>
 
-        <div style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
+        <div className="resume-layout" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           {/* 左侧主内容 */}
           <div style={{ flex: 1, minWidth: 0 }}>
             {/* 筛选标签页 */}
@@ -566,8 +727,8 @@ export default function ResumeLibrary() {
             </div>
 
             {/* 主体内容 */}
-            {loading ? (
-              <Spin tip="加载中..." style={{ display: 'block', textAlign: 'center', padding: 60 }} />
+            {(activeTab === 'recycle' ? trashLoading : loading) ? (
+              <Spin size="large" style={{ display: 'block', textAlign: 'center', padding: 60 }} />
             ) : filteredList.length === 0 ? (
               <Empty description={activeTab === 'recycle' ? '回收站是空的' : searchKeyword ? '未找到匹配的简历' : '还没有简历，请上传或创建你的第一份简历'}>
                 {activeTab !== 'recycle' && !searchKeyword && (
@@ -592,13 +753,13 @@ export default function ResumeLibrary() {
                 )}
                 <Row gutter={[16, 16]}>
                   {paginatedList.map((resume) => (
-                    <Col xs={24} sm={12} md={8} key={resume.id}>
+                    <Col xs={24} md={24} lg={12} xxl={8} key={resume.id}>
                       {renderResumeCard(resume)}
                     </Col>
                   ))}
                   {/* 上传占位卡 */}
                   {activeTab === 'all' && list.length < 10 && (
-                    <Col xs={24} sm={12} md={8}>
+                    <Col xs={24} md={24} lg={12} xxl={8}>
                       <Card
                         style={{ borderRadius: 12, height: '100%', borderStyle: 'dashed', cursor: 'pointer' }}
                         onClick={() => document.getElementById('upload-resume')?.click()}
@@ -650,7 +811,7 @@ export default function ResumeLibrary() {
           </div>
 
           {/* 右侧面板 */}
-          <div style={{ width: 280, flexShrink: 0 }}>
+          <div className="resume-side" style={{ width: 280, flexShrink: 0 }}>
             {/* 简历概览环形图 */}
             <Card style={{ borderRadius: 12, marginBottom: 16 }} styles={{ body: { padding: 20 } }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 }}>
@@ -759,17 +920,39 @@ export default function ResumeLibrary() {
           <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="输入简历名称" maxLength={50} />
         </Modal>
 
-        {/* 预览弹窗（保留原逻辑） */}
+        {/* 预览弹窗：PDF/图片 fetch blob 后页面内渲染（不触发下载），docx 展示解析内容 */}
         <Modal
           title={previewResume?.title || '简历预览'}
           open={previewModalOpen}
-          onCancel={() => { setPreviewModalOpen(false); setPreviewResume(null) }}
-          footer={null}
+          onCancel={closePreview}
+          footer={
+            previewResume ? (
+              <Button
+                icon={<DownloadOutlined />}
+                loading={downloadingId === previewResume.id}
+                onClick={() => handleDownload(previewResume)}
+              >
+                下载原文件
+              </Button>
+            ) : null
+          }
           width={900}
           style={{ top: 20 }}
         >
-          {previewResume && previewResume.file_type === 'pdf' ? (
-            <iframe src={toBackendUrl(previewResume.original_file_url)} style={{ width: '100%', height: '75vh', border: 'none', borderRadius: 8 }} title="PDF 预览" />
+          {previewResume && ['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((previewResume.file_type || '').toLowerCase()) ? (
+            <div style={{ minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+              {previewLoading ? (
+                <Spin size="large" />
+              ) : previewBlobUrl && (previewResume.file_type || '').toLowerCase() === 'pdf' ? (
+                <embed
+                  src={previewBlobUrl}
+                  type="application/pdf"
+                  style={{ width: '100%', height: '75vh', border: 'none', borderRadius: 8 }}
+                />
+              ) : previewBlobUrl ? (
+                <img src={previewBlobUrl} alt="简历预览" style={{ maxWidth: '100%', borderRadius: 8 }} />
+              ) : null}
+            </div>
           ) : previewResume && previewResume.file_type === 'docx' ? (
             <div style={{ padding: 16 }}>
               <Alert type="info" message="Word 文档无法直接在浏览器中预览，以下是解析后的内容" showIcon style={{ marginBottom: 16 }} />

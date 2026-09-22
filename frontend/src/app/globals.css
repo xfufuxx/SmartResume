@@ -2421,3 +2421,589 @@ body {
   }
 }
 
+/* ═════════════════════════════════════════════════════════════════
+   职位管理 · 职位列表（jobs-*，按设计稿还原）
+   ═════════════════════════════════════════════════════════════════ */
+
+/* ── 顶部统计卡 ── */
+.jobs-stat-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 14px;
+  margin-bottom: 18px;
+}
+
+.jobs-stat-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--gray-100);
+  border-radius: 12px;
+  cursor: pointer;
+  transition: box-shadow 0.2s var(--ease-out), transform 0.2s var(--ease-out), border-color 0.2s;
+  min-width: 0;
+}
+
+.jobs-stat-card:hover {
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.07);
+  transform: translateY(-1px);
+}
+
+.jobs-stat-card.is-active {
+  border-color: var(--primary-300);
+}
+
+.jobs-stat-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+}
+
+.jobs-stat-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.jobs-stat-value {
+  font-size: 22px;
+  font-weight: 700;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.jobs-stat-delta {
+  font-size: 11px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.jobs-stat-delta .up { color: var(--success-600); }
+.jobs-stat-delta .down { color: var(--error-600); }
+
+@media (max-width: 1280px) {
+  .jobs-stat-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+}
+
+@media (max-width: 640px) {
+  .jobs-stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 10px; }
+}
+
+/* ── Tab 行 ── */
+.jobs-tabs .ant-tabs-tab {
+  padding: 10px 2px;
+  font-size: 14px;
+}
+
+.jobs-tabs .ant-tabs-tab .jobs-tab-count {
+  color: var(--text-tertiary);
+  font-size: 13px;
+  margin-left: 2px;
+}
+
+.jobs-tabs .ant-tabs-tab-active .jobs-tab-count {
+  color: var(--primary-500);
+}
+
+/* ── 筛选行 ── */
+.jobs-filter-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin: 14px 0 16px;
+}
+
+/* ── 表格 ── */
+.jobs-table .ant-table-thead > tr > th {
+  background: var(--gray-50) !important;
+  color: var(--text-secondary) !important;
+  font-weight: 500;
+  font-size: 13px;
+  white-space: nowrap;
+}
+
+.jobs-table .ant-table-tbody > tr > td {
+  padding-top: 14px;
+  padding-bottom: 14px;
+  vertical-align: middle;
+}
+
+.jobs-table .ant-table-tbody > tr {
+  cursor: pointer;
+}
+
+.jobs-table .ant-table-tbody > tr:hover > td {
+  background: var(--gray-50) !important;
+}
+
+.job-title-cell {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+}
+
+.job-title-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+}
+
+.job-title-main {
+  min-width: 0;
+}
+
+.job-title-name {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-title-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-company-name {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-company-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.job-status-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 10px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.job-time-main {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.job-time-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.job-stage-main {
+  font-size: 13px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.job-stage-sub {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  white-space: nowrap;
+}
+
+.job-action-btn {
+  border: none;
+  background: transparent;
+  color: var(--text-secondary);
+  font-size: 16px;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s, color 0.15s;
+}
+
+.job-action-btn:hover {
+  background: var(--gray-100);
+  color: var(--text-primary);
+}
+
+.job-action-btn.fav-active {
+  color: var(--warning-500);
+}
+
+/* ── 底部统计 + 分页 ── */
+.jobs-table-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 16px;
+}
+
+.jobs-table-total {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+
+/* ── 批量操作条 ── */
+.jobs-batch-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 10px 14px;
+  margin-bottom: 12px;
+  border: 1px solid var(--primary-100);
+  border-radius: 10px;
+  background: var(--primary-50);
+}
+
+.jobs-batch-bar-text {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── 导入职位弹窗（图片识别） ── */
+.job-import-body {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.job-import-drop {
+  text-align: center;
+  padding: 22px 16px;
+  border: 1.5px dashed var(--primary-200);
+  border-radius: 12px;
+  background: var(--primary-50);
+}
+
+.job-import-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 50vh;
+  overflow-y: auto;
+  padding-right: 4px;
+}
+
+.job-import-list-head {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+.job-import-item {
+  border: 1px solid var(--gray-100);
+  border-radius: 10px;
+  padding: 12px;
+  background: var(--bg-elevated, #fff);
+}
+
+.job-import-item-parsing {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--text-tertiary);
+  font-size: 13px;
+}
+
+.job-import-item-error {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  color: var(--error-600);
+  font-size: 13px;
+}
+
+.job-import-item-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.job-import-item-grid > :nth-child(1) {
+  grid-column: 1 / -1;
+}
+
+/* ── 添加职位弹窗（手动表单） ── */
+.job-add-form {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding-top: 4px;
+}
+
+.job-add-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.job-add-row > label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.job-add-row-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+/* 我的投递 - 编辑弹窗两列布局（与岗位表单一致） */
+.apps-edit-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+@media (max-width: 640px) {
+  .apps-edit-2col {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 投递弹窗：联系方式自动取自个人资料的提示条 */
+.apps-applicant-hint {
+  background: var(--primary-50);
+  border: 1px solid var(--primary-100, #e8f0fe);
+  border-radius: 10px;
+  padding: 12px 14px;
+  font-size: 13px;
+  line-height: 1.9;
+  color: var(--text-secondary);
+}
+.apps-applicant-hint-name {
+  display: inline-block;
+  margin-left: 6px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.apps-applicant-hint-sub {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 12px;
+}
+.apps-applicant-hint-tip {
+  display: block;
+  color: var(--text-tertiary);
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+/* 面试追踪枢纽：Tab 与内容区间距 */
+.apps-hub-tabs {
+  margin-bottom: 4px;
+}
+
+/* 面试进度 - 图表行（漏斗 + 环形图） */
+.apps-chart-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  margin: 16px 0 4px;
+}
+.apps-chart-card {
+  background: var(--bg-secondary, var(--gray-50));
+  border-radius: var(--radius-lg);
+  padding: 14px 16px 8px;
+}
+.apps-chart-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 4px;
+}
+/* 环心文字：echarts graphic 在本项目不渲染，改用 DOM 叠加层 */
+.apps-pie-center {
+  position: absolute;
+  top: 40%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  text-align: center;
+  pointer-events: none;
+}
+.apps-pie-center-value {
+  font-size: 20px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+.apps-pie-center-label {
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+@media (max-width: 900px) {
+  .apps-chart-row {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* 沟通消息 - 按日期分组的往来时间线 */
+.comm-timeline {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  padding: 4px 0 8px;
+}
+.comm-day-group {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.comm-day-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  letter-spacing: 0.3px;
+}
+.comm-item {
+  background: var(--bg-secondary, var(--gray-50));
+  border-radius: var(--radius-lg);
+  padding: 12px 14px;
+}
+.comm-item-head {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.comm-dir-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 1px 8px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 600;
+}
+.comm-company {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+.comm-position {
+  font-size: 13px;
+  color: var(--text-secondary);
+}
+.comm-time {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  margin-left: auto;
+}
+.comm-actions {
+  margin-left: 4px;
+}
+.comm-content {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.7;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+@media (max-width: 640px) {
+  .comm-time {
+    margin-left: 0;
+  }
+}
+
+.job-add-row-2 > div {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.job-add-row-2 > div > label {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+@media (max-width: 560px) {
+  .job-import-item-grid,
+  .job-add-row-2 {
+    grid-template-columns: 1fr;
+  }
+}
+
+
+
+/* ── 简历库：卡片悬浮层次与操作栏统一 ──
+   卡片在栅格中被 height:100% 拉伸到行高，若保持 block 布局，操作栏下方会残留白边
+   （灰底操作栏与卡片底边之间出现空隙）→ 改为纵向 flex，body 撑满、操作栏贴底。 */
+.resume-card {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #eef2f7;
+  transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.resume-card:hover {
+  border-color: #dbeafe;
+  box-shadow: 0 8px 24px rgba(37, 99, 235, 0.1);
+}
+
+.resume-card > .ant-card-body {
+  flex: 1 1 auto;
+}
+
+.resume-card > .ant-card-actions {
+  flex: 0 0 auto;
+  margin-top: auto;
+  background: var(--gray-50) !important;
+  border-top: 1px solid var(--border-light) !important;
+  border-radius: 0 0 calc(var(--radius-xl) - 1px) calc(var(--radius-xl) - 1px);
+  line-height: 1;
+}
+
+.resume-card .ant-card-actions > li {
+  margin: 7px 0;
+}
+
+/* 简历页左右分栏：窄屏（含平板竖屏 / 手机）时右栏堆叠到卡片列表下方，
+   避免固定 280px 侧栏把卡片挤压到过窄导致内容换行错乱 */
+@media (max-width: 1180px) {
+  .resume-layout {
+    flex-direction: column;
+  }
+
+  .resume-side {
+    width: 100% !important;
+  }
+}

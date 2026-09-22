@@ -28,7 +28,12 @@ _CONTENT_TYPES = {
 
 
 @router.get("/api/files/{key:path}")
-async def serve_file(key: str, exp: int = Query(...), sig: str = Query(...)):
+async def serve_file(
+    key: str,
+    exp: int = Query(...),
+    sig: str = Query(...),
+    dl: int = Query(0, description="传 1 时以附件形式下发（浏览器直接下载而非内联预览）"),
+):
     # 防目录穿越
     if ".." in key or key.startswith("/") or key.startswith("\\"):
         raise HTTPException(status_code=400, detail="非法文件路径")
@@ -46,5 +51,5 @@ async def serve_file(key: str, exp: int = Query(...), sig: str = Query(...)):
         local_path,
         media_type=content_type,
         filename=os.path.basename(local_path),
-        content_disposition_type="inline",
+        content_disposition_type="attachment" if dl else "inline",
     )

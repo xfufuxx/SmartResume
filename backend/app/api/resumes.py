@@ -1,9 +1,11 @@
+import os
 import uuid
 import logging
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlparse
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, delete, update
 
 from app.database import get_db
 from app.core.deps import get_current_user
@@ -13,9 +15,13 @@ from app.core.errors import app_err
 from app.core.file_security import validate_file_magic, validate_pdf_pages
 from app.models.user import User
 from app.models.resume import Resume
+from app.models.batch_optimization import BatchOptimization, BatchJobTask
+from app.models.optimized_resume import OptimizedResume
+from app.models.interview import InterviewSession
+from app.models.interview_track import InterviewTrack
 from app.schemas.resume import ResumeResponse, ResumeUploadResponse, ResumeCreateRequest, ResumeUpdateRequest, ResumeBatchDeleteRequest, ResumeStats, FavoriteRequest
 from app.services.resume_parser import parse_resume_from_bytes
-from app.services.storage import storage
+from app.services.storage import storage, resign_file_url
 from app.services.text_formatter import format_resume_text
 
 logger = logging.getLogger(__name__)
@@ -23,14 +29,76 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 MAX_RESUMES = 10
 
+# 回收站保留天数：超过后自动物理删除（记录 + 磁盘文件）
+TRASH_RETENTION_DAYS = 7
+
+
+def _file_key_from_url(url: str | None) -> str | None:
+    """从历史三种 URL 形态（签名 URL / /uploads/ 相对路径 / uploads/ 相对路径）提取存储 key。"""
+    if not url:
+        return None
+    path = urlparse(url).path if url.startswith("http") else url
+    for marker in ("/api/files/", "/uploads/"):
+        if marker in path:
+            return path.split(marker, 1)[-1]
+    if path.startswith("uploads/"):
+        return path[len("uploads/"):]
+    return None
+
+
+async def _purge_expired_trash(db: AsyncSession) -> int:
+    """物理删除回收站中超过保留期的简历（含磁盘文件），返回清理数量。"""
+    cutoff = datetime.now(timezone(timedelta(hours=8))) - timedelta(days=TRASH_RETENTION_DAYS)
+    result = await db.execute(
+        select(Resume).where(Resume.deleted_at.isnot(None), Resume.deleted_at < cutoff)
+    )
+    expired = result.scalars().all()
+    if not expired:
+        return 0
+    expired_ids = [r.id for r in expired]
+
+    # 先处理外键引用，避免删除时违反约束（batch_job_tasks → batch_optimizations → resumes）：
+    # - batch_job_tasks：批量优化任务明细随源简历一并删除
+    # - batch_optimizations.source_resume_id（NOT NULL）：批量优化历史随源简历一并删除
+    # - optimized_resumes.resume_id：优化结果为派生数据，随源简历一并删除
+    # - interview_sessions.resume_id（可空）：会话本身保留，仅置空简历引用
+    # - interview_tracks.resume_id（可空）：面试追踪是用户手动录入的记录，保留记录仅置空引用
+    await db.execute(delete(BatchJobTask).where(BatchJobTask.batch_id.in_(
+        select(BatchOptimization.id).where(BatchOptimization.source_resume_id.in_(expired_ids))
+    )))
+    await db.execute(delete(BatchOptimization).where(BatchOptimization.source_resume_id.in_(expired_ids)))
+    await db.execute(delete(OptimizedResume).where(OptimizedResume.resume_id.in_(expired_ids)))
+    await db.execute(update(InterviewSession).where(InterviewSession.resume_id.in_(expired_ids)).values(resume_id=None))
+    await db.execute(update(InterviewTrack).where(InterviewTrack.resume_id.in_(expired_ids)).values(resume_id=None))
+
+    for resume in expired:
+        key = _file_key_from_url(resume.original_file_url)
+        if key:
+            local_path = os.path.join("uploads", key)
+            try:
+                if os.path.isfile(local_path):
+                    os.remove(local_path)
+            except OSError:
+                logger.warning("清理过期回收站文件失败: %s", local_path, exc_info=True)
+        await db.delete(resume)
+    await db.commit()
+    return len(expired)
+
 
 def _scrub_raw(resume: Resume) -> Resume:
-    """内存中解密 raw_text 供接口返回（不写库），兼容历史未加密数据。"""
+    """内存中解密 raw_text 并重签文件 URL（不写库）。
+
+    - raw_text 解密供接口返回，兼容历史未加密数据；
+    - original_file_url 重签名：DB 存的是上传时签发的 URL，30 天后过期，
+      每次读取重签可保证前端预览（新标签页）与下载永远拿到有效链接。
+    """
     if resume.raw_text:
         try:
             resume.raw_text = decrypt_field(resume.raw_text)
         except Exception:
             pass
+    if resume.original_file_url:
+        resume.original_file_url = resign_file_url(resume.original_file_url) or resume.original_file_url
     return resume
 
 
@@ -135,6 +203,8 @@ async def get_resume_stats(
     user: User = Depends(get_current_user),
 ):
     """「我的简历」概览统计：总数、已优化、草稿、未优化、收藏数量"""
+    # 惰性触发过期回收站清理：即使用户从不打开回收站也会被及时清理
+    await _purge_expired_trash(db)
     base = select(Resume).where(Resume.user_id == user.id, Resume.deleted_at.is_(None))
 
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar() or 0
@@ -348,7 +418,8 @@ async def list_trash_resumes(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """回收站：列出已软删除的简历"""
+    """回收站：列出已软删除的简历（先清理超过保留期的过期记录）"""
+    await _purge_expired_trash(db)
     result = await db.execute(
         select(Resume)
         .where(Resume.user_id == user.id, Resume.deleted_at.isnot(None))

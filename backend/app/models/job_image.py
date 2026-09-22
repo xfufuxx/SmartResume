@@ -27,6 +27,10 @@ class JobImage(Base):
     is_primary: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否为默认岗位")
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False, comment="是否收藏")
     user_remark: Mapped[str] = mapped_column(Text, nullable=True, comment="用户备注")
+    status: Mapped[str] = mapped_column(
+        String(20), nullable=False, default="投递中", server_default="投递中",
+        comment="投递状态: 投递中/面试中/已录用/已拒绝",
+    )
     deleted_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=True, comment="软删除时间")
 
     user: Mapped["User"] = relationship(back_populates="job_images")
