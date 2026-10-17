@@ -28,6 +28,7 @@ ATS 兼容性检测、面试模拟、批量优化、feedback 闭环，以及配�
 | 管理员后台（提示词 / 模型路由 / 关键词 / ATS 规则 / 工单 / 订单 / 配额） | `api/admin.py`（51 个端点） | 已接入 |
 | 模型路由、提示词模板在线配置 | `services/model_router.py`、`prompt_templates` 表 | **已建表但未接入业务链路** |
 | CI | `.github/workflows/ci.yml` | 已接入（自包含 pytest） |
+| 岗位能力测评（1~5 星专业/通识自评 → 匹配度报告 + 三阶段补步建议 + 岗位匹配排行） | `api/capability.py` + `services/capability_assessment.py` + `services/capability_seed.py` | 已接入（20 个内置岗位画像，覆盖 AI / 开发 / 设计 / 运营等热门岗） |
 
 ---
 
@@ -77,7 +78,7 @@ flowchart TB
     FE[Next.js 14 前端<br/>Ant Design 5 + axios]
     subgraph API["API 层 · FastAPI (/api)"]
         GW[main.py<br/>JWT 鉴权 / 限流 / CORS]
-        DOM[业务路由<br/>auth · user · resumes · jobs<br/>optimize · match · batch · ats<br/>scoring · analysis · refine · export]
+        DOM[业务路由<br/>auth · user · resumes · jobs<br/>optimize · match · batch · ats<br/>scoring · analysis · refine · export · capability]
         ADM[admin · files · insights<br/>interview · search · messages]
     end
     subgraph SVC["服务层"]
@@ -238,6 +239,7 @@ sequenceDiagram
 | `/api/messages` | `GET ""` `PUT /read-all` | 站内消息（4） |
 | `/api/files/{key}` | — | HMAC 签名代理下载（1） |
 | `/api/admin` | `POST /login` `GET /users` `POST /templates` … | 管理后台（51） |
+| `/api/capability` | `GET /jobs` `GET /categories` `POST /jobs/{id}/assessments` `GET /ranking` | 岗位能力测评（测评 / 报告 / 岗位匹配排行） |
 
 > 合计约 **149 个端点**。错误码统一由 `core/errors.py` 的 `app_err(code)` 返回中文码，
 > 如 `RESUME_NOT_FOUND`、`FILE_TOO_LARGE`、`PARSE_BEFORE_OPTIMIZE`、`QUOTA_EXCEEDED`。
