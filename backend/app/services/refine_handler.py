@@ -2,7 +2,7 @@ import json
 from openai import AsyncOpenAI
 
 from app.config import settings
-from app.services import has_valid_api_key
+from app.services import ensure_mock_allowed, has_valid_api_key
 from app.services.agent_optimizer import _call_with_retry, _get_client
 
 
@@ -22,6 +22,7 @@ async def refine_optimization(
     返回新的建议文本
     """
     if not has_valid_api_key():
+        ensure_mock_allowed("精炼改写")
         return _mock_refine(original_text, suggested_text, instruction)
 
     prompt = REFINE_PROMPT_TEMPLATE.format(

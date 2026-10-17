@@ -19,7 +19,7 @@ from app.models.batch_optimization import BatchOptimization, BatchJobTask
 from app.models.optimized_resume import OptimizedResume
 from app.models.interview import InterviewSession
 from app.models.interview_track import InterviewTrack
-from app.schemas.resume import ResumeResponse, ResumeUploadResponse, ResumeCreateRequest, ResumeUpdateRequest, ResumeBatchDeleteRequest, ResumeStats, FavoriteRequest
+from app.schemas.resume import ResumeResponse, ResumeUploadResponse, ResumeCreateRequest, ResumeUpdateRequest, ResumeBatchDeleteRequest, ResumeStats, FavoriteRequest, ResumeVersionTree, VersionNode
 from app.services.resume_parser import parse_resume_from_bytes
 from app.services.storage import storage, resign_file_url
 from app.services.text_formatter import format_resume_text
@@ -499,6 +499,82 @@ async def get_resume(
     if not resume:
         raise app_err("RESUME_NOT_FOUND")
     return _scrub_raw(resume)
+
+
+@router.get("/{resume_id}/version-tree", response_model=ResumeVersionTree)
+async def get_resume_version_tree(
+    resume_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """简历版本树（P0）：以原始简历为根，聚合其全部优化版与微调链。
+
+    - 一级子节点：针对各岗位的 AI 优化版（OptimizedResume.resume_id 挂靠）。
+    - 下级节点：对优化版的逐条修改/微调（parent_record_id 自引用链，可多级）。
+    - 软删除的版本不进入树中。
+    """
+    resume = (
+        await db.execute(
+            select(Resume).where(
+                Resume.id == resume_id,
+                Resume.user_id == user.id,
+                Resume.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if not resume:
+        raise app_err("RESUME_NOT_FOUND")
+
+    records = (
+        await db.execute(
+            select(OptimizedResume)
+            .where(
+                OptimizedResume.user_id == user.id,
+                OptimizedResume.deleted_at.is_(None),
+                OptimizedResume.resume_id == resume_id,
+            )
+            .order_by(OptimizedResume.created_at.asc())
+        )
+    ).scalars().all()
+
+    by_id: dict[str, OptimizedResume] = {r.id: r for r in records}
+    children_map: dict[str | None, list[OptimizedResume]] = {}
+    for r in records:
+        parent = r.parent_record_id if r.parent_record_id in by_id else None
+        children_map.setdefault(parent, []).append(r)
+
+    def _node(r: OptimizedResume) -> VersionNode:
+        kids = children_map.get(r.id, [])
+        return VersionNode(
+            id=r.id,
+            kind="refined" if r.parent_record_id in by_id else "optimized",
+            title=r.job_title or r.company or None,
+            job_title=r.job_title,
+            company=r.company,
+            match_score=r.match_score,
+            status=r.status,
+            refine_count=r.refine_count,
+            parent_record_id=r.parent_record_id if r.parent_record_id in by_id else None,
+            created_at=r.created_at,
+            children=[_node(k) for k in kids],
+        )
+
+    top_nodes = [_node(r) for r in children_map.get(None, [])]
+    optimized_count = sum(1 for r in records if r.parent_record_id not in by_id)
+    refined_count = len(records) - optimized_count
+
+    return ResumeVersionTree(
+        root=VersionNode(
+            id=resume.id,
+            kind="original",
+            title=resume.title,
+            status=resume.status,
+            created_at=resume.created_at,
+            children=top_nodes,
+        ),
+        optimized_count=optimized_count,
+        refined_count=refined_count,
+    )
 
 
 @router.delete("/{resume_id}")

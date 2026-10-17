@@ -68,3 +68,31 @@ class ResumeStats(BaseModel):
 
 class FavoriteRequest(BaseModel):
     favorite: bool = True
+
+
+# ── 简历版本树（P0：原始版 → 各岗位优化版 → 人工/AI 微调链）──
+
+class VersionNode(BaseModel):
+    """版本树节点。kind 决定语义：
+    - original：原始简历（根节点）
+    - optimized：针对某岗位的 AI 优化版（一级子节点）
+    - refined：对优化版的逐条修改/微调（可多级链）
+    """
+    id: str
+    kind: str
+    title: Optional[str] = None
+    job_title: Optional[str] = None
+    company: Optional[str] = None
+    match_score: Optional[int] = None
+    status: Optional[str] = None
+    refine_count: Optional[int] = None
+    parent_record_id: Optional[str] = None
+    created_at: Optional[datetime] = None
+    children: list["VersionNode"] = []
+
+
+class ResumeVersionTree(BaseModel):
+    """以某条原始简历为根的完整版本树。"""
+    root: VersionNode
+    optimized_count: int = 0
+    refined_count: int = 0

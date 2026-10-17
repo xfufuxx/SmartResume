@@ -391,6 +391,45 @@ export interface OptimizeResult {
   created_at?: string
 }
 
+/** AI 修改逐条确认：单条修改建议（条/点级粒度） */
+/** 单条 AI 建议的事实核验结果（规则引擎产出） */
+export interface FactCheck {
+  level: 'ok' | 'warn'
+  flags: Array<'sourced' | 'insufficient_source' | 'added_number' | 'added_skill' | 'exaggeration'>
+  added_numbers: string[]
+  exag_words: string[]
+  added_words: string[]
+}
+
+export interface ChangeItem {
+  id: string
+  kind: 'modified' | 'added' | 'removed'
+  section: string
+  section_label: string
+  label: string
+  original_text?: string | null
+  suggested_text?: string | null
+  loc: Record<string, unknown>
+  payload?: Record<string, unknown> | null
+  editable: boolean
+  fact_check?: FactCheck | null
+}
+
+/** 变更清单响应 */
+export interface ChangeReviewResponse {
+  record_id: string
+  changes: ChangeItem[]
+  counts: Record<string, number>
+  warn_count: number
+}
+
+/** 单条决策 */
+export interface ChangeApplyDecision {
+  id: string
+  action: 'accept' | 'reject'
+  text?: string | null
+}
+
 export interface DiffResponse {
   record_a: OptimizeResult
   record_b: OptimizeResult
@@ -481,6 +520,13 @@ export interface InsightActionItem {
   link: string
 }
 
+/** 求职漏斗阶段（岗位 → 收藏 → 投递 → HR 回复 → 面试 → Offer） */
+export interface InsightFunnelStage {
+  key: 'jobs' | 'favorite' | 'applied' | 'reply' | 'interview' | 'offer'
+  label: string
+  value: number
+}
+
 export interface InsightOverview {
   counts: InsightCounts
   match: InsightMatch
@@ -488,6 +534,8 @@ export interface InsightOverview {
   categories: Array<{ name: string; value: number }>
   recent_activities: InsightActivity[]
   action_items: InsightActionItem[]
+  /** 求职漏斗（可选：旧后端未升级时缺省） */
+  funnel?: InsightFunnelStage[]
   unread_messages: number
   generated_at: string
 }
@@ -706,6 +754,54 @@ export interface DeliveryEvent {
   occurred_at: string | null
 }
 
+/** 求职时间线单条事件（以投递为轴，聚合投递事件/沟通/面试） */
+export interface TimelineItem {
+  kind: 'application' | 'delivery' | 'communication' | 'interview'
+  label: string
+  detail: string | null
+  at: string | null
+  event_type?: string | null
+  communication_id?: string | null
+  direction?: string | null
+  channel?: string | null
+  interview_id?: string | null
+  stage?: string | null
+  mode?: string | null
+  interview_status?: string | null
+  result?: string | null
+  location?: string | null
+  interviewer?: string | null
+}
+
+/** 单条投递的完整求职时间线 */
+export interface ApplicationTimeline {
+  application: Application
+  items: TimelineItem[]
+  counts: { delivery: number; communication: number; interview: number }
+}
+
+/** 简历版本树节点（original 原始版 / optimized 岗位优化版 / refined 微调版） */
+export interface VersionNode {
+  id: string
+  kind: 'original' | 'optimized' | 'refined'
+  title: string | null
+  job_title: string | null
+  company: string | null
+  match_score: number | null
+  status: string | null
+  refine_count: number | null
+  parent_record_id: string | null
+  created_at: string | null
+  children: VersionNode[]
+}
+
+/** 以某条原始简历为根的完整版本树 */
+export interface ResumeVersionTree {
+  root: VersionNode
+  optimized_count: number
+  refined_count: number
+}
+
 /** 投递弹窗打开时的 HR 邮箱探测结果与通道可用性 */
 export interface DeliveryContactHint {
   email: string | null
@@ -842,5 +938,121 @@ export interface CommunicationStats {
   total: number
   by_direction: Record<string, number>
   by_channel: Record<string, number>
+}
+
+// ─────────────────────────────────────────────────────────────
+// 岗位能力测评（/capability）
+// ─────────────────────────────────────────────────────────────
+
+/** 单个测评维度定义（专业/通识通用） */
+export interface CapabilityDimension {
+  name: string
+  desc: string
+  low_tip: string
+  high_tip: string
+  resources: { category: string; items: string[] }[]
+  actions: string[]
+}
+
+/** 岗位画像（测评「考纲」） */
+export interface JobProfile {
+  id: string
+  title: string
+  category: string
+  summary?: string | null
+  description?: string | null
+  tags: string[]
+  professional_dimensions: CapabilityDimension[]
+  general_dimensions: CapabilityDimension[]
+  is_builtin: boolean
+  created_at?: string | null
+}
+
+/** 提交测评的自评分数：{维度名: 1~5} */
+export interface AssessmentScores {
+  professional_scores: Record<string, number>
+  general_scores: Record<string, number>
+}
+
+export interface AssessmentSubmit {
+  job_profile_id: string
+  professional_scores: Record<string, number>
+  general_scores: Record<string, number>
+}
+
+/** 报告中单个维度的分析结果 */
+export interface ReportDimensionItem {
+  name: string
+  score: number
+  level: 'critical' | 'weak' | 'fair' | 'good' | 'excellent'
+  level_label: string
+  analysis: string
+}
+
+/** 补步建议的一个阶段 */
+export interface ReportPhase {
+  stage: string
+  title: string
+  period: string
+  goal: string
+  reading: { category: string; items: string[] }[]
+  actions: string[]
+}
+
+/** 报告尾部（总结 / 郑重建议 / 复评日期） */
+export interface ReportSummary {
+  reminders: string[]
+  solemn_advice: string[]
+  generated_at: string
+  next_review_at: string
+}
+
+/** 完整测评报告（存于 CapabilityAssessment.report 的快照） */
+export interface CapabilityReport {
+  job_title: string
+  category: string
+  overall_match: number
+  professional_avg: number
+  general_avg: number
+  overall_analysis: string
+  general_analysis: ReportDimensionItem[]
+  professional_analysis: ReportDimensionItem[]
+  improvement_plan: {
+    principle: string
+    phases: ReportPhase[]
+  }
+  summary: ReportSummary
+}
+
+/** 一次测评记录 */
+export interface CapabilityAssessment {
+  id: string
+  user_id: string
+  job_profile_id: string
+  job_title: string
+  category: string
+  professional_scores: Record<string, number>
+  general_scores: Record<string, number>
+  overall_match: number
+  professional_avg: number
+  general_avg: number
+  report: CapabilityReport
+  created_at?: string | null
+}
+
+/** 岗位匹配排行项 */
+export interface CapabilityRankingItem {
+  job_profile_id: string
+  job_title: string
+  category: string
+  overall_match: number
+  professional_avg: number
+  general_avg: number
+  weak_dimension_count: number
+  assessment_count: number
+  previous_match: number | null
+  trend: 'up' | 'down' | 'flat'
+  latest_assessment_id: string
+  assessed_at?: string | null
 }
 

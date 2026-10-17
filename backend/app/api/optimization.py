@@ -10,7 +10,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
 from app.database import get_db
-from app.core.deps import get_current_user, get_redis, RateLimiter
+from app.core.deps import get_current_user, get_redis, RateLimiter, _get_redis_client
 from app.core.errors import app_err
 from app.models.user import User
 from app.models.resume import Resume
@@ -19,9 +19,11 @@ from app.models.optimized_resume import OptimizedResume
 from app.schemas.optimization import (
     OptimizeRequest, OptimizeResponse, MatchAnalysis, DiffResponse,
     SatisfactionFeedbackRequest, QuickOptimizeRequest, RenderRequest, RenderTextRequest,
-    UpdateContentRequest,
+    UpdateContentRequest, ChangeReviewResponse, ChangeApplyRequest,
 )
 from app.services.agent_optimizer import analyze_match, optimize_resume, generate_changes_description
+from app.services.change_review import apply_decisions, compute_changes
+from app.services.task_recovery import OPTIMIZE_STALE_SECONDS, is_stale
 from app.services.storage import storage
 from app.services.pdf_styler import _generate_styled_or_fallback
 
@@ -298,6 +300,7 @@ async def optimize_quick(
         "progress": "正在解析文本...",
         "user_id": user.id,
         "created_at": datetime.now(TZ_UTC8).isoformat(),
+        "updated_at": datetime.now(TZ_UTC8).isoformat(),
     }))
 
     _spawn_task(task_id, _run_optimize_task_from_text(
@@ -320,6 +323,93 @@ async def get_optimization(
     if not record:
         raise app_err("OPTIMIZATION_NOT_FOUND")
     return _to_response(record)
+
+
+@router.get("/{opt_id}/changes", response_model=ChangeReviewResponse)
+async def list_optimization_changes(
+    opt_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """AI 修改逐条确认（P0 第一步）：把优化前后简历对比成条/点级变更清单。
+
+    每条建议含稳定 id、类型（改写/新增/移除）、修改前后文本与定位信息，
+    由前端逐条呈现给用户做「接受 / 拒绝 / 编辑后接受」决策。
+    """
+    record = (
+        await db.execute(
+            select(OptimizedResume).where(
+                OptimizedResume.id == opt_id, OptimizedResume.user_id == user.id
+            )
+        )
+    ).scalar_one_or_none()
+    if not record:
+        raise app_err("OPTIMIZATION_NOT_FOUND")
+    changes = compute_changes(record.original_json or {}, record.optimized_json or {})
+    counts = {"modified": 0, "added": 0, "removed": 0}
+    for c in changes:
+        counts[c["kind"]] = counts.get(c["kind"], 0) + 1
+    warn_count = sum(1 for c in changes if (c.get("fact_check") or {}).get("level") == "warn")
+    return ChangeReviewResponse(
+        record_id=record.id, changes=changes, counts=counts, warn_count=warn_count
+    )
+
+
+@router.post("/{opt_id}/changes/apply", response_model=OptimizeResponse, status_code=201)
+async def apply_optimization_changes(
+    opt_id: str,
+    body: ChangeApplyRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """AI 修改逐条确认（P0 第二步）：应用用户决策，生成「人工确认版」新记录。
+
+    - 以**原始简历**为底，仅叠加被接受的变更（拒绝/未决策一律保留原文）。
+    - 生成的新记录通过 parent_record_id 挂在源优化记录下（进入简历版本树），
+      不覆盖原优化结果。
+    """
+    record = (
+        await db.execute(
+            select(OptimizedResume).where(
+                OptimizedResume.id == opt_id, OptimizedResume.user_id == user.id
+            )
+        )
+    ).scalar_one_or_none()
+    if not record:
+        raise app_err("OPTIMIZATION_NOT_FOUND")
+    if record.deleted_at is not None:
+        raise HTTPException(status_code=404, detail="优化记录已删除")
+
+    changes = compute_changes(record.original_json or {}, record.optimized_json or {})
+    known_ids = {c["id"] for c in changes}
+    decisions = {d.id: {"action": d.action, "text": d.text} for d in body.decisions if d.id in known_ids}
+    if not any(d.get("action") == "accept" for d in decisions.values()):
+        raise HTTPException(status_code=400, detail="至少接受一条修改建议才能生成新版本")
+
+    new_json, accepted, rejected = apply_decisions(
+        record.original_json or {}, changes, decisions
+    )
+
+    new_record = OptimizedResume(
+        user_id=user.id,
+        resume_id=record.resume_id,
+        job_image_id=record.job_image_id,
+        original_json=record.original_json,
+        optimized_json=new_json,
+        match_score=record.match_score,
+        changes_description=f"逐条确认版：接受 {accepted} 条 / 拒绝 {rejected} 条",
+        custom_instructions=record.custom_instructions,
+        job_title=record.job_title,
+        company=record.company,
+        category=record.category,
+        parent_record_id=record.id,
+        refine_count=0,
+        status="completed",
+    )
+    db.add(new_record)
+    await db.commit()
+    await db.refresh(new_record)
+    return _to_response(new_record)
 
 
 @router.post("/{opt_id}/feedback")
@@ -453,10 +543,40 @@ def _cancel_key(task_id: str) -> str:
 
 
 def _spawn_task(task_id: str, coro) -> None:
-    """登记并启动后台任务；任务结束（含被取消）后自动摘除登记。"""
+    """登记并启动后台任务；任务结束（含被取消）后自动摘除登记。
+
+    可靠性兜底（P0）：若协程异常逃逸（自身 except 未覆盖到），在此把任务状态
+    落为 failed，避免任务永远悬挂在 processing（配合启动恢复 + 心跳超时双保险）。
+    """
     task = asyncio.create_task(coro)
     _running_tasks[task_id] = task
-    task.add_done_callback(lambda _t, _id=task_id: _running_tasks.pop(_id, None))
+
+    def _cleanup(_t: asyncio.Task, _id: str = task_id) -> None:
+        _running_tasks.pop(_id, None)
+        exc = None if _t.cancelled() else _t.exception()
+        if exc is None:
+            return
+        logger.error(f"[任务执行器] 任务 {_id} 异常逃逸: {type(exc).__name__}: {exc}", exc_info=exc)
+
+        async def _fail_terminal() -> None:
+            try:
+                redis = _get_redis_client()
+                key = f"optimize_task:{_id}"
+                raw = await redis.get(key)
+                if not raw:
+                    return
+                info = json.loads(raw)
+                if info.get("status") in ("pending", "processing"):
+                    info["status"] = "failed"
+                    info["progress"] = f"任务执行异常（{type(exc).__name__}），请重试"
+                    info["updated_at"] = datetime.now(TZ_UTC8).isoformat()
+                    await redis.setex(key, _TASK_TTL, json.dumps(info))
+            except Exception:  # noqa: BLE001
+                logger.warning(f"[任务执行器] 任务 {_id} 兜底写 failed 失败", exc_info=True)
+
+        asyncio.get_running_loop().create_task(_fail_terminal())
+
+    task.add_done_callback(_cleanup)
 
 
 async def _is_cancelled(redis: aioredis.Redis, task_id: str) -> bool:
@@ -515,6 +635,7 @@ async def optimize_async(
         "progress": "排队中...",
         "user_id": user.id,
         "created_at": datetime.now(TZ_UTC8).isoformat(),
+        "updated_at": datetime.now(TZ_UTC8).isoformat(),
     }))
 
     # 后台异步执行（登记到任务表，便于「停止优化」时立即取消）
@@ -552,6 +673,16 @@ async def get_optimize_status(
     owner = task_info.get("user_id") or (task_info.get("result") or {}).get("user_id")
     if owner is not None and owner != user.id:
         raise HTTPException(status_code=404, detail="任务不存在或已过期")
+
+    # 心跳超时兜底（可靠任务队列 P0）：执行进程异常死亡时，
+    # 依据最后心跳时间把超时任务判为 failed，前端立即得到明确错误而非无限等待
+    if task_info.get("status") in ("pending", "processing") and is_stale(
+        task_info.get("updated_at"), OPTIMIZE_STALE_SECONDS
+    ):
+        task_info["status"] = "failed"
+        task_info["progress"] = "任务长时间无进展，已自动判定为失败，请重试"
+        task_info["updated_at"] = datetime.now(TZ_UTC8).isoformat()
+        await redis.setex(task_key, _TASK_TTL, json.dumps(task_info))
     return task_info
 
 
@@ -843,6 +974,7 @@ async def _update_status_impl(redis: aioredis.Redis, task_key: str, status: str,
     info = json.loads(existing)
     info["status"] = status
     info["progress"] = progress
+    info["updated_at"] = datetime.now(TZ_UTC8).isoformat()  # 心跳：供轮询端点做超时兜底
     info.update(extra)
     await redis.setex(task_key, _TASK_TTL, json.dumps(info))
 
@@ -893,6 +1025,7 @@ async def render_resume(
         "progress": "正在准备渲染...",
         "user_id": user.id,
         "created_at": datetime.now(TZ_UTC8).isoformat(),
+        "updated_at": datetime.now(TZ_UTC8).isoformat(),
     }))
 
     template = body.template or "professional"
@@ -924,6 +1057,7 @@ async def render_resume_text(
         "progress": "正在解析文本...",
         "user_id": user.id,
         "created_at": datetime.now(TZ_UTC8).isoformat(),
+        "updated_at": datetime.now(TZ_UTC8).isoformat(),
     }))
 
     template = body.template or "professional"

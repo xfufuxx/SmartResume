@@ -16,7 +16,7 @@ import { applications, resumes } from '@/lib/api'
 import { formatDate } from '@/lib/utils'
 import type {
   Application, ApplicationPayload, ApplicationStats, ApplicationStatus,
-  DeliveryEvent, EmailSyncResult, ResumeRecord, SuppressionEntry,
+  ApplicationTimeline, EmailSyncResult, ResumeRecord, SuppressionEntry,
 } from '@/types'
 
 const { TextArea } = Input
@@ -56,7 +56,7 @@ export default function ApplicationsTab({ onRecordCommunication }: Props) {
   const [resumeOptions, setResumeOptions] = useState<{ label: string; value: string }[]>([])
   // ── 投递轨迹（阶段1 邮件直投）──
   const [timelineApp, setTimelineApp] = useState<Application | null>(null)
-  const [timelineEvents, setTimelineEvents] = useState<DeliveryEvent[]>([])
+  const [timelineData, setTimelineData] = useState<ApplicationTimeline | null>(null)
   const [timelineLoading, setTimelineLoading] = useState(false)
   const [resendingId, setResendingId] = useState<string | null>(null)
   // ── 官网表单半自动投递（阶段3）──
@@ -238,16 +238,16 @@ export default function ApplicationsTab({ onRecordCommunication }: Props) {
     })
   }, [loadData])
 
-  /* ── 投递轨迹：查看邮件投递事件时间线 / 重发失败投递 ── */
+  /* ── 求职时间线：以投递为轴，聚合投递事件 + 沟通消息 + 面试进度 ── */
   const openTimeline = useCallback(async (a: Application) => {
     setTimelineApp(a)
-    setTimelineEvents([])
+    setTimelineData(null)
     setTimelineLoading(true)
     try {
-      const r = await applications.deliveryEvents(a.id)
-      setTimelineEvents(r.data || [])
+      const r = await applications.timeline(a.id)
+      setTimelineData(r.data || null)
     } catch {
-      message.error('投递轨迹加载失败')
+      message.error('求职时间线加载失败')
     } finally {
       setTimelineLoading(false)
     }
@@ -675,9 +675,9 @@ export default function ApplicationsTab({ onRecordCommunication }: Props) {
         )}
       </Modal>
 
-      {/* 投递轨迹时间线（邮件直投事件流水） */}
+      {/* 求职时间线（投递为轴：投递事件 + 沟通消息 + 面试进度） */}
       <Modal
-        title={`投递轨迹${timelineApp?.job_title ? ` · ${timelineApp.job_title}` : ''}`}
+        title={`求职时间线${timelineApp?.job_title ? ` · ${timelineApp.job_title}` : ''}`}
         open={!!timelineApp}
         footer={[
           timelineApp?.channel === 'email' && timelineApp?.delivery_status === 'failed' && (
@@ -726,54 +726,54 @@ export default function ApplicationsTab({ onRecordCommunication }: Props) {
         )}
         {timelineLoading ? (
           <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>
-        ) : timelineEvents.length === 0 ? (
-          <Empty description="暂无投递事件" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+        ) : !timelineData || timelineData.items.length === 0 ? (
+          <Empty description="暂无时间线事件" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
-          <Timeline
-            items={timelineEvents.map((e) => {
-              const itemMeta: Record<string, { color: string }> = {
-                queued: { color: 'blue' },
-                sent: { color: 'green' },
-                failed: { color: 'red' },
-                bounced: { color: 'orange' },
-                replied: { color: 'green' },
-                form_prefilled: { color: 'blue' },
-                form_submitted: { color: 'green' },
-                form_failed: { color: 'red' },
-                guide_opened: { color: 'blue' },
-                guide_submitted: { color: 'green' },
-                guide_failed: { color: 'red' },
-              }
-              const typeLabel: Record<string, string> = {
-                queued: '已加入发送队列',
-                sent: '已投递到对方邮箱',
-                failed: '发送失败',
-                bounced: '被退信',
-                replied: '对方已回复',
-                form_prefilled: '官网表单已预填（待人工确认提交）',
-                form_submitted: '已在官网确认提交',
-                form_failed: '官网提交未完成',
-                guide_opened: '已打开平台岗位页',
-                guide_submitted: '已在平台完成投递（用户回填）',
-                guide_failed: '平台投递未完成（用户回填）',
-              }
-              const m = itemMeta[e.event_type] || { color: 'gray' }
-              return {
-                color: m.color,
-                children: (
-                  <div>
-                    <div>{typeLabel[e.event_type] || e.event_type}</div>
-                    {e.detail && (
-                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{e.detail}</div>
-                    )}
-                    <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                      {formatDate(e.occurred_at || '')}
+          <>
+            <Space size={4} style={{ marginBottom: 12 }}>
+              <Tag>投递事件 {timelineData.counts.delivery}</Tag>
+              <Tag>沟通消息 {timelineData.counts.communication}</Tag>
+              <Tag>面试进度 {timelineData.counts.interview}</Tag>
+            </Space>
+            <Timeline
+              items={timelineData.items.map((it) => {
+                const deliveryColor: Record<string, string> = {
+                  queued: 'blue', sent: 'green', failed: 'red', bounced: 'orange', replied: 'green',
+                  form_prefilled: 'blue', form_submitted: 'green', form_failed: 'red',
+                  guide_opened: 'blue', guide_submitted: 'green', guide_failed: 'red',
+                }
+                let color = 'gray'
+                if (it.kind === 'application') color = 'blue'
+                else if (it.kind === 'delivery') color = deliveryColor[it.event_type || ''] || 'gray'
+                else if (it.kind === 'communication') color = it.direction === 'in' ? 'green' : 'purple'
+                else if (it.kind === 'interview') {
+                  color = it.interview_status === 'rejected' ? 'red'
+                    : (it.interview_status === 'passed' || it.interview_status === 'offer') ? 'green' : 'cyan'
+                }
+                return {
+                  color,
+                  children: (
+                    <div>
+                      <div>{it.label}</div>
+                      {it.detail && (
+                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', whiteSpace: 'pre-wrap' }}>
+                          {it.detail}
+                        </div>
+                      )}
+                      {it.kind === 'interview' && (it.interviewer || it.location) && (
+                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                          {[it.interviewer, it.location].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                      <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                        {formatDate(it.at || '')}
+                      </div>
                     </div>
-                  </div>
-                ),
-              }
-            })}
-          />
+                  ),
+                }
+              })}
+            />
+          </>
         )}
       </Modal>
 

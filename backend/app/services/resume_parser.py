@@ -5,7 +5,7 @@ import logging
 from openai import AsyncOpenAI
 
 from app.config import settings
-from app.services import has_valid_api_key
+from app.services import ensure_mock_allowed, has_valid_api_key
 from app.prompts.resume_parse import RESUME_PARSE_SYSTEM_PROMPT, RESUME_PARSE_USER_PROMPT
 
 logger = logging.getLogger(__name__)
@@ -200,6 +200,7 @@ async def _ocr_fallback(image_bytes: bytes) -> str:
 
 async def parse_resume_from_bytes(content: bytes, filename: str = "") -> dict:
     if not has_valid_api_key():
+        ensure_mock_allowed("简历解析")
         return _mock_resume_parse()
     ext = filename.split(".")[-1].lower() if filename else ""
 
@@ -237,6 +238,7 @@ async def parse_resume_from_bytes(content: bytes, filename: str = "") -> dict:
         error_msg = str(e).lower()
         if any(kw in error_msg for kw in ["401", "invalid_key", "unauthorized", "api_key", "invalid api key"]):
             logger.warning("LLM API Key 无效，使用 Mock 数据代替")
+            ensure_mock_allowed("简历解析")
             return _mock_resume_parse()
         raise
 
@@ -293,6 +295,7 @@ async def parse_resume_text(text: str) -> dict:
         error_msg = str(e).lower()
         if any(kw in error_msg for kw in ["401", "invalid_key", "unauthorized", "api_key", "invalid api key"]):
             logger.warning("LLM API Key 无效，parse_resume_text 使用 Mock 数据代替")
+            ensure_mock_allowed("简历解析")
             return _MOCK_RESUME_JSON
         raise
 

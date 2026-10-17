@@ -12,7 +12,7 @@ import {
   UploadOutlined, DownloadOutlined, SearchOutlined, FilterOutlined,
   StarOutlined, StarFilled, UndoOutlined,
   CrownOutlined, CopyOutlined, DeleteOutlined, EditOutlined, EyeOutlined,
-  EllipsisOutlined,
+  EllipsisOutlined, FormOutlined, ExportOutlined, FileTextOutlined,
   ContainerOutlined, SendOutlined, CodeOutlined, AppstoreOutlined, LineChartOutlined,
   BgColorsOutlined, ShoppingOutlined, NotificationOutlined, FileSearchOutlined,
 } from '@ant-design/icons'
@@ -74,6 +74,46 @@ const CATEGORY_META: Record<string, { icon: React.ReactNode; color: string }> = 
 }
 
 const DEFAULT_CATEGORY_META = { icon: <FileSearchOutlined />, color: '#007AFF' }
+
+/* 投递通道元信息：按「自动化程度」明确展示，避免"一键投递"让用户误以为点一下就全自动完成。
+   后端通道决策优先级为 guide > email > form > manual，前端展示保持一致。 */
+const DELIVERY_CHANNEL_META: Record<
+  'email' | 'form' | 'guide' | 'manual',
+  { label: string; level: string; desc: string; icon: React.ReactNode; tagColor: string; tagBg: string }
+> = {
+  email: {
+    label: '邮件直接投递',
+    level: '自动完成',
+    desc: '系统自动把简历发送到 HR 邮箱，你无需额外操作，可在「面试追踪 → 投递记录」查看送达状态。',
+    icon: <SendOutlined />,
+    tagColor: '#389e0d',
+    tagBg: '#f6ffed',
+  },
+  form: {
+    label: 'AI 帮你填写',
+    level: 'AI 预填，你手动提交',
+    desc: '系统打开官网并自动预填表单，你核对信息后在浏览器中手动点击提交（系统不会自动提交）。',
+    icon: <FormOutlined />,
+    tagColor: '#0958d9',
+    tagBg: '#e6f4ff',
+  },
+  guide: {
+    label: '前往招聘平台投递',
+    level: '跳转平台，你手动提交',
+    desc: '生成「准备包」（平台深链 + 简历文本），你前往官方平台完成投递后回来标记结果。本应用不代替你提交。',
+    icon: <ExportOutlined />,
+    tagColor: '#d46b08',
+    tagBg: '#fff7e6',
+  },
+  manual: {
+    label: '记录这次投递',
+    level: '你自行记录',
+    desc: '仅在本系统登记一条投递记录（岗位 / 简历 / 附言），后续投递动作由你自己完成。',
+    icon: <FileTextOutlined />,
+    tagColor: '#595959',
+    tagBg: '#fafafa',
+  },
+}
 
 /** 匹配度圆环（真实数据：来自该岗位优化记录的最高 match_score） */
 function MatchRing({ value }: { value: number }) {
@@ -143,7 +183,17 @@ export default function JobLibrary() {
   const [applyForm, setApplyForm] = useState({
     resume_id: '', cover_letter: '', recipient_email: '', apply_url: '', consent_given: false, guide: false,
   })
+  // 根据用户当前选择实时推导「本次投递通道 + 自动化程度」，与后端决策优先级一致（guide > email > form > manual）
+  const activeDeliveryChannel = useMemo<'email' | 'form' | 'guide' | 'manual'>(() => {
+    if (applyForm.guide) return 'guide'
+    if (applyForm.recipient_email.trim()) return 'email'
+    if (applyForm.apply_url.trim()) return 'form'
+    return 'manual'
+  }, [applyForm.guide, applyForm.recipient_email, applyForm.apply_url])
   const [applyLoading, setApplyLoading] = useState(false)
+  // 对外投递的「提交前确认」（展示公司/职位/简历/邮箱摘要 + 双确认勾选，明确最终动作）
+  const [confirmOpen, setConfirmOpen] = useState(false)
+  const [confirmChecks, setConfirmChecks] = useState({ info: false, auth: false })
   const [contactHint, setContactHint] = useState<DeliveryContactHint | null>(null)
   // ── 阶段3：官网表单探测（apply_url 填写后可探测表单结构与 robots 核查）──
   const [formProbe, setFormProbe] = useState<FormProbeResult | null>(null)
@@ -687,19 +737,12 @@ export default function JobLibrary() {
     }
   }, [])
 
-  const handleApplySubmit = useCallback(async () => {
+  // 实际提交（前置校验已在 handleApplySubmit 完成）
+  const doApplySubmit = useCallback(async () => {
     if (!applyJob) return
     const email = applyForm.recipient_email.trim()
     const applyUrl = applyForm.apply_url.trim()
     const guide = applyForm.guide
-    if ((email || applyUrl || guide) && !applyForm.consent_given) {
-      message.warning('对外投递需先勾选下方的授权确认')
-      return
-    }
-    if (guide && !guidePack?.deep_link) {
-      message.warning('平台引导投递需先生成准备包（深链）')
-      return
-    }
     setApplyLoading(true)
     try {
       const payload: ApplicationPayload = {
@@ -724,12 +767,15 @@ export default function JobLibrary() {
       }
       setApplyModalOpen(false)
       setApplyJob(null)
+      setConfirmOpen(false)
+      setConfirmChecks({ info: false, auth: false })
     } catch (err: unknown) {
       const resp = (err as { response?: { status?: number; data?: { detail?: string } } })?.response
       if (resp?.status === 409) {
         message.warning('你已投递过该岗位')
         setApplyModalOpen(false)
         setApplyJob(null)
+        setConfirmOpen(false)
       } else if (resp?.status === 429) {
         message.warning(resp?.data?.detail || '已达今日投递上限，请明日再试')
       } else if (resp?.status === 422) {
@@ -741,6 +787,28 @@ export default function JobLibrary() {
       setApplyLoading(false)
     }
   }, [applyJob, applyForm, guidePack])
+
+  // 弹窗「确定」：先做前置校验；manual（仅记录）直接提交，对外通道先展示提交前确认
+  const handleApplySubmit = useCallback(() => {
+    if (!applyJob) return
+    const email = applyForm.recipient_email.trim()
+    const applyUrl = applyForm.apply_url.trim()
+    const guide = applyForm.guide
+    if ((email || applyUrl || guide) && !applyForm.consent_given) {
+      message.warning('对外投递需先勾选下方的授权确认')
+      return
+    }
+    if (guide && !guidePack?.deep_link) {
+      message.warning('平台引导投递需先生成准备包（深链）')
+      return
+    }
+    if (activeDeliveryChannel === 'manual') {
+      doApplySubmit()
+      return
+    }
+    setConfirmChecks({ info: false, auth: false })
+    setConfirmOpen(true)
+  }, [applyJob, applyForm, guidePack, activeDeliveryChannel, doApplySubmit])
 
   const handleBatchTrash = useCallback(() => {
     if (selectedIds.length === 0) return
@@ -871,7 +939,7 @@ export default function JobLibrary() {
             <EditOutlined />
           </button>
         </Tooltip>
-        <Tooltip title="一键投递该岗位">
+        <Tooltip title="投递该岗位（方式随选择动态变化）">
           <button className="job-action-btn" onClick={(e) => { e.stopPropagation(); openApply(job) }}>
             <SendOutlined />
           </button>
@@ -1360,7 +1428,7 @@ export default function JobLibrary() {
                 }
               }}
             >
-              一键投递
+              投递该岗位
             </Button>,
             <Button key="close" onClick={() => { setPreviewModalOpen(false); setPreviewJob(null) }}>
               关闭
@@ -1435,19 +1503,52 @@ export default function JobLibrary() {
           )}
         </Modal>
 
-        {/* 一键投递弹窗：岗位信息只读 + 选简历 + 选填附言（联系方式自动带出） */}
+        {/* 投递弹窗：岗位信息只读 + 选简历 + 选填附言（联系方式自动带出）。
+            提交按钮文案与下方「自动化程度」提示随用户当前选择实时变化，避免"一键投递"误导。 */}
         <Modal
           title="投递该岗位"
           open={applyModalOpen}
           onOk={handleApplySubmit}
           onCancel={() => { setApplyModalOpen(false); setApplyJob(null) }}
-          okText="确认投递"
+          okText={DELIVERY_CHANNEL_META[activeDeliveryChannel].label}
           cancelText="取消"
           confirmLoading={applyLoading}
           destroyOnClose
         >
           {applyJob && (
             <div className="job-add-form">
+              {/* 本次投递方式与自动化程度：根据用户选择实时反映，明确系统能力边界，消除心理落差 */}
+              {(() => {
+                const m = DELIVERY_CHANNEL_META[activeDeliveryChannel]
+                return (
+                  <div
+                    style={{
+                      display: 'flex', gap: 12, alignItems: 'flex-start',
+                      padding: '12px 14px', marginBottom: 16, borderRadius: 8,
+                      border: `1px solid ${m.tagColor}`, background: m.tagBg,
+                    }}
+                  >
+                    <span style={{ fontSize: 22, lineHeight: 1.2, color: m.tagColor }}>{m.icon}</span>
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                        <b style={{ fontSize: 14, color: 'var(--text-primary)' }}>{m.label}</b>
+                        <span
+                          style={{
+                            fontSize: 12, fontWeight: 600, color: m.tagColor,
+                            background: '#fff', border: `1px solid ${m.tagColor}`,
+                            borderRadius: 4, padding: '0 6px', lineHeight: '18px',
+                          }}
+                        >
+                          自动化程度：{m.level}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
+                        {m.desc}
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
               <div className="job-add-row">
                 <label>投递岗位</label>
                 <Input
@@ -1631,6 +1732,64 @@ export default function JobLibrary() {
                   </Checkbox>
                 </div>
               )}
+            </div>
+          )}
+        </Modal>
+
+        {/* ── 提交前确认弹窗：对外投递（email/form/guide）在最终动作前二次确认 ── */}
+        <Modal
+          title="即将提交"
+          open={confirmOpen}
+          onOk={doApplySubmit}
+          onCancel={() => setConfirmOpen(false)}
+          okText="确认提交"
+          cancelText="返回修改"
+          okButtonProps={{ disabled: !(confirmChecks.info && confirmChecks.auth), loading: applyLoading }}
+          width={460}
+          destroyOnClose
+        >
+          {applyJob && (
+            <div className="job-add-form">
+              <div className="job-add-row">
+                <label>公司</label>
+                <Input value={getJobCompany(applyJob) || '—'} disabled />
+              </div>
+              <div className="job-add-row">
+                <label>职位</label>
+                <Input value={getJobTitle(applyJob)} disabled />
+              </div>
+              <div className="job-add-row">
+                <label>使用简历</label>
+                <Input
+                  value={resumeOptions.find((r) => r.value === applyForm.resume_id)?.label || '未选择简历'}
+                  disabled
+                />
+              </div>
+              <div className="job-add-row">
+                <label>联系邮箱</label>
+                <Input value={applyForm.recipient_email.trim() || profile?.email || '—'} disabled />
+              </div>
+              <div className="job-add-row">
+                <label>投递方式</label>
+                <Input
+                  value={`${DELIVERY_CHANNEL_META[activeDeliveryChannel].label}（${DELIVERY_CHANNEL_META[activeDeliveryChannel].level}）`}
+                  disabled
+                />
+              </div>
+              <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                <Checkbox
+                  checked={confirmChecks.info}
+                  onChange={(e) => setConfirmChecks((p) => ({ ...p, info: e.target.checked }))}
+                >
+                  <span style={{ fontSize: 13 }}>我确认以上投递信息准确无误</span>
+                </Checkbox>
+                <Checkbox
+                  checked={confirmChecks.auth}
+                  onChange={(e) => setConfirmChecks((p) => ({ ...p, auth: e.target.checked }))}
+                >
+                  <span style={{ fontSize: 13 }}>我授权本次对外投递，并了解可随时在「面试追踪」撤回</span>
+                </Checkbox>
+              </div>
             </div>
           )}
         </Modal>

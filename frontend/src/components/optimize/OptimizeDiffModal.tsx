@@ -21,6 +21,8 @@ interface OptimizeDiffModalProps {
   scoreAfter?: number | null
   /** 跳转「逐条对比」详情页 */
   onOpenDetail?: () => void
+  /** 打开「逐条确认 AI 修改」弹窗（接受/拒绝/编辑后接受 → 生成新版本） */
+  onOpenReview?: () => void
   /** 下载优化后的 PDF */
   onExport?: () => void
   exporting?: boolean
@@ -50,7 +52,7 @@ function Segments({ segments }: { segments: DiffSegment[] }) {
  * 只呈现确有变化的条目，新增/改动文字用高亮标出，方便一眼看出改了什么。
  */
 export default function OptimizeDiffModal({
-  open, onClose, result, before, scoreBefore, scoreAfter, onOpenDetail, onExport, exporting,
+  open, onClose, result, before, scoreBefore, scoreAfter, onOpenDetail, onOpenReview, onExport, exporting,
 }: OptimizeDiffModalProps) {
   const diff = useMemo(
     () => buildResumeDiff(before || result?.original_json || null, result?.optimized_json || null),
@@ -165,6 +167,11 @@ export default function OptimizeDiffModal({
 
         <div className="opt-diff-foot">
           <Space wrap>
+            {onOpenReview && (
+              <Button type="primary" icon={<CheckCircleFilled />} onClick={onOpenReview}>
+                逐条确认 AI 修改
+              </Button>
+            )}
             {onOpenDetail && (
               <Button icon={<SwapOutlined />} onClick={onOpenDetail}>查看逐条对比</Button>
             )}

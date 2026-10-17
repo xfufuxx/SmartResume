@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useMemo, useRef, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState, useCallback } from 'react'
 import Link from 'next/link'
 import { Avatar, Badge, Button, Dropdown, Spin, Tag, type MenuProps } from 'antd'
 import {
@@ -24,12 +24,13 @@ import {
   TeamOutlined,
   SafetyCertificateOutlined,
   AimOutlined,
+  ExperimentOutlined,
 } from '@ant-design/icons'
 import { useRouter, usePathname } from 'next/navigation'
 import { clearAuth } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
 import { messages, search } from '@/lib/api'
-import type { SearchResult } from '@/types'
+import type { SearchResult, MessageItem } from '@/types'
 
 interface AppLayoutProps {
   children: React.ReactNode
@@ -77,6 +78,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
       { key: 'match', label: '岗位匹配罗盘', icon: <AimOutlined />, path: '/match' },
       { key: 'ats', label: 'ATS 体检', icon: <SafetyCertificateOutlined />, path: '/ats' },
       { key: 'scoring', label: '简历评分', icon: <TrophyOutlined />, path: '/scoring' },
+      { key: 'capability', label: '岗位能力测评', icon: <ExperimentOutlined />, path: '/capability' },
       { key: 'batch', label: '批量优化', icon: <SnippetsOutlined />, path: '/batch' },
     ],
   },
@@ -284,6 +286,222 @@ function isActive(item: NavItem, pathname: string, activeKey?: string) {
   return pathname === item.path || pathname.startsWith(item.path + '/')
 }
 
+const BELL_TYPE_LABEL: Record<string, string> = {
+  optimize: '简历优化',
+  score: '简历评分',
+  system: '系统通知',
+  interview: '面试追踪',
+  job: '职位动态',
+  activity: '活动通知',
+}
+
+/**
+ * 右上角消息中心：点击展开下拉预览面板（最近消息 + 未读数），
+ * 并提供「查看全部消息」跳转到统一消息中心 /messages。
+ * 修复此前「点击无响应」：用 antd Dropdown 包裹，点击必然展开；
+ * 所有消息管理（分类、标记、删除、设置、统计）统一收敛到 /messages 页面。
+ */
+function MessageBell() {
+  const router = useRouter()
+  const pathname = usePathname()
+  const [open, setOpen] = useState(false)
+  const [unread, setUnread] = useState(0)
+  const [recent, setRecent] = useState<MessageItem[]>([])
+  const [loading, setLoading] = useState(false)
+
+  const refresh = useCallback(async () => {
+    try {
+      const res = await messages.list(1, 6, false)
+      setRecent(res.data?.items || [])
+      setUnread(res.data?.unread_count || 0)
+    } catch {
+      /* 静默失败：铃铛仍可正常展开 */
+    }
+  }, [])
+
+  // 挂载拉取一次；离开 /messages 回到其它页面时再刷新（捕获在消息页内的已读操作）
+  useEffect(() => {
+    if (pathname !== '/messages') refresh()
+  }, [pathname, refresh])
+
+  const handleOpenChange = useCallback((next: boolean) => {
+    setOpen(next)
+    if (next) refresh()
+  }, [refresh])
+
+  const goAll = useCallback(() => {
+    setOpen(false)
+    router.push('/messages')
+  }, [router])
+
+  const markRead = useCallback(async (id: string) => {
+    try {
+      await messages.markRead(id)
+      setRecent((prev) => prev.map((m) => (m.id === id ? { ...m, is_read: true } : m)))
+      setUnread((u) => Math.max(0, u - 1))
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const markAll = useCallback(async () => {
+    try {
+      await messages.markAllRead()
+      setRecent((prev) => prev.map((m) => ({ ...m, is_read: true })))
+      setUnread(0)
+    } catch {
+      /* ignore */
+    }
+  }, [])
+
+  const panel = (
+    <div
+      style={{
+        width: 360,
+        maxWidth: '90vw',
+        background: 'var(--bg-card, #fff)',
+        border: '1px solid var(--border-light)',
+        borderRadius: 12,
+        boxShadow: '0 12px 32px rgba(15,23,42,0.14)',
+        overflow: 'hidden',
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '12px 16px',
+          borderBottom: '1px solid var(--border-light)',
+        }}
+      >
+        <span style={{ fontWeight: 600, fontSize: 14, color: 'var(--text-primary)' }}>
+          消息通知
+          {unread > 0 && (
+            <span style={{ marginLeft: 6, color: 'var(--error-600)' }}>· {unread} 条未读</span>
+          )}
+        </span>
+        {unread > 0 && (
+          <Button type="link" size="small" style={{ padding: 0 }} onClick={markAll}>
+            全部已读
+          </Button>
+        )}
+      </div>
+
+      <div style={{ maxHeight: 360, overflowY: 'auto' }}>
+        {loading ? (
+          <div style={{ padding: 40, textAlign: 'center' }}>
+            <Spin />
+          </div>
+        ) : recent.length === 0 ? (
+          <div style={{ padding: 40, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 13 }}>
+            暂无消息
+          </div>
+        ) : (
+          recent.map((msg) => (
+            <div
+              key={msg.id}
+              onClick={() => {
+                markRead(msg.id)
+                goAll()
+              }}
+              style={{
+                display: 'flex',
+                gap: 10,
+                alignItems: 'flex-start',
+                padding: '12px 16px',
+                cursor: 'pointer',
+                borderBottom: '1px solid var(--border-light)',
+                background: msg.is_read ? 'transparent' : 'var(--bg-hover)',
+              }}
+              onMouseEnter={(e) => {
+                if (msg.is_read) (e.currentTarget as HTMLDivElement).style.background = 'var(--bg-page)'
+              }}
+              onMouseLeave={(e) => {
+                if (msg.is_read) (e.currentTarget as HTMLDivElement).style.background = 'transparent'
+              }}
+            >
+              <span
+                style={{
+                  width: 6,
+                  height: 6,
+                  borderRadius: '50%',
+                  marginTop: 7,
+                  flexShrink: 0,
+                  background: msg.is_read ? 'transparent' : 'var(--primary-500)',
+                }}
+              />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div
+                  style={{
+                    fontSize: 13,
+                    fontWeight: msg.is_read ? 400 : 600,
+                    color: 'var(--text-primary)',
+                    display: 'flex',
+                    gap: 8,
+                  }}
+                >
+                  <span style={{ fontSize: 11, color: 'var(--text-tertiary)', flexShrink: 0 }}>
+                    {BELL_TYPE_LABEL[msg.msg_type] || '通知'}
+                  </span>
+                  <span
+                    style={{
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {msg.title || BELL_TYPE_LABEL[msg.msg_type] || '通知'}
+                  </span>
+                </div>
+                {msg.content && (
+                  <div
+                    style={{
+                      fontSize: 12,
+                      color: 'var(--text-tertiary)',
+                      marginTop: 2,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {msg.content}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      <div style={{ padding: '10px 16px', borderTop: '1px solid var(--border-light)', textAlign: 'center' }}>
+        <Button type="link" onClick={goAll} style={{ padding: 0 }}>
+          查看全部消息
+        </Button>
+      </div>
+    </div>
+  )
+
+  return (
+    <Dropdown
+      trigger={['click']}
+      open={open}
+      onOpenChange={handleOpenChange}
+      popupRender={() => panel}
+      placement="bottomRight"
+    >
+      <Badge count={unread} size="small">
+        <Button
+          type="text"
+          icon={<BellOutlined style={{ fontSize: 18 }} />}
+          style={{ color: 'var(--text-tertiary)' }}
+          aria-label="消息中心"
+        />
+      </Badge>
+    </Dropdown>
+  )
+}
+
 export default function AppLayout({
   children,
   activeKey,
@@ -301,7 +519,6 @@ export default function AppLayout({
   const { theme, toggleTheme } = useTheme()
   const [navigating, setNavigating] = useState(false)
   const [drawerOpen, setDrawerOpen] = useState(false)
-  const [unreadCount, setUnreadCount] = useState(0)
   const prevPathRef = useRef(pathname)
   const prefetchedRef = useRef(false)
 
@@ -346,20 +563,6 @@ export default function AppLayout({
     })
   }, [router])
 
-  // 未读消息红点：登录后拉取一次真实未读数（原为写死 3）。
-  // 改为仅在挂载时拉取，避免每次路由切换都发起一次后端请求——多用户并发下可显著减少无效调用
-  useEffect(() => {
-    const load = async () => {
-      try {
-        const res = await messages.list(1, 1, true)
-        setUnreadCount(res.data?.unread_count || 0)
-      } catch {
-        /* 静默失败：铃铛仍可正常跳转 */
-      }
-    }
-    load()
-  }, [])
-
   const handleLogout = () => {
     clearAuth()
     router.push('/login')
@@ -389,14 +592,7 @@ export default function AppLayout({
         style={{ color: 'var(--text-tertiary)' }}
         title={theme === 'dark' ? '切换浅色主题' : '切换深色主题'}
       />
-      <Badge count={unreadCount} size="small">
-        <Button
-          type="text"
-          icon={<BellOutlined style={{ fontSize: 18 }} />}
-          style={{ color: 'var(--text-tertiary)' }}
-          onClick={() => router.push('/messages')}
-        />
-      </Badge>
+      <MessageBell />
       <Dropdown menu={{ items: userMenuItems }} placement="bottomRight">
         <Avatar style={{ cursor: 'pointer', background: 'var(--primary-500)' }} icon={<UserOutlined />} />
       </Dropdown>

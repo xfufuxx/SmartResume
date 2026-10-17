@@ -11,7 +11,7 @@ import {
   BellOutlined, FileTextOutlined,
   PhoneOutlined, ExportOutlined,
   MailOutlined, EnvironmentOutlined, AimOutlined, DollarOutlined,
-  WarningOutlined, LockOutlined,
+  WarningOutlined, LockOutlined, RightOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
@@ -372,33 +372,36 @@ export default function ProfilePage() {
               label: <span><Badge count={unreadCount} size="small" offset={[6, -2]}><BellOutlined /> 消息中心</Badge></span>,
               children: (
                 <Card
-                  title="消息列表"
-                  extra={
-                    <Space>
-                      {unreadCount > 0 && <Button size="small" onClick={handleMarkAllRead}>全部已读</Button>}
-                    </Space>
-                  }
+                  title="消息中心"
+                  extra={unreadCount > 0 ? <Button size="small" onClick={handleMarkAllRead}>全部标为已读</Button> : undefined}
                 >
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'space-between',
+                      gap: 16,
+                      flexWrap: 'wrap',
+                      marginBottom: 8,
+                    }}
+                  >
+                    <div style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                      {unreadCount > 0 ? `你有 ${unreadCount} 条未读消息` : '所有消息均已读'}
+                    </div>
+                    <Button type="primary" icon={<BellOutlined />} onClick={() => router.push('/messages')}>
+                      进入消息中心
+                    </Button>
+                  </div>
+                  <Divider style={{ margin: '8px 0 16px' }} />
                   {messageList.length === 0 ? (
                     <Empty description="暂无消息" image={Empty.PRESENTED_IMAGE_SIMPLE} />
                   ) : (
                     <List
-                      dataSource={messageList}
+                      dataSource={messageList.slice(0, 5)}
                       renderItem={(msg) => (
                         <List.Item
-                          style={{ background: msg.is_read ? undefined : 'var(--success-50)' }}
-                          actions={[
-                            !msg.is_read && (
-                              <Button key="read" size="small" type="link"
-                                onClick={async () => { await msgApi.markRead(msg.id); loadAll() }}>
-                                标为已读
-                              </Button>
-                            ),
-                            <Button key="del" size="small" type="link" danger
-                              onClick={async () => { await msgApi.delete(msg.id); loadAll() }}>
-                              删除
-                            </Button>,
-                          ]}
+                          style={{ cursor: 'pointer', background: msg.is_read ? undefined : 'var(--success-50)' }}
+                          onClick={() => router.push('/messages')}
                         >
                           <List.Item.Meta
                             title={<Space>{!msg.is_read && <Badge status="processing" />}{msg.title || msg.msg_type}</Space>}
@@ -415,6 +418,11 @@ export default function ProfilePage() {
                       )}
                     />
                   )}
+                  <div style={{ marginTop: 12, textAlign: 'right' }}>
+                    <Button type="link" onClick={() => router.push('/messages')}>
+                      查看全部消息 <RightOutlined />
+                    </Button>
+                  </div>
                 </Card>
               ),
             },

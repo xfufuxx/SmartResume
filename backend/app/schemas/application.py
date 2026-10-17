@@ -289,3 +289,39 @@ class GuidePackResponse(BaseModel):
     job_company: str | None = None
     resume_title: str | None = Field(None, description="所用简历标题")
     resume_text: str = Field("", description="简历纯文本（可直接粘贴到平台输入框）")
+
+
+# ── 求职时间线（以 Application 为核心，聚合投递事件 + 沟通消息 + 面试进度）──
+
+class TimelineItem(BaseModel):
+    """时间线单条事件。kind 决定字段语义：
+    - application：投递创建（起点）
+    - delivery：投递通道事件（event_type + label）
+    - communication：沟通消息（direction/channel/content）
+    - interview：面试进度（stage/mode/interview_time 等）
+    """
+    kind: str = Field(..., description="application/delivery/communication/interview")
+    label: str = Field(..., description="人类可读主文案")
+    detail: str | None = Field(None, description="补充信息（失败原因/沟通内容/复盘备注等）")
+    at: datetime | None = Field(None, description="发生时间（排序键，升序时间线）")
+    # delivery 专属
+    event_type: str | None = None
+    # communication 专属
+    communication_id: str | None = None
+    direction: str | None = Field(None, description="out(我→公司)/in(公司→我)")
+    channel: str | None = Field(None, description="phone/email/wechat/other")
+    # interview 专属
+    interview_id: str | None = None
+    stage: str | None = Field(None, description="面试轮次")
+    mode: str | None = Field(None, description="面试方式：现场/线上/电话")
+    interview_status: str | None = Field(None, description="scheduled/awaiting/passed/offer/rejected")
+    result: str | None = Field(None, description="面试复盘 / 结果备注")
+    location: str | None = None
+    interviewer: str | None = None
+
+
+class ApplicationTimeline(BaseModel):
+    """单条投递的完整求职时间线。"""
+    application: ApplicationResponse
+    items: list[TimelineItem] = Field(default=[], description="按时间升序的全量事件")
+    counts: dict = Field(default={}, description="各来源事件计数（delivery/communication/interview）")

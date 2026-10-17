@@ -1,6 +1,6 @@
 import axios from 'axios'
 
-import type { InterviewTrackPayload, ApplicationPayload, CommunicationPayload } from '@/types'
+import type { InterviewTrackPayload, ApplicationPayload, CommunicationPayload, AssessmentSubmit } from '@/types'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -274,6 +274,8 @@ export const resumes = {
   list: () => api.get('/api/resumes/'),
   stats: () => api.get('/api/resumes/stats'),
   get: (id: string) => api.get(`/api/resumes/${id}`),
+  /** 简历版本树：原始版 → 各岗位优化版 → 微调链 */
+  versionTree: (id: string) => api.get(`/api/resumes/${id}/version-tree`),
   create: (title?: string, sourceResumeId?: string) =>
     api.post('/api/resumes/', { title: title || null, source_resume_id: sourceResumeId || null }),
   update: (id: string, title: string) =>
@@ -378,12 +380,17 @@ export const optimize = {
   categories: () => api.get('/api/optimize/categories'),
   feedback: (id: string, score: number, text?: string) =>
     api.post(`/api/optimize/${id}/feedback`, { satisfaction_score: score, feedback_text: text || null }),
+  /** AI 修改逐条确认：获取条/点级变更清单 */
+  changes: (id: string) => api.get(`/api/optimize/${id}/changes`),
+  /** AI 修改逐条确认：应用决策，生成「人工确认版」新记录 */
+  applyChanges: (id: string, decisions: { id: string; action: 'accept' | 'reject'; text?: string | null }[]) =>
+    api.post(`/api/optimize/${id}/changes/apply`, { decisions }),
 }
 
 export const scoring = {
   getScore: (resumeId: string, jobId?: string) =>
     api.get(`/api/resume/${resumeId}/score`, { params: jobId ? { job_id: jobId } : {} }),
-  getTrending: (days = 7) => api.get('/api/jobs/trending', { params: { days } }),
+  getTrending: (days = 7) => api.get('/api/scoring/jobs/trending', { params: { days } }),
 }
 
 export const matching = {
@@ -449,6 +456,27 @@ export const interviewTracks = {
   remove: (id: string) => api.delete(`/api/interview-tracks/${id}`),
 }
 
+/** 岗位能力测评：岗位画像库 + 用户自评 + 报告生成 + 岗位匹配排行 */
+export const capability = {
+  /** 岗位画像列表（搜索/分类过滤） */
+  jobs: (params?: { keyword?: string; category?: string }) =>
+    api.get('/api/capability/jobs', { params }),
+  /** 岗位分类（筛下拉单一数据源） */
+  categories: () => api.get('/api/capability/categories'),
+  /** 岗位画像详情（含两套测评维度） */
+  job: (id: string) => api.get(`/api/capability/jobs/${id}`),
+  /** 提交自评 → 生成报告 */
+  submit: (payload: AssessmentSubmit) => api.post('/api/capability/assessments', payload),
+  /** 我的测评记录（时间倒序） */
+  assessments: () => api.get('/api/capability/assessments'),
+  /** 单次测评报告详情 */
+  assessment: (id: string) => api.get(`/api/capability/assessments/${id}`),
+  /** 删除一条测评记录 */
+  remove: (id: string) => api.delete(`/api/capability/assessments/${id}`),
+  /** 岗位匹配排行（每岗位取最近一次，按匹配度倒序） */
+  ranking: () => api.get('/api/capability/ranking'),
+}
+
 /** 岗位投递申请：用户向指定岗位发起投递（关联存储 + 状态记录 + 防重复 + 阶段1 邮件直投） */
 export const applications = {
   options: () => api.get('/api/applications/options'),
@@ -465,6 +493,8 @@ export const applications = {
   contactHint: (jobId: string) => api.get(`/api/applications/contact-hint/${jobId}`),
   /** 投递轨迹时间线 */
   deliveryEvents: (id: string) => api.get(`/api/applications/${id}/delivery-events`),
+  /** 求职时间线：聚合投递事件 + 沟通消息 + 面试进度（按时间升序） */
+  timeline: (id: string) => api.get(`/api/applications/${id}/timeline`),
   /** 重发失败的邮件投递 */
   resend: (id: string) => api.post(`/api/applications/${id}/resend`),
   /** 批量投递（阶段2）：多岗位共用简历/附言/授权，逐个限频调度 */

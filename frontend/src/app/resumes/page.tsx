@@ -4,19 +4,20 @@ import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import {
   Button, Card, Typography, Spin, Row, Col, message, Tag, Space,
   Modal, Input, Empty, Tooltip, Popconfirm, Alert, Descriptions, Checkbox,
-  Progress, Dropdown, Select, Segmented, Pagination, Divider,
+  Progress, Dropdown, Select, Segmented, Pagination, Divider, Tree,
 } from 'antd'
 import {
   PlusOutlined, CrownOutlined, CopyOutlined, DeleteOutlined, EditOutlined,
   EyeOutlined, StarOutlined, StarFilled, MoreOutlined, AppstoreOutlined,
   BarsOutlined, ThunderboltOutlined, TrophyOutlined, FireOutlined,
   FileTextOutlined, BulbOutlined, ClockCircleOutlined, DownloadOutlined, RollbackOutlined,
+  ApartmentOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { resumes, toBackendUrl } from '@/lib/api'
 import { getToken } from '@/lib/auth'
 import { formatDate } from '@/lib/utils'
-import type { ResumeRecord, ResumeStats } from '@/types'
+import type { ResumeRecord, ResumeStats, ResumeVersionTree, VersionNode } from '@/types'
 import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
 
@@ -69,6 +70,9 @@ export default function ResumeLibrary() {
   const [newTitle, setNewTitle] = useState('')
   const [copySourceId, setCopySourceId] = useState<string | null>(null)
   const [editModalOpen, setEditModalOpen] = useState(false)
+  const [treeOpen, setTreeOpen] = useState(false)
+  const [treeData, setTreeData] = useState<ResumeVersionTree | null>(null)
+  const [treeLoading, setTreeLoading] = useState(false)
   const [editId, setEditId] = useState<string | null>(null)
   const [editTitle, setEditTitle] = useState('')
   const [previewModalOpen, setPreviewModalOpen] = useState(false)
@@ -268,6 +272,66 @@ export default function ResumeLibrary() {
       message.error('更新失败')
     }
   }, [editId, editTitle, loadList])
+
+  /* ── 版本树：原始版 → 各岗位优化版 → 微调链 ── */
+  const handleOpenVersionTree = useCallback(async (resume: ResumeRecord) => {
+    setTreeOpen(true)
+    setTreeData(null)
+    setTreeLoading(true)
+    try {
+      const r = await resumes.versionTree(resume.id)
+      setTreeData(r.data || null)
+    } catch {
+      message.error('版本树加载失败')
+    } finally {
+      setTreeLoading(false)
+    }
+  }, [])
+
+  const renderTreeNodeTitle = useCallback((node: VersionNode) => {
+    if (node.kind === 'original') {
+      return (
+        <span>
+          <FileTextOutlined style={{ marginRight: 6, color: 'var(--primary-600)' }} />
+          {node.title || '原始简历'}
+          <Tag style={{ marginLeft: 8 }}>原始版</Tag>
+        </span>
+      )
+    }
+    if (node.kind === 'optimized') {
+      return (
+        <span>
+          <ThunderboltOutlined style={{ marginRight: 6, color: '#F59E0B' }} />
+          {node.job_title || node.company || '岗位优化版'}
+          {node.company ? <span style={{ color: 'var(--text-tertiary)' }}> @ {node.company}</span> : null}
+          {node.match_score != null ? (
+            <Tag color="green" style={{ marginLeft: 8 }}>匹配 {node.match_score}</Tag>
+          ) : null}
+          <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-tertiary)' }}>
+            {formatDate(node.created_at || '')}
+          </span>
+        </span>
+      )
+    }
+    return (
+      <span>
+        <BulbOutlined style={{ marginRight: 6, color: '#8B5CF6' }} />
+        微调版
+        {node.refine_count ? <Tag style={{ marginLeft: 8 }}>第 {node.refine_count + 1} 次修改</Tag> : null}
+        <span style={{ marginLeft: 8, fontSize: 12, color: 'var(--text-tertiary)' }}>
+          {formatDate(node.created_at || '')}
+        </span>
+      </span>
+    )
+  }, [])
+
+  const toAntTreeData = useCallback((node: VersionNode): { key: string; title: React.ReactNode; children: ReturnType<typeof toAntTreeData> }[] => {
+    return [{
+      key: node.id,
+      title: renderTreeNodeTitle(node),
+      children: node.children.map((c) => toAntTreeData(c)[0]),
+    }]
+  }, [renderTreeNodeTitle])
 
   const handleRestore = useCallback(async (id: string) => {
     try {
@@ -556,6 +620,7 @@ export default function ResumeLibrary() {
                         { key: 'download', label: '下载', icon: <DownloadOutlined />, onClick: () => handleDownload(resume) },
                         { key: 'primary', label: '设为默认', icon: <CrownOutlined />, onClick: () => handleSetPrimary(resume.id) },
                         { key: 'copy', label: '复制', icon: <CopyOutlined />, onClick: () => handleCopy(resume.id) },
+                        { key: 'tree', label: '版本树', icon: <ApartmentOutlined />, onClick: () => handleOpenVersionTree(resume) },
                         { key: 'edit', label: '重命名', icon: <EditOutlined />, onClick: () => handleEdit(resume.id, resume.title || '') },
                         { type: 'divider' },
                         { key: 'delete', label: '删除', danger: true, icon: <DeleteOutlined />, onClick: () => handleDelete(resume.id) },
@@ -918,6 +983,41 @@ export default function ResumeLibrary() {
         {/* 重命名弹窗 */}
         <Modal title="重命名简历" open={editModalOpen} onOk={handleSaveEdit} onCancel={() => { setEditModalOpen(false); setEditId(null) }} okText="保存" cancelText="取消">
           <Input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} placeholder="输入简历名称" maxLength={50} />
+        </Modal>
+
+        {/* 版本树弹窗：原始版 → 各岗位优化版 → 微调链 */}
+        <Modal
+          title={<span><ApartmentOutlined style={{ marginRight: 8 }} />简历版本树</span>}
+          open={treeOpen}
+          footer={<Button onClick={() => setTreeOpen(false)}>关闭</Button>}
+          onCancel={() => setTreeOpen(false)}
+          width={560}
+          destroyOnClose
+        >
+          {treeLoading ? (
+            <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>
+          ) : !treeData ? (
+            <Empty description="暂无版本数据" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          ) : (
+            <>
+              <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
+                {treeData.optimized_count} 个岗位优化版 · {treeData.refined_count} 次微调修改
+              </div>
+              {treeData.root.children.length === 0 ? (
+                <Empty
+                  description="还没有优化版本——用「岗位优化」生成第一个版本后，这里会展示完整版本谱系"
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                />
+              ) : (
+                <Tree
+                  defaultExpandAll
+                  blockNode
+                  showLine
+                  treeData={toAntTreeData(treeData.root)}
+                />
+              )}
+            </>
+          )}
         </Modal>
 
         {/* 预览弹窗：PDF/图片 fetch blob 后页面内渲染（不触发下载），docx 展示解析内容 */}

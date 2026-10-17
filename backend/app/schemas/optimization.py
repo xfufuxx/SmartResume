@@ -81,3 +81,46 @@ class DiffResponse(BaseModel):
     record_a: OptimizeResponse
     record_b: OptimizeResponse
     diff_summary: str
+
+
+# ── AI 修改逐条确认（P0）──
+
+class FactCheck(BaseModel):
+    """单条 AI 建议的事实核验结果（P0-4，规则引擎产出）。"""
+    level: str = "ok"            # ok / warn
+    flags: list[str] = []        # sourced / insufficient_source / added_number / added_skill / exaggeration
+    added_numbers: list[str] = []  # 原简历没有的数字，如 ["35%","3倍"]
+    exag_words: list[str] = []     # 原简历没有的强主张词，如 ["主导","精通"]
+    added_words: list[str] = []    # AI 新增的内容片段（供核对）
+
+
+class ChangeItem(BaseModel):
+    """单条 AI 修改建议（条/点级粒度，带稳定 id 与定位信息）。"""
+    id: str
+    kind: str  # modified / added / removed
+    section: str  # summary / skills / experience / projects
+    section_label: str
+    label: str
+    original_text: Optional[str] = None
+    suggested_text: Optional[str] = None
+    loc: dict = {}
+    payload: Optional[dict] = None
+    editable: bool = True  # 是否支持「编辑后接受」（结构类条目仅接受/拒绝）
+    fact_check: Optional[FactCheck] = None  # 事实核验标注
+
+
+class ChangeReviewResponse(BaseModel):
+    record_id: str
+    changes: list[ChangeItem] = []
+    counts: dict = {}
+    warn_count: int = 0  # 含「需确认事实」警告的建议条数
+
+
+class ChangeApplyDecision(BaseModel):
+    id: str
+    action: str  # accept / reject
+    text: Optional[str] = None  # 「编辑后接受」的最终文本
+
+
+class ChangeApplyRequest(BaseModel):
+    decisions: list[ChangeApplyDecision]

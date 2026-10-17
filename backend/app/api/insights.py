@@ -17,6 +17,9 @@ from app.models.user import User, Message
 from app.models.resume import Resume
 from app.models.job_image import JobImage
 from app.models.optimized_resume import OptimizedResume
+from app.models.application import Application
+from app.models.interview_track import InterviewTrack
+from app.models.communication import Communication
 
 logger = logging.getLogger(__name__)
 
@@ -66,6 +69,17 @@ async def overview(
             .where(OptimizedResume.user_id == uid, OptimizedResume.deleted_at.is_(None))
             .order_by(OptimizedResume.created_at.desc())
         )
+    ).scalars().all()
+
+    # ── 求职过程数据（投递 / 面试 / 沟通）：支撑「求职漏斗」与「今日行动」提醒 ──
+    apps = (
+        await db.execute(select(Application).where(Application.user_id == uid))
+    ).scalars().all()
+    tracks = (
+        await db.execute(select(InterviewTrack).where(InterviewTrack.user_id == uid))
+    ).scalars().all()
+    comms = (
+        await db.execute(select(Communication).where(Communication.user_id == uid))
     ).scalars().all()
 
     # ── 基础计数 ──
@@ -218,6 +232,92 @@ async def overview(
             "action": "去体检", "link": "/ats",
         })
 
+    # ── 求职漏斗（岗位 → 收藏 → 投递 → HR 回复 → 面试 → Offer）──
+    applied_job_ids = {a.job_image_id for a in apps}
+    fav_jobs = [j for j in jobs if j.is_favorite]
+    hr_replies = sum(1 for c in comms if c.direction == "in")
+    app_offers = sum(1 for a in apps if a.status == "offer")
+    track_offers = sum(1 for t in tracks if t.status == "offer")
+    funnel = [
+        {"key": "jobs", "label": "岗位库", "value": len(jobs)},
+        {"key": "favorite", "label": "收藏岗位", "value": len(fav_jobs)},
+        {"key": "applied", "label": "已投递", "value": len(apps)},
+        {"key": "reply", "label": "HR 回复", "value": hr_replies},
+        {"key": "interview", "label": "面试", "value": len(tracks)},
+        {"key": "offer", "label": "Offer", "value": max(app_offers, track_offers)},
+    ]
+
+    # ── 今日求职行动（时间敏感的主动提醒，置于普通建议之前）──
+    reminder_items: list[dict] = []
+
+    # 1) 投递跟进：超过 5 天仍停在「已投递」
+    job_title_map: dict[str, str] = {}
+    for j in jobs:
+        t = j.title or (j.parsed_job_json or {}).get("title")
+        if t:
+            job_title_map[j.id] = str(t)
+    stale_days = 5
+    stale_apps = [
+        a for a in apps
+        if a.status == "submitted" and a.created_at
+        and (now_cst - _to_cst(a.created_at)).days >= stale_days
+    ]
+    if stale_apps:
+        oldest = min(stale_apps, key=lambda a: a.created_at)
+        name = job_title_map.get(oldest.job_image_id, "某岗位")
+        reminder_items.append({
+            "level": "warning", "title": f"{len(stale_apps)} 个投递超过 {stale_days} 天没有新进展",
+            "desc": f"最早的一条是「{name}」。HR 每天收到大量简历，主动跟进一次能显著提高被看见的概率。",
+            "action": "去跟进", "link": "/interviews",
+        })
+
+    # 2) 即将到来的面试：未来 48 小时内、状态仍为「待面试」
+    upcoming = [
+        t for t in tracks
+        if t.status == "scheduled" and t.interview_time
+        and 0 <= (_to_cst(t.interview_time) - now_cst).total_seconds() <= 48 * 3600
+    ]
+    if upcoming:
+        nearest = min(upcoming, key=lambda t: t.interview_time)
+        it_time = _to_cst(nearest.interview_time)
+        reminder_items.append({
+            "level": "primary",
+            "title": f"即将面试：{nearest.company} · {nearest.position}",
+            "desc": (
+                f"{it_time.strftime('%m-%d %H:%M')} {nearest.stage or ''} {nearest.mode or ''}".strip()
+                + "。建议提前用 AI 面试押题演练一轮高频问题。"
+            ),
+            "action": "去准备", "link": "/interview",
+        })
+
+    # 3) HR 近 3 天回复过 → 建议及时 Follow-up
+    recent_replies = []
+    for c in comms:
+        if c.direction != "in":
+            continue
+        at = _to_cst(c.contact_at or c.created_at)
+        if at and 0 <= (now_cst - at).total_seconds() <= 3 * 86400:
+            recent_replies.append((c, at))
+    if recent_replies:
+        latest_c, latest_at = max(recent_replies, key=lambda pair: pair[1])
+        reminder_items.append({
+            "level": "warning",
+            "title": f"{latest_c.company} 在 {latest_at.strftime('%m-%d')} 回复过你",
+            "desc": "HR 主动联系后的 24~48 小时内跟进效果最好，建议发送 Follow-up 或确认下一步安排。",
+            "action": "去回复", "link": "/interviews",
+        })
+
+    # 4) 收藏了但还没投递的岗位
+    fav_not_applied = [j for j in fav_jobs if j.id not in applied_job_ids]
+    if fav_not_applied:
+        reminder_items.append({
+            "level": "info", "title": f"{len(fav_not_applied)} 个收藏岗位还没投递",
+            "desc": "收藏不等于机会，匹配度达标的岗位建议尽快定制简历并投递。",
+            "action": "去投递", "link": "/jobs",
+        })
+
+    action_items = reminder_items + action_items
+
     # ── 未读消息数（顶部铃铛红点用真实值）──
     unread_result = await db.execute(
         select(func.count(Message.id)).where(Message.user_id == uid, Message.is_read == False)  # noqa: E712
@@ -237,6 +337,7 @@ async def overview(
         "categories": categories,
         "recent_activities": activities,
         "action_items": action_items,
+        "funnel": funnel,
         "unread_messages": unread_messages,
         "generated_at": now_cst.isoformat(),
     }

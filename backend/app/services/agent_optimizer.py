@@ -3,7 +3,7 @@ import asyncio
 from openai import AsyncOpenAI
 
 from app.config import settings
-from app.services import has_valid_api_key
+from app.services import ensure_mock_allowed, has_valid_api_key
 from app.prompts.match_analysis import MATCH_ANALYSIS_SYSTEM_PROMPT
 from app.prompts.optimize import OPTIMIZE_SYSTEM_PROMPT
 
@@ -42,6 +42,7 @@ async def _call_with_retry(client, **kwargs):
 
 async def analyze_match(resume_json: dict, job_json: dict) -> dict:
     if not has_valid_api_key():
+        ensure_mock_allowed("匹配分析")
         return _mock_match_analysis()
 
     resume_str = json.dumps(resume_json, ensure_ascii=False, indent=2)
@@ -67,6 +68,7 @@ async def analyze_match(resume_json: dict, job_json: dict) -> dict:
 
 async def optimize_resume(resume_json: dict, job_json: dict, strategy: dict, custom_instructions: str | None = None) -> dict:
     if not has_valid_api_key():
+        ensure_mock_allowed("简历优化")
         return _mock_optimize()
 
     resume_str = json.dumps(resume_json, ensure_ascii=False, indent=2)

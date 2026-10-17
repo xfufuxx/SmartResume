@@ -72,7 +72,7 @@ def _normalize_job_title(title: str) -> str:
     return "其他"
 
 
-@router.get("/jobs/trending", response_model=list[TrendingJobResponse])
+@router.get("/scoring/jobs/trending", response_model=list[TrendingJobResponse])
 async def get_trending_jobs(
     days: int = Query(7, ge=1, le=30),
     db: AsyncSession = Depends(get_db),

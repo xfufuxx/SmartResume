@@ -4,7 +4,7 @@ import asyncio
 from datetime import datetime, timedelta, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update
 
 from app.models.batch_optimization import BatchOptimization, BatchJobTask
 from app.models.resume import Resume
@@ -12,6 +12,7 @@ from app.models.job_image import JobImage
 from app.models.optimized_resume import OptimizedResume
 from app.services.agent_optimizer import analyze_match, optimize_resume, generate_changes_description
 from app.services.pdf_generator import generate_pdf
+from app.services.task_recovery import batch_stale_seconds, is_stale
 from app.services.storage import storage
 
 TZ_UTC8 = timezone(timedelta(hours=8))
@@ -83,6 +84,19 @@ async def get_batch_status(batch_id: str, user_id: str, db: AsyncSession) -> dic
     batch = result.scalar_one_or_none()
     if not batch:
         return {"error": "批次不存在"}
+
+    # 心跳超时兜底（可靠任务队列 P0）：执行进程异常死亡时避免批次永久悬挂在 processing
+    if batch.status in ("pending", "processing") and is_stale(
+        batch.created_at, batch_stale_seconds(batch.total_jobs)
+    ):
+        batch.status = "failed"
+        batch.completed_at = datetime.now(timezone.utc)
+        await db.execute(
+            update(BatchJobTask)
+            .where(BatchJobTask.batch_id == batch.id, BatchJobTask.status.in_(("pending", "processing")))
+            .values(status="failed", error_message="任务长时间无进展，已自动判定为失败，请重试")
+        )
+        await db.commit()
 
     tasks_result = await db.execute(
         select(BatchJobTask).where(BatchJobTask.batch_id == batch_id)

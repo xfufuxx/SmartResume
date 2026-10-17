@@ -103,7 +103,7 @@ export default function MessagesPage() {
   const load = useCallback(async () => {
     setLoading(true)
     try {
-      const res = await messages.list(1, 100, false)
+      const res = await messages.list(1, 200, false)
       setList(res.data?.items || [])
     } catch {
       message.error('加载消息失败')

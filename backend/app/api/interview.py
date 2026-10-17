@@ -11,6 +11,7 @@ from sqlalchemy import select
 
 from app.database import get_db, async_session_factory
 from app.core.deps import get_current_user, RateLimiter
+from app.services.task_recovery import INTERVIEW_STALE_SECONDS, is_stale
 from app.models.user import User
 from app.models.resume import Resume
 from app.models.job_image import JobImage
@@ -205,6 +206,12 @@ async def get_session(
     session = result.scalars().unique().one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="面试会话不存在")
+
+    # 心跳超时兜底（可靠任务队列 P0）：后台生成任务异常死亡时避免前端无限轮询 pending
+    if session.status == "pending" and is_stale(session.created_at, INTERVIEW_STALE_SECONDS):
+        session.status = "failed"
+        session.error_message = "任务长时间无进展，已自动判定为失败，请重试"
+        await db.commit()
     return _session_to_dict(session)
 
 

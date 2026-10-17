@@ -3,7 +3,7 @@
 import React, { useEffect, useMemo, useState } from 'react'
 import {
   Typography, Spin, Row, Col, message, Button, Progress, List, Tag,
-  Space, Avatar, Badge, Empty, Skeleton,
+  Space, Avatar, Badge, Empty, Skeleton, Alert,
 } from 'antd'
 import {
   FileTextOutlined, FileSearchOutlined, ThunderboltOutlined,
@@ -256,6 +256,26 @@ export default function Dashboard() {
   const actionItems = overview?.action_items || []
   const activities = overview?.recent_activities || []
 
+  // ── 求职漏斗：岗位 → 收藏 → 投递 → HR 回复 → 面试 → Offer（后端 insights/overview 返回）──
+  const funnel = overview?.funnel || []
+  const funnelMax = Math.max(1, ...funnel.map((f) => f.value))
+  const funnelConv = funnel.slice(1).map((s, i) => ({
+    key: s.key,
+    rate: funnel[i].value > 0 ? s.value / funnel[i].value : null,
+    stuck: funnel[i].value > 0 && s.value < funnel[i].value,
+  }))
+  // 各环节「卡壳」时的行动建议（帮助用户理解卡在哪里，而非只看数字）
+  const FUNNEL_TIPS: Record<string, string> = {
+    favorite: '收藏率偏低：遇到合适岗位随手收藏，先积累求职候选池。',
+    applied: '收藏后投递转化偏低：别让岗位躺在收藏夹，匹配度达标就尽快定制简历投递。',
+    reply: 'HR 回复率偏低：建议检查简历匹配度与关键词覆盖——低于 70 分的简历初筛容易被刷。',
+    interview: '回复到面试的转化偏低：复盘投递渠道与简历针对性，优先投递高匹配岗位。',
+    offer: '面试到 Offer 的转化偏低：用 AI 面试押题提前演练高频问题与追问。',
+  }
+  const weakestStage = funnelConv
+    .filter((c) => c.rate !== null && c.stuck)
+    .sort((a, b) => (a.rate as number) - (b.rate as number))[0]
+
   const hotJobs = useMemo(() => {
     if (trending.length) {
       return trending.slice(0, 5).map((t) => ({ name: t.job_title, value: Math.min(100, Math.max(50, 90 - t.rank * 8)) }))
@@ -400,11 +420,61 @@ export default function Dashboard() {
               </Col>
             </Row>
 
+            {/* 求职漏斗：帮助用户理解求职转化卡在哪个环节 */}
+            {funnel.length > 0 && funnel.some((f) => f.value > 0) && (
+              <Row gutter={[24, 24]} style={{ marginBottom: 24 }}>
+                <Col span={24}>
+                  <div className="app-card" style={{ padding: 20 }}>
+                    <div className="app-section-title" style={{ marginBottom: 16 }}>
+                      <RiseOutlined style={{ color: 'var(--primary-600)' }} /> 求职漏斗
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'flex-end', gap: 4, flexWrap: 'wrap' }}>
+                      {funnel.map((stage, i) => (
+                        <React.Fragment key={stage.key}>
+                          {i > 0 && (
+                            <div style={{ textAlign: 'center', minWidth: 56, paddingBottom: 22 }}>
+                              <div style={{ fontSize: 11, color: funnelConv[i - 1].rate != null ? 'var(--text-secondary)' : 'var(--text-quaternary)' }}>
+                                {funnelConv[i - 1].rate != null
+                                  ? `${Math.round((funnelConv[i - 1].rate as number) * 100)}%`
+                                  : '—'}
+                              </div>
+                              <ArrowRightOutlined style={{ fontSize: 12, color: 'var(--text-quaternary)' }} />
+                            </div>
+                          )}
+                          <div style={{ flex: 1, minWidth: 88, textAlign: 'center' }}>
+                            <div style={{ fontSize: 22, fontWeight: 700, color: 'var(--text-primary)' }}>{stage.value}</div>
+                            <div
+                              style={{
+                                height: 8, borderRadius: 4, margin: '6px auto 4px',
+                                background: 'var(--primary-500)',
+                                width: `${Math.max(6, (stage.value / funnelMax) * 100)}%`,
+                                opacity: 1 - i * 0.13,
+                              }}
+                            />
+                            <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>{stage.label}</div>
+                          </div>
+                        </React.Fragment>
+                      ))}
+                    </div>
+                    {weakestStage && (
+                      <Alert
+                        style={{ marginTop: 14 }}
+                        type="warning"
+                        showIcon
+                        message={`转化最弱环节：${funnel.find((f) => f.key === weakestStage.key)?.label ?? ''}`}
+                        description={FUNNEL_TIPS[weakestStage.key]}
+                      />
+                    )}
+                  </div>
+                </Col>
+              </Row>
+            )}
+
             <Row gutter={[24, 24]}>
               <Col xs={24} md={12} lg={7}>
                 <div className="app-card" style={{ padding: 20 }}>
                   <div className="app-section-title" style={{ marginBottom: 8 }}>
-                    <RobotOutlined style={{ color: 'var(--primary-600)' }} /> 下一步建议
+                    <RobotOutlined style={{ color: 'var(--primary-600)' }} /> 今日求职行动
                   </div>
                   {actionItems.length ? (
                     <List

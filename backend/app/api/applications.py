@@ -32,6 +32,7 @@ from app.models.application import Application
 from app.models.communication import Communication
 from app.models.delivery_event import DELIVERY_EVENT_LABELS, DeliveryEvent
 from app.models.email_suppression import EmailSuppression
+from app.models.interview_track import InterviewTrack
 from app.models.job_image import JobImage
 from app.models.resume import Resume
 from app.models.user import User
@@ -43,6 +44,7 @@ from app.schemas.application import (
     ApplicationCreate,
     ApplicationResponse,
     ApplicationStats,
+    ApplicationTimeline,
     ApplicationUpdate,
     BatchApplicationCreate,
     BatchApplicationResult,
@@ -54,6 +56,7 @@ from app.schemas.application import (
     GuidePackResponse,
     SuppressionCreate,
     SuppressionEntryResponse,
+    TimelineItem,
 )
 from app.services.delivery_email import (
     build_application_email,
@@ -281,6 +284,140 @@ async def list_delivery_events(
         .order_by(DeliveryEvent.occurred_at.desc())
     )
     return list(result.scalars().all())
+
+
+@router.get("/{application_id}/timeline", response_model=ApplicationTimeline)
+async def get_application_timeline(
+    application_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """求职时间线（P0 核心视图）：以单条投递为轴，聚合投递通道事件、沟通消息、面试进度。
+
+    - 投递事件：delivery_events（邮件/官网表单/平台引导全通道流水）。
+    - 沟通消息：communications 中 application_id 直接挂靠的记录。
+    - 面试进度：interview_tracks 按 job_image_id 精确匹配；无关联时按
+      公司+职位（忽略大小写）与岗位快照兜底匹配。
+    - 全部事件按发生时间升序合并，起点为「提交投递」。
+    """
+    app_rec = await _get_owned(db, user, application_id)
+    job = (
+        await db.execute(
+            select(JobImage).where(
+                JobImage.id == app_rec.job_image_id, JobImage.user_id == user.id
+            )
+        )
+    ).scalar_one_or_none()
+
+    items: list[TimelineItem] = [
+        TimelineItem(
+            kind="application",
+            label=f"提交投递（{DELIVERY_CHANNEL_LABELS.get(app_rec.channel, app_rec.channel)}）",
+            detail=(
+                f"收件邮箱 {app_rec.recipient_email}" if app_rec.recipient_email
+                else (f"投递入口 {app_rec.apply_url}" if app_rec.apply_url else None)
+            ),
+            at=app_rec.created_at,
+        )
+    ]
+
+    # 1) 投递通道事件
+    events = (
+        await db.execute(
+            select(DeliveryEvent)
+            .where(DeliveryEvent.application_id == app_rec.id)
+            .order_by(DeliveryEvent.occurred_at.asc())
+        )
+    ).scalars().all()
+    for e in events:
+        items.append(TimelineItem(
+            kind="delivery",
+            label=DELIVERY_EVENT_LABELS.get(e.event_type, e.event_type),
+            detail=e.detail,
+            at=e.occurred_at,
+            event_type=e.event_type,
+        ))
+
+    # 2) 沟通消息（直接挂靠本投递）
+    comms = (
+        await db.execute(
+            select(Communication)
+            .where(Communication.user_id == user.id, Communication.application_id == app_rec.id)
+            .order_by(Communication.contact_at.asc(), Communication.created_at.asc())
+        )
+    ).scalars().all()
+    for c in comms:
+        when = c.contact_at or c.created_at
+        direction_label = "我→公司" if c.direction == "out" else "公司→我"
+        items.append(TimelineItem(
+            kind="communication",
+            label=f"沟通记录（{direction_label}）",
+            detail=c.content,
+            at=when,
+            communication_id=c.id,
+            direction=c.direction,
+            channel=c.channel,
+        ))
+
+    # 3) 面试进度：job_image_id 精确匹配，无则公司+职位兜底（两分支均限当前用户）
+    match_cond = None
+    if app_rec.job_image_id:
+        match_cond = InterviewTrack.job_image_id == app_rec.job_image_id
+    if job is not None and job.company and job.title:
+        company_pos_cond = (
+            (func.lower(InterviewTrack.company) == func.lower(job.company))
+            & (func.lower(InterviewTrack.position) == func.lower(job.title))
+        )
+        match_cond = company_pos_cond if match_cond is None else (match_cond | company_pos_cond)
+    if match_cond is None:
+        tracks = []
+    else:
+        tracks = (
+            await db.execute(
+                select(InterviewTrack)
+                .where(InterviewTrack.user_id == user.id, match_cond)
+                .order_by(InterviewTrack.interview_time.asc())
+            )
+        ).scalars().all()
+    seen_track_ids: set[str] = set()
+    for t in tracks:
+        if t.id in seen_track_ids:
+            continue
+        seen_track_ids.add(t.id)
+        when = t.interview_time or t.created_at
+        stage_label = f"{t.stage}" if t.stage else "面试"
+        status_label = {
+            "scheduled": "已约面", "awaiting": "等安排", "passed": "已通过",
+            "offer": "已拿 Offer", "rejected": "未通过",
+        }.get(t.status, t.status)
+        parts = [stage_label, status_label]
+        if t.mode:
+            parts.append(t.mode)
+        items.append(TimelineItem(
+            kind="interview",
+            label=f"{' · '.join(parts)}",
+            detail=t.result,
+            at=when,
+            interview_id=t.id,
+            stage=t.stage,
+            mode=t.mode,
+            interview_status=t.status,
+            result=t.result,
+            location=t.location,
+            interviewer=t.interviewer,
+        ))
+
+    items.sort(key=lambda it: (it.at is not None, it.at))
+    counts = {
+        "delivery": len(events),
+        "communication": len(comms),
+        "interview": len(seen_track_ids),
+    }
+    return ApplicationTimeline(
+        application=_serialize(app_rec, job),
+        items=items,
+        counts=counts,
+    )
 
 
 @router.post("/{application_id}/resend", response_model=ApplicationResponse)

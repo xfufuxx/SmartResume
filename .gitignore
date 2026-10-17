@@ -14,6 +14,10 @@ backend/.env
 # Uploads
 uploads/
 
+# Logs
+logs/
+*.log
+
 # Node
 node_modules/
 .next/

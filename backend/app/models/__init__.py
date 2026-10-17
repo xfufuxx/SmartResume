@@ -18,6 +18,7 @@ from app.models.communication import Communication
 from app.models.delivery_event import DeliveryEvent
 from app.models.email_suppression import EmailSuppression
 from app.models.email_template import EmailTemplate
+from app.models.capability_assessment import JobProfile, CapabilityAssessment
 
 __all__ = [
     "User", "UserDevice", "Message", "AuditLog", "ResumeTemplate", "UserQuota",
@@ -28,4 +29,5 @@ __all__ = [
     "InterviewSession", "InterviewQuestion", "InterviewTrack",
     "Application", "Communication", "DeliveryEvent",
     "EmailSuppression", "EmailTemplate",
+    "JobProfile", "CapabilityAssessment",
 ]

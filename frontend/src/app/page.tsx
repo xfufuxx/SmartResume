@@ -28,6 +28,7 @@ import ResumePreview from '@/components/optimize/ResumePreview'
 import MatchGauge, { levelMeta } from '@/components/optimize/MatchGauge'
 import MetricStat from '@/components/optimize/MetricStat'
 import OptimizeDiffModal from '@/components/optimize/OptimizeDiffModal'
+import ChangeReviewModal from '@/components/optimize/ChangeReviewModal'
 import type {
   ResumeParseResult, JobParseResult, OptimizeResult, ResumeRecord, ResumeAnalysis,
 } from '@/types'
@@ -107,6 +108,8 @@ export default function Home() {
   const [result, setResult] = useState<OptimizeResult | null>(null)
   /** 前后对比弹窗：只在优化彻底完成后打开 */
   const [diffModalOpen, setDiffModalOpen] = useState(false)
+  /** 逐条确认弹窗（AI 建议 → 用户确认 → 新版本） */
+  const [reviewModalOpen, setReviewModalOpen] = useState(false)
   /** 本次运行已用时长（秒）：只反映「还在进行中」，不伪装成进度 */
   const [runningSeconds, setRunningSeconds] = useState(0)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -1110,8 +1113,22 @@ export default function Home() {
           scoreBefore={baseAnalysis?.match_rate ?? null}
           scoreAfter={optimizedAnalysis?.match_rate ?? null}
           onOpenDetail={result ? () => router.push(`/history/${result.id}`) : undefined}
+          onOpenReview={result ? () => setReviewModalOpen(true) : undefined}
           onExport={handleExportPdf}
           exporting={exporting}
+        />
+
+        {/* 逐条确认 AI 修改：接受/拒绝/编辑后接受 → 生成「人工确认版」新记录 */}
+        <ChangeReviewModal
+          open={reviewModalOpen}
+          recordId={result?.id || null}
+          onClose={() => setReviewModalOpen(false)}
+          onApplied={async (newId) => {
+            try {
+              const r = await optimize.get(newId)
+              setResult(r.data || null)
+            } catch { /* 新版本加载失败不影响主流程 */ }
+          }}
         />
 
         <TemplateSelector open={showTemplateModal} onClose={() => setShowTemplateModal(false)} selected={selectedTemplate} onSelect={setSelectedTemplate} options={TEMPLATE_OPTIONS} />

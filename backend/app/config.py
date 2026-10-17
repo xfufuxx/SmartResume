@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     VERSION: str = "1.0.0"
     DEBUG: bool = False
 
+    # 运行环境：development（默认，LLM 未配置时静默 Mock 兜底，方便本地开发）
+    # / production（LLM 未配置或鉴权失败时不再返回 Mock，而是显式报错提示重试，
+    #   避免用户误以为已完成真实 AI 处理）
+    APP_ENV: str = "development"
+
     DATABASE_URL: str = "postgresql+asyncpg://postgres:root@localhost:5432/smart_resume"
     REDIS_URL: str = "redis://localhost:6379/0"
 
