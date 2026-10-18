@@ -1,14 +1,27 @@
 version: "3.9"
 
+# 生产部署（阿里云 ECS）：nginx 为唯一入口（80），/api 反代后端，其余反代前端。
+# 启动：NEXT_PUBLIC_API_URL=https://你的域名 docker compose up -d --build
+#
+# 注意：
+# 1) NEXT_PUBLIC_API_URL 是前端「构建期」内联变量，会被浏览器直接用，
+#    必须填浏览器可访问的公网地址（同域由 nginx 反代，或独立 API 子域），
+#    不能填 http://backend:8000（仅容器网络可解析，浏览器访问不到）。
+# 2) db / redis / backend / frontend 不再发布宿主端口，只经 nginx 对外，
+#    避免数据库与内部服务暴露到公网；本机调试可用 docker compose exec。
+# 3) POSTGRES_PASSWORD 通过环境变量注入，需与 backend/.env 的
+#    DATABASE_URL 密码保持一致（environment 里的 DATABASE_URL 会覆盖 .env）。
+# 4) celery_worker 为兼容保留：当前业务代码未向 Celery 投递任务
+#    （异步任务由后端进程内协程驱动），省资源可单独不起：
+#    docker compose up -d db redis backend frontend nginx
+
 services:
   db:
     image: postgres:16-alpine
     environment:
       POSTGRES_DB: smart_resume
       POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: postgres
-    ports:
-      - "5432:5432"
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,25 +29,23 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   redis:
     image: redis:7-alpine
-    ports:
-      - "6379:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: unless-stopped
 
   backend:
     build:
       context: ../backend
-    ports:
-      - "8000:8000"
     env_file: ../backend/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/smart_resume
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/smart_resume
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/1
@@ -44,8 +55,9 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ../backend:/app
+      # 简历原件等上传文件（PII，只经后端签名 URL 下发，不做公开静态目录）
       - uploads:/app/uploads
+    restart: unless-stopped
 
   celery_worker:
     build:
@@ -53,7 +65,7 @@ services:
     command: celery -A celery_worker.celery_app worker --loglevel=info
     env_file: ../backend/.env
     environment:
-      DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/smart_resume
+      DATABASE_URL: postgresql+asyncpg://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/smart_resume
       REDIS_URL: redis://redis:6379/0
       CELERY_BROKER_URL: redis://redis:6379/1
       CELERY_RESULT_BACKEND: redis://redis:6379/1
@@ -63,18 +75,28 @@ services:
       redis:
         condition: service_healthy
     volumes:
-      - ../backend:/app
       - uploads:/app/uploads
+    restart: unless-stopped
 
   frontend:
     build:
       context: ../frontend
-    ports:
-      - "3000:3000"
-    environment:
-      NEXT_PUBLIC_API_URL: http://localhost:8000
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
     depends_on:
       - backend
+    restart: unless-stopped
+
+  nginx:
+    image: nginx:1.27-alpine
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+    depends_on:
+      - backend
+      - frontend
+    restart: unless-stopped
 
 volumes:
   pgdata:

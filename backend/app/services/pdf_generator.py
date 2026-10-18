@@ -285,7 +285,15 @@ def _build_fallback_pdf(resume: dict) -> bytes:
     if projects:
         elements.extend(section_header("项目经历"))
         for proj in projects:
-            elements.append(Paragraph(f"<b>{proj.get('name', '')}</b>", bold_body))
+            proj = proj or {}
+            head = " · ".join(x for x in [proj.get("name", ""), proj.get("role", "")] if x)
+            period = " - ".join(x for x in [proj.get("start", "") or "", proj.get("end", "") or ""] if x)
+            if period:
+                head = f"{head}（{period}）" if head else period
+            elements.append(Paragraph(f"<b>{head}</b>", bold_body))
+            for point in proj.get("points") or []:
+                if point:
+                    elements.append(Paragraph(str(point), body_style))
             if proj.get("description"):
                 elements.append(Paragraph(proj["description"], body_style))
             tech = proj.get("tech", [])

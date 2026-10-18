@@ -165,6 +165,6 @@ def _mock_optimize() -> dict:
         "education": [{"school": "华中科技大学", "degree": "本科", "major": "计算机科学与技术", "start": "2015-09", "end": "2019-06"}],
         "skills": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "Kubernetes", "Git", "性能优化", "系统架构设计"],
         "projects": [
-            {"name": "智能简历优化平台", "description": "基于 AI 的简历与岗位匹配优化系统，日处理简历 1000+ 份", "tech": ["FastAPI", "OpenAI", "React", "PostgreSQL", "Docker"]},
+            {"name": "智能简历优化平台", "role": "核心开发", "start": "2023-03", "end": "2023-12", "points": ["基于 FastAPI + React 构建简历解析与优化系统，日处理简历 1000+ 份", "接入视觉模型实现简历版面识别，解析准确率达 95%", "使用 WeasyPrint 与 Playwright 双通道导出 PDF，导出成功率 99.5%"]},
         ],
     }

@@ -30,11 +30,22 @@ export default function HistoryPage() {
   const [category, setCategory] = useState('全部')
   const [categories, setCategories] = useState<string[]>(['全部', '开发', '产品', '运营', '设计', '市场', '其他'])
   const [selected, setSelected] = useState<string[]>([])
+  // 从消息中心深链进入（?id=<记录id>）时高亮定位对应的优化记录
+  const [highlightId, setHighlightId] = useState<string | null>(null)
 
   useEffect(() => {
     const t = getToken()
     if (!t) { router.push('/login'); return }
     setToken(t)
+
+    // 「简历优化完成」类消息点击后带入 ?id=，用于定位并高亮对应记录
+    try {
+      const hid = new URLSearchParams(window.location.search).get('id')
+      if (hid) {
+        setHighlightId(hid)
+        window.history.replaceState(null, '', '/history')
+      }
+    } catch { /* ignore */ }
 
     router.prefetch('/dashboard')
     router.prefetch('/resumes')
@@ -66,6 +77,20 @@ export default function HistoryPage() {
 
   useEffect(() => { fetchAll() }, [fetchAll])
   useEffect(() => { fetchFavorites() }, [fetchFavorites])
+
+  // 深链定位：记录加载完成后滚动到目标卡片并高亮；记录不存在（已删除）则放弃
+  useEffect(() => {
+    if (loading || !highlightId) return
+    if (!allRecords.some((r) => r.id === highlightId)) {
+      setHighlightId(null)
+      return
+    }
+    const timer = setTimeout(() => {
+      const el = document.getElementById(`opt-card-${highlightId}`)
+      if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+    }, 250)
+    return () => clearTimeout(timer)
+  }, [loading, highlightId, allRecords])
 
   const toggleFavorite = async (id: string) => {
     try {
@@ -126,6 +151,8 @@ export default function HistoryPage() {
   const renderCard = (r: OptimizeResult, isTrash = false) => (
     <Card
       key={r.id}
+      id={`opt-card-${r.id}`}
+      className={highlightId === r.id ? 'opt-card-highlight' : undefined}
       size="small"
       hoverable
       onClick={(e) => {

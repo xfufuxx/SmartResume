@@ -62,11 +62,13 @@ def main() -> int:
         try:
             # ── 登录 ──
             step("登录")
-            page.goto(f"{FRONT}/login", wait_until="domcontentloaded")
+            page.goto(f"{FRONT}/login", wait_until="load", timeout=90000)
+            page.wait_for_timeout(3000)  # 等待 React 水合，避免点击落到原生表单提交
             page.get_by_placeholder("邮箱地址").fill(EMAIL)
             page.get_by_placeholder("密码").fill(PASSWORD)
             page.get_by_role("button", name=rx("登录")).first.click()
-            page.wait_for_url("**/dashboard", timeout=30000)
+            # 跳转可能早于监听注册，用轮询避免竞态（勿用 wait_for_url）
+            page.wait_for_function("() => location.pathname.includes('/dashboard')", timeout=60000)
             check("登录成功并跳转 /dashboard", True, page.url)
 
             # ── 进入优化页 ──

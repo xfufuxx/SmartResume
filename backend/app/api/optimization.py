@@ -23,6 +23,7 @@ from app.schemas.optimization import (
 )
 from app.services.agent_optimizer import analyze_match, optimize_resume, generate_changes_description
 from app.services.change_review import apply_decisions, compute_changes
+from app.services.optimized_record_cleanup import detach_optimized_record_refs
 from app.services.task_recovery import OPTIMIZE_STALE_SECONDS, is_stale
 from app.services.storage import storage
 from app.services.pdf_styler import _generate_styled_or_fallback
@@ -248,6 +249,8 @@ async def permanent_delete(
         raise HTTPException(status_code=404, detail="记录不存在")
     if record.pdf_url:
         await storage.delete(record.pdf_url)
+    # 先解除 feedbacks / batch_optimizations / 子记录 parent 对该记录的引用，再删除，避免 FK 违规 500
+    await detach_optimized_record_refs(db, [record.id])
     await db.delete(record)
     await db.commit()
     return {"detail": "已永久删除"}
@@ -444,6 +447,7 @@ async def submit_satisfaction(
 
 _ALLOWED_TEMPLATES = {
     "professional", "simple", "modern", "compact", "elegant", "dark", "fresh", "classic",
+    "ocean", "sunset", "violet", "academic",
 }
 
 
@@ -480,7 +484,7 @@ async def update_optimized_content(
 @router.post("/{opt_id}/reexport")
 async def reexport_pdf(
     opt_id: str,
-    template: str = Query("professional", description="模板: professional/simple/modern/compact/elegant/dark/fresh/classic"),
+    template: str = Query("professional", description="模板: professional/simple/modern/compact/elegant/dark/fresh/classic/ocean/sunset/violet/academic"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
@@ -1268,8 +1272,14 @@ _MOCK_RESUME_DATA = {
     "projects": [
         {
             "name": "智能简历优化系统",
-            "description": "基于 AI 的简历分析与优化平台，支持多种格式导入、智能内容优化、多模板 PDF 导出。",
-            "tech": ["FastAPI", "React", "Playwright", "SQLAlchemy"],
+            "role": "核心开发",
+            "start": "2023-03",
+            "end": "2023.12",
+            "points": [
+                "基于 AI 的简历分析与优化平台，支持多种格式导入、智能内容优化、多模板 PDF 导出",
+                "使用 Playwright + Chromium 渲染 PDF，解决 Windows 无 GTK3 依赖问题",
+                "设计批量优化任务队列，单任务平均耗时从 45s 降至 18s",
+            ],
         },
     ],
 }

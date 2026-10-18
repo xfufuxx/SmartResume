@@ -187,8 +187,13 @@ def resume_plain_text(parsed_json: dict | None, raw_text: str | None = None, tit
         for proj in projects:
             if not isinstance(proj, dict):
                 continue
-            if proj.get("name"):
-                lines.append(str(proj["name"]))
+            period = " - ".join(x for x in [str(proj.get("start") or ""), str(proj.get("end") or "")] if x)
+            head = " · ".join(x for x in [str(proj.get("name") or ""), str(proj.get("role") or ""), period] if x)
+            if head:
+                lines.append(head)
+            for point in proj.get("points") or []:
+                if point:
+                    lines.append(f"- {point}")
             if proj.get("description"):
                 lines.append(str(proj["description"]))
             if proj.get("tech"):

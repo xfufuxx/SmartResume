@@ -37,6 +37,14 @@ _HR_EMAIL_RE = re.compile(
 # 明显不是 HR 邮箱的发件域（示例性黑名单，可按需扩展）
 _EXCLUDED_EMAIL_KEYWORDS = ("example.com", "test.com", "noreply", "no-reply", "donotreply")
 
+# SMTP 认证失败时的可执行提示（写入 delivery_events / delivery_status，供前端展示）。
+# QQ/163 等邮箱需专用「授权码」（设置→账户→IMAP/SMTP 服务生成），非账户登录密码。
+_SMTP_AUTH_HINT = (
+    "SMTP 认证失败：授权码无效/已失效，或未开启 IMAP/SMTP 服务。"
+    "请在邮箱「设置→账户→IMAP/SMTP 服务」开启并重新生成授权码，"
+    "更新 backend/.env 的 SMTP_PASSWORD 后重试（QQ 需专用授权码，非账户密码）。"
+)
+
 
 def is_valid_email(email: str) -> bool:
     return bool(email and _EMAIL_RE.match(email.strip()))
@@ -138,15 +146,29 @@ def _send_email_with_attachments_sync(
 
     try:
         server = smtplib.SMTP(settings.SMTP_HOST, settings.SMTP_PORT, timeout=15)
+        server.ehlo()
         server.starttls()
+        server.ehlo()  # STARTTLS 后服务端能力列表重置，必须重新 EHLO（否则 login 用的是 TLS 前的旧能力）
         server.login(settings.SMTP_USER, settings.SMTP_PASSWORD)
         refused = server.send_message(msg, from_addr=from_addr, to_addrs=[to_email])
-        quit_code = server.noop()
         server.quit()
         if refused:
             return False, f"对方拒收: {refused}"
         msg_id = msg.get("Message-ID")
         return True, (msg_id.strip("<>") if isinstance(msg_id, str) else None) or "sent"
+    except smtplib.SMTPAuthenticationError as e:  # 535：授权码无效/服务未开启/账户异常
+        logger.error("SMTP 认证失败 To=%s: %s", to_email, e)
+        return False, _SMTP_AUTH_HINT
+    except smtplib.SMTPServerDisconnected as e:
+        # QQ 等在授权码无效/频率限制时常直接断连而非返回 535，按认证类问题提示
+        logger.error("SMTP 连接被对端关闭 To=%s: %s", to_email, e)
+        return False, _SMTP_AUTH_HINT
+    except smtplib.SMTPConnectError as e:
+        logger.error("SMTP 连接失败 To=%s: %s", to_email, e)
+        return False, f"无法连接 SMTP 服务器 {settings.SMTP_HOST}:{settings.SMTP_PORT}（{e}）"
+    except (smtplib.SMTPException, OSError, TimeoutError) as e:  # noqa: BLE001
+        logger.error("SMTP 发送异常 To=%s: %s", to_email, e)
+        return False, f"SMTP 发送异常：{e}"
     except Exception as e:  # noqa: BLE001 —— 发送失败需落事件而非抛断流程
         logger.error("投递邮件发送失败 To=%s: %s", to_email, e)
         return False, str(e)

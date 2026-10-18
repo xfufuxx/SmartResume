@@ -523,14 +523,17 @@ export default function BatchOptimizePage() {
           >
             查看
           </Button>
-          <Dropdown menu={{ items: getActionItems(record) }} placement="bottomRight" arrow>
-            <Button
-              type="text"
-              icon={<MoreOutlined />}
-              onClick={(e) => e.stopPropagation()}
-              style={{ color: 'var(--text-tertiary)' }}
-            />
-          </Dropdown>
+          {/* 菜单经 Portal 渲染，点击仍沿 React 树冒泡到 tr 的 onRow onClick（误开抽屉），容器拦截 */}
+          <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+            <Dropdown menu={{ items: getActionItems(record) }} placement="bottomRight" arrow>
+              <Button
+                type="text"
+                icon={<MoreOutlined />}
+                onClick={(e) => e.stopPropagation()}
+                style={{ color: 'var(--text-tertiary)' }}
+              />
+            </Dropdown>
+          </span>
         </Space>
       ),
     },

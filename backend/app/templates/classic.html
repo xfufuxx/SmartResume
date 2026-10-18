@@ -225,7 +225,12 @@
     <div class="section-title">项目经历</div>
     {% for proj in resume.projects %}
     <div class="proj-item">
-      <div class="proj-name">{{ proj.name }}</div>
+      <div class="proj-name">{{ proj.name }}{% if proj.role %} · {{ proj.role }}{% endif %}{% if proj.start or proj.end %}（{{ proj.start }} - {{ proj.end }}）{% endif %}</div>
+      {% if proj.points %}
+      <ul class="exp-points">
+        {% for point in proj.points %}<li>{{ point }}</li>{% endfor %}
+      </ul>
+      {% endif %}
       {% if proj.description %}<div class="proj-desc">{{ proj.description }}</div>{% endif %}
       {% if proj.tech %}<div class="proj-tech">{{ proj.tech | join(' · ') }}</div>{% endif %}
     </div>

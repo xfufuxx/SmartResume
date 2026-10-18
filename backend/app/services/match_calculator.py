@@ -42,6 +42,7 @@ def _check_quantification(resume: dict) -> bool:
         all_text_parts.extend(exp.get("points", []) or [])
         all_text_parts.append(exp.get("description", "") or "")
     for proj in projects:
+        all_text_parts.extend(proj.get("points", []) or [])
         all_text_parts.append(proj.get("description", "") or "")
 
     all_text = " ".join(all_text_parts)

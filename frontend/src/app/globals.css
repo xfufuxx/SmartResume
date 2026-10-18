@@ -662,6 +662,22 @@ body {
   font-weight: 600 !important;
 }
 
+/* ── 面试押题题卡：antd Card 标题默认单行省略（nowrap+ellipsis），长题目会被截断 ── */
+.iq-question-card .ant-card-head-title {
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+}
+
+.iq-question-card .ant-card-head-wrapper {
+  align-items: flex-start;
+}
+
+/* 题目换行后与序号/收藏按钮的间距仍由组件内 flex gap 控制，此处仅兜底行高 */
+.iq-question-card .ant-card-head-title > div {
+  line-height: 1.6;
+}
+
 .ant-card-body {
   padding: 20px !important;
 }
@@ -1190,6 +1206,7 @@ body {
   align-items: center;
   gap: 10px;
   padding: 16px 16px 10px;
+  flex-shrink: 0;
 }
 
 .wb-brand-logo {
@@ -1270,6 +1287,32 @@ body {
   display: flex;
   align-items: center;
   gap: 10px;
+  flex-shrink: 0;
+}
+
+/* 侧边栏导航滚动区：视口高度不足时，仅此区域出现滚动条（overflow-y:auto，
+   内容不溢出则不显示），品牌区与账户信息固定不滚动，不影响整体布局与视觉。 */
+.wb-nav-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--text-tertiary) transparent;
+}
+.wb-nav-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.wb-nav-scroll::-webkit-scrollbar-thumb {
+  background: var(--text-tertiary);
+  border-radius: 3px;
+}
+.wb-nav-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(120, 120, 128, 0.55);
+}
+.wb-nav-scroll::-webkit-scrollbar-track {
+  background: transparent;
 }
 
 .wb-hamburger {
@@ -1502,6 +1545,22 @@ body {
 
 .opt-compare-card.is-optimized {
   border-color: rgba(0, 122, 255, 0.3) !important;
+}
+
+/* 消息中心深链定位：点击「简历优化完成」消息跳到历史页后，高亮对应记录卡片 */
+.opt-card-highlight {
+  outline: 2px solid var(--primary-500);
+  outline-offset: 2px;
+  animation: opt-card-pulse 1.6s ease-in-out 3;
+}
+
+@keyframes opt-card-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(0, 122, 255, 0); }
+  50% { box-shadow: 0 0 0 6px rgba(0, 122, 255, 0.16); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opt-card-highlight { animation: none; }
 }
 
 .opt-card-title {
@@ -2114,6 +2173,82 @@ body {
   border-radius: 6px;
   background: var(--bg-card);
   color: var(--text-secondary);
+}
+
+.opt-mini-chip.is-primary {
+  background: var(--primary-50);
+  color: var(--primary-600);
+}
+
+/* ── 使用职位描述：标题行 ── */
+.opt-switch-main {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.opt-switch-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  background: var(--primary-50);
+  color: var(--primary-500);
+  font-size: 15px;
+}
+
+/* ── 使用职位描述：JD 上传区 ── */
+.opt-jd-drop .ant-upload-drag {
+  padding: 14px !important;
+  border-width: 1px !important;
+  border-style: dashed !important;
+  border-radius: var(--radius-md) !important;
+  background: var(--bg-card) !important;
+}
+
+.opt-jd-drop.ant-upload-wrapper .ant-upload-drag:hover {
+  border-color: var(--primary-500) !important;
+}
+
+.opt-jd-drop-inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  padding: 8px 0;
+}
+
+.opt-jd-drop-icon {
+  font-size: 22px;
+  color: var(--primary-500);
+  line-height: 1;
+}
+
+.opt-jd-drop-title {
+  font-size: 12.5px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.opt-jd-drop-sub {
+  font-size: 11px;
+  color: var(--text-tertiary);
+}
+
+/* ── 使用职位描述：已识别技能 ── */
+.opt-job-skills {
+  margin-top: 10px;
+}
+
+.opt-job-skills-label {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 11px;
+  color: var(--text-tertiary);
 }
 
 /* ── 简历分析指标 ── */

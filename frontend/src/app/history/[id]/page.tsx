@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react'
 import {
   Button, Card, Typography, Spin, message, Space,
-  Row, Col, Divider, Tag, Progress, Empty, Select,
+  Row, Col, Divider, Tag, Progress, Empty,
 } from 'antd'
 import {
   DownloadOutlined, EditOutlined, SaveOutlined, CloseOutlined, FileSyncOutlined,
@@ -16,17 +16,8 @@ import type { OptimizeResult, ResumeParseResult } from '@/types'
 import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
 import ResumeEditor from '@/components/ResumeEditor'
-
-const TEMPLATES = [
-  { value: 'professional', label: '专业商务' },
-  { value: 'simple', label: '简洁黑白' },
-  { value: 'modern', label: '现代分栏' },
-  { value: 'compact', label: '紧凑一页' },
-  { value: 'elegant', label: '雅致衬线' },
-  { value: 'classic', label: '经典排版' },
-  { value: 'fresh', label: '清新蓝' },
-  { value: 'dark', label: '深色质感' },
-]
+import TemplateSelector from '@/components/TemplateSelector'
+import { TEMPLATE_OPTIONS, TEMPLATE_LABELS, DEFAULT_TEMPLATE } from '@/lib/templates'
 
 function ExperienceDiff({ original, optimized }: { original: ResumeParseResult; optimized: ResumeParseResult }) {
   const origExps = original.experience || []
@@ -101,6 +92,63 @@ function SkillsDiff({ original, optimized }: { original: ResumeParseResult; opti
   )
 }
 
+/** 项目条目公共渲染：兼容 points 形状（name/role/start/end/points）与旧形状（description/tech） */
+function ProjectFields({ proj }: { proj: ResumeParseResult['projects'][number] }) {
+  const period = [proj.start, proj.end].filter(Boolean).join(' - ')
+  return (
+    <>
+      <Typography.Text strong>{proj.name}</Typography.Text>
+      {(proj.role || period) && (
+        <div style={{ color: 'var(--text-tertiary)', fontSize: 12 }}>
+          {[proj.role, period].filter(Boolean).join(' | ')}
+        </div>
+      )}
+      {(proj.points || []).length > 0 && (
+        <ul style={{ paddingLeft: 20, marginTop: 4, marginBottom: 0 }}>
+          {(proj.points || []).map((p, j) => <li key={j} style={{ fontSize: 13 }}>{p}</li>)}
+        </ul>
+      )}
+      {proj.description && <div style={{ marginTop: 4 }}>{proj.description}</div>}
+      {proj.tech && proj.tech.length > 0 && (
+        <div style={{ marginTop: 4 }}>
+          <Space wrap>{proj.tech.map((t) => <Tag key={t}>{t}</Tag>)}</Space>
+        </div>
+      )}
+    </>
+  )
+}
+
+function ProjectDiff({ original, optimized }: { original: ResumeParseResult; optimized: ResumeParseResult }) {
+  const origProjs = original.projects || []
+  const optProjs = optimized.projects || []
+  const maxLen = Math.max(origProjs.length, optProjs.length)
+  if (maxLen === 0) return null
+
+  return (
+    <div>
+      <Typography.Title level={5}>项目经历</Typography.Title>
+      {Array.from({ length: maxLen }).map((_, i) => (
+        <Row gutter={16} key={i} style={{ marginBottom: 16 }}>
+          <Col xs={24} md={12}>
+            {origProjs[i] ? (
+              <Card size="small" title={<span style={{ color: 'var(--text-tertiary)' }}>优化前</span>} style={{ background: 'var(--gray-50)' }}>
+                <ProjectFields proj={origProjs[i]} />
+              </Card>
+            ) : <Empty description="无" />}
+          </Col>
+          <Col xs={24} md={12}>
+            {optProjs[i] ? (
+              <Card size="small" title={<span style={{ color: 'var(--primary-600)' }}>优化后</span>} style={{ borderColor: 'var(--primary-600)' }}>
+                <ProjectFields proj={optProjs[i]} />
+              </Card>
+            ) : <Empty description="无" />}
+          </Col>
+        </Row>
+      ))}
+    </div>
+  )
+}
+
 export default function OptimizationDetailPage() {
   const router = useRouter()
   const params = useParams()
@@ -115,7 +163,8 @@ export default function OptimizationDetailPage() {
   const [draft, setDraft] = useState<ResumeParseResult | null>(null)
   const [saving, setSaving] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [template, setTemplate] = useState('professional')
+  const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
+  const [showTemplateModal, setShowTemplateModal] = useState(false)
 
   useEffect(() => {
     const t = getToken()
@@ -153,7 +202,10 @@ export default function OptimizationDetailPage() {
       experience: (draft.experience || [])
         .filter((e) => (e.title || e.company))
         .map((e) => ({ ...e, points: (e.points || []).map((p) => p.trim()).filter(Boolean) })),
-      projects: (draft.projects || []).filter((p) => p.name),
+      projects: (draft.projects || [])
+        .filter((p) => p.name)
+        // points 形状：去空白行；旧形状（description/tech）原样保留，不注入空 points
+        .map((p) => (p.points ? { ...p, points: p.points.map((x) => x.trim()).filter(Boolean) } : p)),
       education: (draft.education || []).filter((e) => e.school),
       skills: (draft.skills || []).map((s) => s.trim()).filter(Boolean),
     }
@@ -249,12 +301,12 @@ export default function OptimizationDetailPage() {
                       保存修改
                     </Button>
                     <Button icon={<CloseOutlined />} onClick={() => setEditing(false)}>取消</Button>
-                    <Select
-                      style={{ width: 130 }}
-                      value={template}
-                      onChange={setTemplate}
-                      options={TEMPLATES}
-                    />
+                    <Button
+                      icon={TEMPLATE_OPTIONS.find((o) => o.key === template)?.icon}
+                      onClick={() => setShowTemplateModal(true)}
+                    >
+                      {TEMPLATE_LABELS[template] || '选择模板'}
+                    </Button>
                     <Button
                       icon={<FileSyncOutlined />}
                       loading={exporting}
@@ -345,21 +397,10 @@ export default function OptimizationDetailPage() {
 
             <SkillsDiff original={original || { experience: [], skills: [], projects: [], personal_info: {}, summary: '', education: [] }} optimized={optimized} />
 
-            {optimized.projects && optimized.projects.length > 0 && (
+            {((original?.projects?.length || 0) + (optimized.projects?.length || 0)) > 0 && (
               <>
                 <Divider />
-                <Typography.Title level={5} className="app-section-title">项目经历</Typography.Title>
-                {optimized.projects.map((proj, i) => (
-                  <Card size="small" key={i} style={{ marginBottom: 8 }}>
-                    <Typography.Text strong>{proj.name}</Typography.Text>
-                    {proj.description && <div style={{ marginTop: 4 }}>{proj.description}</div>}
-                    {proj.tech && proj.tech.length > 0 && (
-                      <div style={{ marginTop: 4 }}>
-                        <Space wrap>{proj.tech.map((t) => <Tag key={t}>{t}</Tag>)}</Space>
-                      </div>
-                    )}
-                  </Card>
-                ))}
+                <ProjectDiff original={original || { experience: [], skills: [], projects: [], personal_info: {}, summary: '', education: [] }} optimized={optimized} />
               </>
             )}
 
@@ -381,6 +422,13 @@ export default function OptimizationDetailPage() {
           </Card>
         )}
       </div>
+      <TemplateSelector
+        open={showTemplateModal}
+        onClose={() => setShowTemplateModal(false)}
+        selected={template}
+        onSelect={setTemplate}
+        options={TEMPLATE_OPTIONS}
+      />
     </AppLayout>
   )
 }

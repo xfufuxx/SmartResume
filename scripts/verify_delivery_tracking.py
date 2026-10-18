@@ -1,6 +1,8 @@
 """阶段2 回归：回执闭环 / 批量投递 / 邮件模板 / suppression 名单 / 撤回告知。
 
-运行前提：dry-run 后端已在 :8000 运行（SMTP 置空启动，绝不真实发信），
+运行前提：后端已在 :8000 运行。支持两种模式——
+  · dry-run：SMTP_USER/SMTP_PASSWORD 置空启动，发送自动 dry-run，绝不真实发信；
+  · 真实 SMTP：已配置有效授权码时，本脚本会真实发信（撤回告知断言接受 "dry-run" 或 "sent"）。
 Redis 在 :6379，Postgres 就绪。
 
 用法：backend/.venv 的 python scripts/verify_delivery_tracking.py
@@ -245,11 +247,11 @@ def main() -> int:
           and app1_by_src.get("<reply-1@echo>") == "replied",
           json.dumps(app1_by_src, ensure_ascii=False)[:200])
 
-    # ── 7. 撤回告知邮件（dry-run 模式 → withdrawal_email=dry-run） ──
+    # ── 7. 撤回告知邮件（dry-run 模式→"dry-run"；真实 SMTP 已配置→"sent"） ──
     print("== 撤回告知 ==")
     r = req("DELETE", f"/api/applications/{app_d_id}", token=TOKEN) if app_d_id else None
-    check("撤回成功且撤回告知 dry-run",
-          r is not None and r.status_code == 200 and r.json().get("withdrawal_email") == "dry-run",
+    check("撤回成功且撤回告知已发出(dry-run 或 sent)",
+          r is not None and r.status_code == 200 and r.json().get("withdrawal_email") in ("dry-run", "sent"),
           r.text[:200] if r is not None else "app_d_id 缺失")
 
     # 清理批量投递产生的记录（保持演示库干净）：撤回 A/B/C 与 manual D

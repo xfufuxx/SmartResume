@@ -13,7 +13,7 @@ logger = logging.getLogger(__name__)
 # 4 种 PDF 策略模板
 STRATEGY_TEMPLATES = {"jinja2", "html", "latex", "preserve"}
 # Jinja2 风格模板（映射到 templates/ 目录下的 .html 文件）
-JINJA2_STYLE_TEMPLATES = {"professional", "simple", "modern", "compact", "elegant", "dark", "fresh", "classic"}
+JINJA2_STYLE_TEMPLATES = {"professional", "simple", "modern", "compact", "elegant", "dark", "fresh", "classic", "ocean", "sunset", "violet", "academic"}
 # 所有可用的模板选项
 ALL_TEMPLATES = STRATEGY_TEMPLATES | JINJA2_STYLE_TEMPLATES
 

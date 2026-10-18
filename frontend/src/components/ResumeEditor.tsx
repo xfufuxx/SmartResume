@@ -183,7 +183,7 @@ export default function ResumeEditor({ value, onChange, personalInfo }: ResumeEd
             type="link"
             size="small"
             icon={<PlusOutlined />}
-            onClick={() => patch({ projects: [...(value.projects || []), { name: '', description: '', tech: [] }] })}
+            onClick={() => patch({ projects: [...(value.projects || []), { name: '', role: '', start: '', end: '', points: [''] }] })}
           >
             添加
           </Button>
@@ -207,22 +207,78 @@ export default function ResumeEditor({ value, onChange, personalInfo }: ResumeEd
                   onClick={() => patch({ projects: (value.projects || []).filter((_, k) => k !== i) })}
                 />
               </Space>
-              <TextArea
-                rows={2}
-                placeholder="项目描述：做了什么、解决了什么问题、产出是什么"
-                value={proj.description || ''}
-                onChange={(e) => updateProject(i, { description: e.target.value })}
-              />
-              <div style={{ marginTop: 8 }}>
-                <Select
-                  mode="tags"
-                  style={{ width: '100%' }}
-                  placeholder="技术栈"
-                  value={proj.tech || []}
-                  onChange={(v) => updateProject(i, { tech: v as string[] })}
-                  tokenSeparators={[',', '，', '、']}
+              <Space wrap style={{ marginBottom: 8 }}>
+                <Input
+                  style={{ width: 160 }}
+                  placeholder="角色，如：后端负责人"
+                  value={proj.role || ''}
+                  onChange={(e) => updateProject(i, { role: e.target.value })}
                 />
-              </div>
+                <Input
+                  style={{ width: 120 }}
+                  placeholder="开始 2022.03"
+                  value={proj.start || ''}
+                  onChange={(e) => updateProject(i, { start: e.target.value })}
+                />
+                <Input
+                  style={{ width: 120 }}
+                  placeholder="结束 2023.08"
+                  value={proj.end || ''}
+                  onChange={(e) => updateProject(i, { end: e.target.value })}
+                />
+              </Space>
+
+              <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginBottom: 6 }}>项目要点（建议带数字）</div>
+              {(proj.points || []).map((p, j) => (
+                <div key={j} style={{ display: 'flex', gap: 6, marginBottom: 6 }}>
+                  <TextArea
+                    autoSize={{ minRows: 1, maxRows: 4 }}
+                    value={p}
+                    onChange={(e) => {
+                      const points = [...(proj.points || [])]
+                      points[j] = e.target.value
+                      updateProject(i, { points })
+                    }}
+                    placeholder="例如：设计接口服务与数据库模型，支撑日均 200 万条数据处理"
+                  />
+                  <Button
+                    type="text"
+                    icon={<MinusCircleOutlined />}
+                    onClick={() => updateProject(i, { points: (proj.points || []).filter((_, k) => k !== j) })}
+                  />
+                </div>
+              ))}
+              <Button
+                type="dashed"
+                size="small"
+                block
+                icon={<PlusOutlined />}
+                onClick={() => updateProject(i, { points: [...(proj.points || []), ''] })}
+              >
+                添加要点
+              </Button>
+
+              {/* 旧形状数据兼容：存在 description/tech 时才展示，避免污染新形状 */}
+              {(proj.description !== undefined || proj.tech !== undefined) && (
+                <div style={{ marginTop: 8 }}>
+                  <TextArea
+                    rows={2}
+                    placeholder="项目描述：做了什么、解决了什么问题、产出是什么"
+                    value={proj.description || ''}
+                    onChange={(e) => updateProject(i, { description: e.target.value })}
+                  />
+                  <div style={{ marginTop: 8 }}>
+                    <Select
+                      mode="tags"
+                      style={{ width: '100%' }}
+                      placeholder="技术栈"
+                      value={proj.tech || []}
+                      onChange={(v) => updateProject(i, { tech: v as string[] })}
+                      tokenSeparators={[',', '，', '、']}
+                    />
+                  </div>
+                </div>
+              )}
             </div>
           ))
         ) : (

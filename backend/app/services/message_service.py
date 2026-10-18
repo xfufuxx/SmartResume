@@ -65,6 +65,18 @@ async def mark_as_read(db: AsyncSession, message_id: str, user_id: str) -> bool:
     return True
 
 
+async def mark_as_unread(db: AsyncSession, message_id: str, user_id: str) -> bool:
+    result = await db.execute(
+        select(Message).where(Message.id == message_id, Message.user_id == user_id)
+    )
+    msg = result.scalar_one_or_none()
+    if not msg:
+        return False
+    msg.is_read = False
+    await db.flush()
+    return True
+
+
 async def mark_all_read(db: AsyncSession, user_id: str):
     result = await db.execute(
         select(Message).where(Message.user_id == user_id, Message.is_read == False)

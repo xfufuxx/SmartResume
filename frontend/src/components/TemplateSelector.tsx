@@ -37,8 +37,8 @@ function MiniPreview({ preview }: { preview: TemplateOption['preview'] }) {
     <div
       style={{
         width: '100%',
-        height: 120,
-        borderRadius: 12,
+        height: 84,
+        borderRadius: 10,
         overflow: 'hidden',
         border: '1px solid rgba(0, 0, 0, 0.06)',
         backgroundColor: preview.bg,
@@ -50,7 +50,7 @@ function MiniPreview({ preview }: { preview: TemplateOption['preview'] }) {
       {/* 模拟布局 */}
       {preview.layout === 'banner' && (
         <>
-          <div style={{ height: 28, background: `linear-gradient(135deg, ${preview.primary}, ${preview.secondary})` }} />
+          <div style={{ height: 24, background: `linear-gradient(135deg, ${preview.primary}, ${preview.secondary})` }} />
           <div style={{ flex: 1, display: 'flex' }}>
             <div style={{ width: '35%', background: '#f5f5f5', padding: 4 }}>
               <div style={{ height: 4, width: '60%', background: preview.primary, borderRadius: 2, marginBottom: 4 }} />
@@ -125,17 +125,17 @@ export default function TemplateSelector({
       onCancel={onClose}
       footer={null}
       width={800}
-      styles={{ body: { padding: '16px 24px 24px' } }}
+      styles={{ body: { padding: '14px 20px 20px', maxHeight: '76vh', overflowY: 'auto' } }}
     >
-      <Typography.Paragraph style={{ marginBottom: 20, color: '#6B7280', fontSize: 14 }}>
-        选择一种模板风格，生成优化后的简历将使用该样式排版。点击卡片即可选中。
+      <Typography.Paragraph style={{ marginBottom: 16, color: '#6B7280', fontSize: 13 }}>
+        共 {options.length} 种风格，点击卡片即可选中（内容较多时可滚动查看全部）。
       </Typography.Paragraph>
 
-      <Row gutter={[16, 16]}>
+      <Row gutter={[12, 12]}>
         {options.map((opt) => {
           const isSelected = selected === opt.key
           return (
-            <Col xs={24} sm={12} md={8} key={opt.key}>
+            <Col xs={24} sm={12} md={6} key={opt.key}>
               <Card
                 hoverable
                 size="small"
@@ -153,11 +153,11 @@ export default function TemplateSelector({
                     : '0 4px 12px rgba(0, 0, 0, 0.06)',
                   transition: 'background 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), border-color 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s cubic-bezier(0.34, 1.56, 0.64, 1)',
                 }}
-                styles={{ body: { padding: 12 } }}
+                styles={{ body: { padding: 10 } }}
                 onClick={() => { onSelect(opt.key); onClose() }}
               >
                 <MiniPreview preview={opt.preview} />
-                <div style={{ marginTop: 10, display: 'flex', alignItems: 'center', gap: 8 }}>
+                <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{
                     width: 28, height: 28, borderRadius: 7,
                     background: isSelected ? opt.preview.primary : '#E5E7EB',
@@ -180,8 +180,9 @@ export default function TemplateSelector({
                   )}
                 </div>
                 <Typography.Text style={{
-                  fontSize: 11, display: 'block', marginTop: 6,
-                  color: '#6B7280', lineHeight: 1.5,
+                  fontSize: 10, display: '-webkit-box', marginTop: 4,
+                  color: '#6B7280', lineHeight: 1.35,
+                  WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                 }}>
                   {opt.preview.desc}
                 </Typography.Text>

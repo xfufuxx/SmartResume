@@ -427,8 +427,11 @@ def _replace_projects(doc: Document, section: Section, optimized: dict):
             target_para = doc.paragraphs[p_info.paragraph_index]
             if j == 0:
                 _replace_paragraph_text(target_para, opt_proj.get("name", ""), p_info.runs)
-            elif j == 1 and opt_proj.get("description"):
-                _replace_paragraph_text(target_para, opt_proj["description"], p_info.runs)
+            elif j == 1:
+                # 第二段兼容两种形状：旧 description 优先，回退 points 拼接（run.text 的 \n 会转为换行）
+                fallback = opt_proj.get("description") or "\n".join(opt_proj.get("points") or [])
+                if fallback:
+                    _replace_paragraph_text(target_para, fallback, p_info.runs)
             elif j == 2 and opt_proj.get("tech"):
                 tech_text = f"技术栈：{', '.join(opt_proj['tech'])}"
                 _replace_paragraph_text(target_para, tech_text, p_info.runs)

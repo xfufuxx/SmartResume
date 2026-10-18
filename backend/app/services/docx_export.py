@@ -84,6 +84,15 @@ def build_docx_from_resume_json(data: dict) -> bytes:
             p = doc.add_paragraph()
             run = p.add_run(proj.get("name", ""))
             run.bold = True
+            role = proj.get("role", "")
+            period = f"{proj.get('start', '')} - {proj.get('end', '')}"
+            if role:
+                p.add_run(f"    （{role}）")
+            if period.strip(" -"):
+                p.add_run(f"    （{period}）")
+            for point in proj.get("points") or []:
+                if point:
+                    doc.add_paragraph(str(point), style="List Bullet")
             if proj.get("description"):
                 doc.add_paragraph(proj["description"])
             tech = proj.get("tech") or []

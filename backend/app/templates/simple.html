@@ -79,7 +79,13 @@
   <h2>项目经历</h2>
   {% for proj in resume.projects %}
   <div class="exp-item">
-    <div class="exp-header">{{ proj.name }}</div>
+    <div class="exp-header">{{ proj.name }}{% if proj.role %} · {{ proj.role }}{% endif %}</div>
+    {% if proj.start or proj.end %}<div class="exp-sub">{{ proj.start }} — {{ proj.end }}</div>{% endif %}
+    {% if proj.points %}
+    <ul>
+      {% for point in proj.points %}<li>{{ point }}</li>{% endfor %}
+    </ul>
+    {% endif %}
     {% if proj.description %}<div class="summary">{{ proj.description }}</div>{% endif %}
     {% if proj.tech %}<div class="exp-sub">技术栈：{{ proj.tech | join('、') }}</div>{% endif %}
   </div>

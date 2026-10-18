@@ -6,7 +6,7 @@ from app.core.deps import get_current_user
 from app.models.user import User
 from app.schemas.user import MessageResponse
 from app.services.message_service import (
-    get_messages, mark_as_read, mark_all_read, delete_message, get_unread_count,
+    get_messages, mark_as_read, mark_as_unread, mark_all_read, delete_message, get_unread_count,
 )
 
 router = APIRouter()
@@ -52,6 +52,19 @@ async def read_message(
         raise HTTPException(status_code=404, detail="消息不存在")
     await db.commit()
     return {"detail": "已标记为已读"}
+
+
+@router.put("/{message_id}/unread")
+async def unread_message(
+    message_id: str,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    ok = await mark_as_unread(db, message_id, user.id)
+    if not ok:
+        raise HTTPException(status_code=404, detail="消息不存在")
+    await db.commit()
+    return {"detail": "已标记为未读"}
 
 
 @router.put("/read-all")

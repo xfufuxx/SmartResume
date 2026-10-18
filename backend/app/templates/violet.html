@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+  }
+  @page { margin: 0; size: A4; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
+    font-size: 10pt;
+    color: #3f3f46;
+    line-height: 1.6;
+    width: 210mm;
+    background: #faf5ff;
+  }
+
+  /* ── 左侧深紫侧栏 + 右侧内容 ── */
+  .main {
+    display: flex;
+    min-height: 297mm;
+  }
+
+  .sidebar {
+    width: 34%;
+    background: linear-gradient(180deg, #4c1d95 0%, #6d28d9 60%, #7c3aed 100%);
+    color: #fff;
+    padding: 28px 20px;
+  }
+  .sidebar .name {
+    font-size: 20pt;
+    font-weight: 700;
+    letter-spacing: 3px;
+    margin-bottom: 6px;
+  }
+  .sidebar .role-line {
+    font-size: 9.5pt;
+    color: rgba(255,255,255,0.75);
+    margin-bottom: 18px;
+    padding-bottom: 14px;
+    border-bottom: 1px solid rgba(255,255,255,0.2);
+  }
+  .sidebar h3 {
+    font-size: 10.5pt;
+    color: #ddd6fe;
+    font-weight: 700;
+    letter-spacing: 2px;
+    margin-bottom: 8px;
+    margin-top: 16px;
+  }
+  .sidebar h3:first-of-type { margin-top: 0; }
+  .sidebar .info-item {
+    font-size: 9pt;
+    color: rgba(255,255,255,0.85);
+    margin-bottom: 5px;
+    line-height: 1.6;
+    word-break: break-all;
+  }
+  .sidebar .skill-chip {
+    display: inline-block;
+    background: rgba(255,255,255,0.12);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: #ede9fe;
+    padding: 2px 9px;
+    border-radius: 999px;
+    margin: 2px 4px 2px 0;
+    font-size: 8.5pt;
+  }
+
+  .content {
+    flex: 1;
+    padding: 28px 24px;
+  }
+  .content h3 {
+    font-size: 13pt;
+    color: #4c1d95;
+    font-weight: 700;
+    letter-spacing: 2px;
+    margin-bottom: 10px;
+    margin-top: 18px;
+    padding-left: 10px;
+    border-left: 4px solid #7c3aed;
+  }
+  .content h3:first-child { margin-top: 0; }
+
+  .summary-text {
+    font-size: 9.5pt;
+    color: #52525b;
+    line-height: 1.8;
+    margin-bottom: 4px;
+  }
+
+  .exp-item {
+    margin-bottom: 12px;
+    padding-left: 14px;
+    border-left: 2px solid #ede9fe;
+    page-break-inside: avoid;
+  }
+  .exp-header {
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: #4c1d95;
+    margin-bottom: 2px;
+  }
+  .exp-sub {
+    font-size: 9pt;
+    color: #a1a1aa;
+    margin-bottom: 4px;
+  }
+  .exp-points {
+    list-style: none;
+    padding: 0;
+  }
+  .exp-points li {
+    font-size: 9pt;
+    color: #52525b;
+    line-height: 1.7;
+    margin-bottom: 3px;
+    padding-left: 13px;
+    position: relative;
+  }
+  .exp-points li::before {
+    content: "◆";
+    position: absolute;
+    left: 0;
+    font-size: 6pt;
+    top: 3px;
+    color: #7c3aed;
+  }
+
+  .edu-item {
+    margin-bottom: 8px;
+  }
+  .edu-item .school {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #4c1d95;
+  }
+  .edu-item .info {
+    font-size: 9pt;
+    color: #a1a1aa;
+  }
+
+  .proj-item {
+    margin-bottom: 10px;
+    padding: 10px 14px;
+    background: #f5f3ff;
+    border-radius: 8px;
+    border: 1px solid #ede9fe;
+  }
+  .proj-item .proj-name {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #4c1d95;
+  }
+  .proj-item .proj-desc {
+    font-size: 9pt;
+    color: #71717a;
+    margin: 3px 0;
+  }
+  .proj-item .proj-tech {
+    font-size: 8.5pt;
+    color: #7c3aed;
+  }
+
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+  <div class="main">
+    <div class="sidebar">
+      <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
+      <div class="role-line">
+        {% if resume.personal_info.email %}<div>{{ resume.personal_info.email }}</div>{% endif %}
+        {% if resume.personal_info.phone %}<div>{{ resume.personal_info.phone }}</div>{% endif %}
+        {% if resume.personal_info.address %}<div>{{ resume.personal_info.address }}</div>{% endif %}
+      </div>
+
+      {% if resume.skills %}
+      <h3>专业技能</h3>
+      <div>
+        {% for skill in resume.skills %}<span class="skill-chip">{{ skill }}</span>{% endfor %}
+      </div>
+      {% endif %}
+
+      {% if resume.education %}
+      <h3>教育背景</h3>
+      {% for edu in resume.education %}
+      <div class="info-item">
+        <strong>{{ edu.school }}</strong><br>
+        {{ edu.degree }}{% if edu.major %} · {{ edu.major }}{% endif %}<br>
+        {{ edu.start }} — {{ edu.end }}
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if resume.personal_info.github or resume.personal_info.linkedin %}
+      <h3>社交链接</h3>
+      {% if resume.personal_info.github %}<div class="info-item">GitHub: {{ resume.personal_info.github }}</div>{% endif %}
+      {% if resume.personal_info.linkedin %}<div class="info-item">LinkedIn: {{ resume.personal_info.linkedin }}</div>{% endif %}
+      {% endif %}
+    </div>
+
+    <div class="content">
+      {% if resume.summary %}
+      <h3>个人概述</h3>
+      <div class="summary-text">{{ resume.summary }}</div>
+      {% endif %}
+
+      {% if resume.experience %}
+      <h3>工作经历</h3>
+      {% for exp in resume.experience %}
+      <div class="exp-item">
+        <div class="exp-header">{{ exp.title }}{% if exp.company %} · {{ exp.company }}{% endif %}</div>
+        <div class="exp-sub">{{ exp.start }} — {{ exp.end }}</div>
+        {% if exp.points %}
+        <ul class="exp-points">
+          {% for point in exp.points %}<li>{{ point }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
+
+      {% if resume.projects %}
+      <h3>项目经历</h3>
+      {% for proj in resume.projects %}
+      <div class="proj-item">
+        <div class="proj-name">{{ proj.name }}{% if proj.role %} · {{ proj.role }}{% endif %}{% if proj.start or proj.end %}（{{ proj.start }} - {{ proj.end }}）{% endif %}</div>
+        {% if proj.points %}
+        <ul class="exp-points">
+          {% for point in proj.points %}<li>{{ point }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if proj.description %}<div class="proj-desc">{{ proj.description }}</div>{% endif %}
+        {% if proj.tech %}<div class="proj-tech">{{ proj.tech | join(' · ') }}</div>{% endif %}
+      </div>
+      {% endfor %}
+      {% endif %}
+    </div>
+  </div>
+</body>
+</html>

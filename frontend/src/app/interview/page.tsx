@@ -83,6 +83,7 @@ function QuestionCard({
   return (
     <Card
       size="small"
+      className="iq-question-card"
       style={{ marginBottom: 12, borderColor: item.is_bookmarked ? 'var(--primary-300)' : undefined }}
       title={
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>

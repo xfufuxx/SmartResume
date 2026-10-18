@@ -23,11 +23,22 @@ export default function CapabilityPage() {
   const [viewing, setViewing] = useState<CapabilityAssessment | null>(null)
   // 每次完成/删除测评后自增，驱动「测评记录」Tab 重新拉取
   const [recordsKey, setRecordsKey] = useState(0)
+  // 从消息中心深链进入（?record=<测评记录id>）：加载记录后自动打开该测评报告
+  const [pendingRecordId, setPendingRecordId] = useState<string | null>(null)
 
   useEffect(() => {
     const t = getToken()
     if (!t) { router.push('/login'); return }
     setToken(t)
+
+    try {
+      const rid = new URLSearchParams(window.location.search).get('record')
+      if (rid) {
+        setActiveTab('records')
+        setPendingRecordId(rid)
+        window.history.replaceState(null, '', '/capability')
+      }
+    } catch { /* ignore */ }
   }, [router])
 
   const handleAssessed = (assessment: CapabilityAssessment) => {
@@ -75,6 +86,8 @@ export default function CapabilityPage() {
               children: (
                 <RecordsTab
                   refreshKey={recordsKey}
+                  openRecordId={pendingRecordId}
+                  onOpened={() => setPendingRecordId(null)}
                   onView={(assessment) => setViewing(assessment)}
                   onDeleted={() => setRecordsKey((k) => k + 1)}
                   onGoAssess={() => setActiveTab('jobs')}

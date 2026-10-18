@@ -30,6 +30,7 @@ import { useRouter, usePathname } from 'next/navigation'
 import { clearAuth } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
 import { messages, search } from '@/lib/api'
+import { resolveMessageTarget } from '@/lib/message-nav'
 import type { SearchResult, MessageItem } from '@/types'
 
 interface AppLayoutProps {
@@ -297,9 +298,10 @@ const BELL_TYPE_LABEL: Record<string, string> = {
 
 /**
  * 右上角消息中心：点击展开下拉预览面板（最近消息 + 未读数），
- * 并提供「查看全部消息」跳转到统一消息中心 /messages。
- * 修复此前「点击无响应」：用 antd Dropdown 包裹，点击必然展开；
- * 所有消息管理（分类、标记、删除、设置、统计）统一收敛到 /messages 页面。
+ * 点击某条消息会按类型跳转到对应功能模块（测评/历史/评分/面试等，见 lib/message-nav），
+ * 无对应模块的类型（系统通知/活动通知）则进入统一消息中心 /messages；
+ * 面板底部「查看全部消息」始终进 /messages，消息管理（分类、标记、删除、统计）收敛在该页。
+ * 修复此前「点击无响应」：用 antd Dropdown 包裹，点击必然展开。
  */
 function MessageBell() {
   const router = useRouter()
@@ -354,6 +356,14 @@ function MessageBell() {
     }
   }, [])
 
+  /** 点击某条消息：标记已读 + 跳转到该消息对应的功能模块（无对应模块则进消息中心） */
+  const goMessage = useCallback((msg: MessageItem) => {
+    setOpen(false)
+    markRead(msg.id)
+    const target = resolveMessageTarget(msg)
+    router.push(target ? target.path : '/messages')
+  }, [markRead, router])
+
   const panel = (
     <div
       style={{
@@ -401,10 +411,7 @@ function MessageBell() {
           recent.map((msg) => (
             <div
               key={msg.id}
-              onClick={() => {
-                markRead(msg.id)
-                goAll()
-              }}
+              onClick={() => goMessage(msg)}
               style={{
                 display: 'flex',
                 gap: 10,
@@ -626,6 +633,7 @@ export default function AppLayout({
           <span className="wb-brand-name">智能简历</span>
         </div>
 
+        <nav className="wb-nav-scroll" aria-label="功能导航">
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
             <div className="wb-nav-group-label">{group.label}</div>
@@ -640,6 +648,7 @@ export default function AppLayout({
             })}
           </div>
         ))}
+        </nav>
 
         <div className="wb-sidebar-footer">
           <Avatar style={{ background: 'var(--primary-500)' }} size={32} icon={<UserOutlined />} />

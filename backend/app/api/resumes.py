@@ -21,6 +21,7 @@ from app.models.interview import InterviewSession
 from app.models.interview_track import InterviewTrack
 from app.schemas.resume import ResumeResponse, ResumeUploadResponse, ResumeCreateRequest, ResumeUpdateRequest, ResumeBatchDeleteRequest, ResumeStats, FavoriteRequest, ResumeVersionTree, VersionNode
 from app.services.resume_parser import parse_resume_from_bytes
+from app.services.optimized_record_cleanup import detach_optimized_record_refs
 from app.services.storage import storage, resign_file_url
 from app.services.text_formatter import format_resume_text
 
@@ -61,12 +62,18 @@ async def _purge_expired_trash(db: AsyncSession) -> int:
     # - batch_job_tasks：批量优化任务明细随源简历一并删除
     # - batch_optimizations.source_resume_id（NOT NULL）：批量优化历史随源简历一并删除
     # - optimized_resumes.resume_id：优化结果为派生数据，随源简历一并删除
+    #   删除前须先解除 feedbacks（NOT NULL）/ batch_job_tasks.optimization_record_id /
+    #   optimized_resumes.parent_record_id 对它们的引用，否则触发 ForeignKeyViolationError → 500
     # - interview_sessions.resume_id（可空）：会话本身保留，仅置空简历引用
     # - interview_tracks.resume_id（可空）：面试追踪是用户手动录入的记录，保留记录仅置空引用
     await db.execute(delete(BatchJobTask).where(BatchJobTask.batch_id.in_(
         select(BatchOptimization.id).where(BatchOptimization.source_resume_id.in_(expired_ids))
     )))
     await db.execute(delete(BatchOptimization).where(BatchOptimization.source_resume_id.in_(expired_ids)))
+    opt_ids = list((await db.execute(
+        select(OptimizedResume.id).where(OptimizedResume.resume_id.in_(expired_ids))
+    )).scalars().all())
+    await detach_optimized_record_refs(db, opt_ids)
     await db.execute(delete(OptimizedResume).where(OptimizedResume.resume_id.in_(expired_ids)))
     await db.execute(update(InterviewSession).where(InterviewSession.resume_id.in_(expired_ids)).values(resume_id=None))
     await db.execute(update(InterviewTrack).where(InterviewTrack.resume_id.in_(expired_ids)).values(resume_id=None))

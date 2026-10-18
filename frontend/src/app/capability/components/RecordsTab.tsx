@@ -16,6 +16,9 @@ const { Text, Paragraph } = Typography
 
 interface Props {
   refreshKey: number
+  /** 深链待打开的测评记录 id（消息中心点击「测评完成」消息带入），打开后经 onOpened 清除 */
+  openRecordId?: string | null
+  onOpened?: () => void
   onView: (assessment: CapabilityAssessment) => void
   onDeleted: () => void
   onGoAssess: () => void
@@ -28,7 +31,7 @@ const TREND_META: Record<string, { icon: React.ReactNode; color: string; label: 
 }
 
 /** 测评记录 Tab：岗位匹配排行 + 历史测评记录 */
-export default function RecordsTab({ refreshKey, onView, onDeleted, onGoAssess }: Props) {
+export default function RecordsTab({ refreshKey, openRecordId, onOpened, onView, onDeleted, onGoAssess }: Props) {
   const [loading, setLoading] = useState(true)
   const [records, setRecords] = useState<CapabilityAssessment[]>([])
   const [ranking, setRanking] = useState<CapabilityRankingItem[]>([])
@@ -50,6 +53,14 @@ export default function RecordsTab({ refreshKey, onView, onDeleted, onGoAssess }
   useEffect(() => {
     load()
   }, [load, refreshKey])
+
+  // 深链：记录加载完成后自动打开消息指定的测评报告；记录不存在（已删除）则仅停留在本 Tab
+  useEffect(() => {
+    if (loading || !openRecordId) return
+    const hit = records.find((r) => r.id === openRecordId)
+    if (hit) onView(hit)
+    onOpened?.()
+  }, [loading, openRecordId, records, onView, onOpened])
 
   const handleDelete = async (id: string) => {
     await capability.remove(id)

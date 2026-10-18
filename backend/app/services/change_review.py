@@ -300,8 +300,12 @@ def _exp_text(e: dict) -> str:
 def _proj_text(e: dict | None) -> str:
     if not e:
         return ""
-    tech = f"技术栈：{'、'.join(e.get('tech') or [])}" if e.get("tech") else ""
-    return "\n".join(x for x in [e.get("name") or "", e.get("description") or "", tech] if x)
+    period = " - ".join(x for x in [e.get("start") or "", e.get("end") or ""] if x)
+    head = " · ".join(x for x in [e.get("name") or "", e.get("role") or "", period] if x)
+    pts = "\n".join(f"· {p}" for p in (e.get("points") or []))
+    # 兼容旧形状（description/tech）；与 points 形状去重后拼接
+    legacy = "\n".join(x for x in [e.get("description") or "", f"技术栈：{'、'.join(e.get('tech') or [])}" if e.get("tech") else ""] if x)
+    return "\n".join(x for x in [head, pts, legacy] if x)
 
 
 def apply_decisions(original: dict, changes: list[dict], decisions: dict[str, dict]) -> tuple[dict, int, int]:

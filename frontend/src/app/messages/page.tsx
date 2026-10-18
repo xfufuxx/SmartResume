@@ -11,9 +11,11 @@ import {
   FileTextOutlined, TrophyOutlined, InfoCircleOutlined,
   SettingOutlined, RightOutlined, MoreOutlined, MessageOutlined,
   FileSearchOutlined, RocketOutlined, CloseCircleOutlined,
+  DownOutlined, UpOutlined, EyeInvisibleOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { messages } from '@/lib/api'
+import { resolveMessageTarget } from '@/lib/message-nav'
 import { getToken } from '@/lib/auth'
 import { formatDate } from '@/lib/utils'
 import type { MessageItem } from '@/types'
@@ -183,6 +185,16 @@ export default function MessagesPage() {
     }
   }, [selectedIds])
 
+  const handleMarkUnread = useCallback(async (id: string) => {
+    try {
+      await messages.markUnread(id)
+      setList((prev) => prev.map((m) => (m.id === id ? { ...m, is_read: false } : m)))
+      message.success('已标记为未读')
+    } catch {
+      message.error('操作失败')
+    }
+  }, [])
+
   const handleMarkAllRead = useCallback(async () => {
     try {
       await messages.markAllRead()
@@ -224,16 +236,24 @@ export default function MessagesPage() {
     }
   }, [list])
 
-  const handleOpen = useCallback((msg: MessageItem) => {
-    setExpandedId((prev) => (prev === msg.id ? null : msg.id))
+  const handleOpen = useCallback(async (msg: MessageItem) => {
+    // 先落已读状态（await 保证跳转导致组件卸载前请求已发出），再执行跳转
     if (!msg.is_read) {
-      messages.markRead(msg.id)
-        .then(() => {
-          setList((prev) => prev.map((m) => (m.id === msg.id ? { ...m, is_read: true } : m)))
-        })
-        .catch(() => { /* ignore */ })
+      try {
+        await messages.markRead(msg.id)
+        setList((prev) => prev.map((m) => (m.id === msg.id ? { ...m, is_read: true } : m)))
+      } catch {
+        /* 已读失败不阻断跳转 */
+      }
     }
-  }, [])
+    // 有目标模块的消息：点击跳转到对应功能页；无跳转类型的消息：就地展开/收起
+    const target = resolveMessageTarget(msg)
+    if (target) {
+      router.push(target.path)
+      return
+    }
+    setExpandedId((prev) => (prev === msg.id ? null : msg.id))
+  }, [router])
 
   const handleQuickAction = useCallback((key: string) => {
     if (key === 'mark-all') handleMarkAllRead()
@@ -352,13 +372,22 @@ export default function MessagesPage() {
                     const meta = MSG_TYPE_MAP[msg.msg_type] || MSG_TYPE_MAP.default
                     const expanded = expandedId === msg.id
                     const selected = selectedIds.has(msg.id)
+                    const target = resolveMessageTarget(msg)
                     const menuItems: MenuProps['items'] = [
+                      ...(target
+                        ? [{
+                            key: 'goto',
+                            label: `前往${target.label}`,
+                            icon: <RightOutlined />,
+                            onClick: () => router.push(target.path),
+                          }]
+                        : []),
                       {
-                        key: 'read',
-                        label: '标记为已读',
-                        icon: <CheckCircleOutlined />,
-                        disabled: msg.is_read,
-                        onClick: () => handleMarkRead(msg.id),
+                        key: 'unread',
+                        label: '标记为未读',
+                        icon: <EyeInvisibleOutlined />,
+                        disabled: !msg.is_read,
+                        onClick: () => handleMarkUnread(msg.id),
                       },
                       {
                         key: 'delete',
@@ -381,13 +410,16 @@ export default function MessagesPage() {
                         onClick={() => handleOpen(msg)}
                       >
                         <div style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-                          <Checkbox
-                            checked={selected}
-                            onChange={(e) => {
-                              e.stopPropagation()
-                              handleSelectOne(msg.id, e.target.checked)
-                            }}
-                          />
+                          {/* 勾选的 click 会冒泡到整行 onClick（误触发跳转），容器拦截 */}
+                          <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+                            <Checkbox
+                              checked={selected}
+                              onChange={(e) => {
+                                e.stopPropagation()
+                                handleSelectOne(msg.id, e.target.checked)
+                              }}
+                            />
+                          </span>
                           <div
                             style={{
                               width: 40,
@@ -441,42 +473,37 @@ export default function MessagesPage() {
                             >
                               {msg.content || '暂无内容'}
                             </div>
-                            {expanded && (
-                              <div style={{ marginTop: 12, display: 'flex', gap: 8 }}>
-                                <Button
-                                  size="small"
-                                  icon={<CheckCircleOutlined />}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleMarkRead(msg.id)
-                                  }}
-                                  disabled={msg.is_read}
-                                >
-                                  标记已读
-                                </Button>
-                                <Button
-                                  size="small"
-                                  danger
-                                  icon={<DeleteOutlined />}
-                                  onClick={(e) => {
-                                    e.stopPropagation()
-                                    handleDelete(msg.id)
-                                  }}
-                                >
-                                  删除
-                                </Button>
+                            {target && !expanded && (
+                              <div style={{ marginTop: 6, fontSize: 12, color: 'var(--primary-600)', display: 'flex', alignItems: 'center', gap: 4 }}>
+                                <span>点击前往：{target.label}</span>
+                                <RightOutlined style={{ fontSize: 10 }} />
                               </div>
                             )}
                           </div>
-                          <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
-                            <Button
-                              type="text"
-                              size="small"
-                              icon={<MoreOutlined />}
-                              onClick={(e) => e.stopPropagation()}
-                              style={{ color: 'var(--text-tertiary)' }}
-                            />
-                          </Dropdown>
+                          <Button
+                            type="text"
+                            size="small"
+                            icon={expanded ? <UpOutlined /> : <DownOutlined />}
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              setExpandedId((prev) => (prev === msg.id ? null : msg.id))
+                            }}
+                            style={{ color: 'var(--text-tertiary)' }}
+                            title={expanded ? '收起全文' : '展开全文'}
+                          />
+                          {/* 下拉菜单虽经 Portal 渲染到 body，但点击事件仍沿 React 树冒泡到
+                              整行的 onClick（会误触发跳转）；用此容器拦截冒泡 */}
+                          <span onClick={(e) => e.stopPropagation()} style={{ display: 'inline-flex' }}>
+                            <Dropdown menu={{ items: menuItems }} trigger={['click']} placement="bottomRight">
+                              <Button
+                                type="text"
+                                size="small"
+                                icon={<MoreOutlined />}
+                                onClick={(e) => e.stopPropagation()}
+                                style={{ color: 'var(--text-tertiary)' }}
+                              />
+                            </Dropdown>
+                          </span>
                         </div>
                       </div>
                     )

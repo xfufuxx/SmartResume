@@ -296,8 +296,14 @@ export interface ResumeParseResult {
   skills: string[]
   projects: Array<{
     name: string
+    /** 与 experience 同构的真实形状（解析/优化输出） */
+    role?: string
+    start?: string
+    end?: string
+    points?: string[]
+    /** 历史形状兼容（早期解析结果） */
     description?: string
-    tech: string[]
+    tech?: string[]
   }>
 }
 

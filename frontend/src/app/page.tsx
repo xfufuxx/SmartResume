@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
   Button, Upload, Card, Typography, Spin, message,
-  Tag, Space, List, Input, Modal, Empty, Switch, Select, Tooltip, Skeleton,
+  Tag, Space, List, Input, Modal, Empty, Switch, Select, Skeleton,
 } from 'antd'
 import {
   UploadOutlined, FileTextOutlined, PictureOutlined,
@@ -11,7 +11,7 @@ import {
   BulbOutlined, StarFilled, CrownOutlined,
   RocketOutlined, ExperimentOutlined, HighlightOutlined,
   FolderOpenOutlined, CheckCircleFilled, SwapOutlined,
-  AimOutlined, FormOutlined, StopOutlined,
+  AimOutlined, StopOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import {
@@ -22,8 +22,8 @@ import { getToken } from '@/lib/auth'
 import { useApiData } from '@/lib/useApi'
 import { formatDate } from '@/lib/utils'
 import AppLayout from '@/components/AppLayout'
+import { TEMPLATE_OPTIONS, DEFAULT_TEMPLATE } from '@/lib/templates'
 import TemplateSelector from '@/components/TemplateSelector'
-import type { TemplateOption } from '@/components/TemplateSelector'
 import ResumePreview from '@/components/optimize/ResumePreview'
 import MatchGauge, { levelMeta } from '@/components/optimize/MatchGauge'
 import MetricStat from '@/components/optimize/MetricStat'
@@ -32,17 +32,6 @@ import ChangeReviewModal from '@/components/optimize/ChangeReviewModal'
 import type {
   ResumeParseResult, JobParseResult, OptimizeResult, ResumeRecord, ResumeAnalysis,
 } from '@/types'
-
-const TEMPLATE_OPTIONS: TemplateOption[] = [
-  { key: 'professional', label: '专业分栏', icon: <FileTextOutlined />, preview: { primary: '#2c6fbb', secondary: '#1a5276', bg: '#fff', text: '#333', layout: 'dual', desc: '蓝色主题双栏布局，左侧联系信息右侧工作经历' } },
-  { key: 'simple', label: '简约单栏', icon: <BulbOutlined />, preview: { primary: '#444', secondary: '#ddd', bg: '#fff', text: '#444', layout: 'single', desc: '极简单栏居中，浅灰色调，适合内容简洁的简历' } },
-  { key: 'modern', label: '现代渐变', icon: <StarFilled />, preview: { primary: '#2c6fbb', secondary: '#3498db', bg: '#fff', text: '#333', layout: 'banner', desc: '蓝色渐变顶部横幅，左侧技能标签右侧工作经历' } },
-  { key: 'compact', label: '紧凑高效', icon: <ThunderboltOutlined />, preview: { primary: '#111', secondary: '#333', bg: '#fff', text: '#333', layout: 'single', desc: '最大信息密度，时间线排版，适合内容丰富的简历' } },
-  { key: 'elegant', label: '优雅金边', icon: <CrownOutlined />, preview: { primary: '#c9a962', secondary: '#2d2d2d', bg: '#fff', text: '#3a3a3a', layout: 'dual', desc: '深色侧边栏+金色点缀，高端商务风格' } },
-  { key: 'dark', label: '深色科技', icon: <RocketOutlined />, preview: { primary: '#00d4ff', secondary: '#0d1117', bg: '#0d1117', text: '#e0e0e0', layout: 'dark', desc: '深色背景+霓虹蓝点缀，科技感十足，适合技术岗' } },
-  { key: 'fresh', label: '清新绿意', icon: <ExperimentOutlined />, preview: { primary: '#2d6a4f', secondary: '#52b788', bg: '#fafcf8', text: '#3a5a40', layout: 'banner', desc: '绿色渐变顶部，自然清新风格，双栏布局' } },
-  { key: 'classic', label: '经典黑白', icon: <HighlightOutlined />, preview: { primary: '#000', secondary: '#555', bg: '#fff', text: '#1a1a1a', layout: 'single', desc: '黑白极简，传统正式风格，粗线分隔，适合严肃场合' } },
-]
 
 const POLL_INTERVAL = 2000
 const POLL_TIMEOUT = 5 * 60 * 1000
@@ -103,7 +92,7 @@ export default function Home() {
   // ── 优化 ──
   const [optimizing, setOptimizing] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [selectedTemplate, setSelectedTemplate] = useState('professional')
+  const [selectedTemplate, setSelectedTemplate] = useState(DEFAULT_TEMPLATE)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [result, setResult] = useState<OptimizeResult | null>(null)
   /** 前后对比弹窗：只在优化彻底完成后打开 */
@@ -454,36 +443,6 @@ export default function Home() {
     }
   }, [resumeId, jobId, selectedTemplate, result, blockedByRunning, beginRun, finishRun, startTaskPolling, buildInstructions])
 
-  /** 个人中心文本一键生成（跳过上传，直接用已保存的简历/岗位文本）*/
-  const handleQuickOptimize = useCallback(async () => {
-    if (!savedTexts.resumeText.trim()) { message.warning('请先在「个人中心」中填写简历信息'); return }
-    if (!savedTexts.jobText.trim()) { message.warning('请先在「个人中心」中填写岗位信息'); return }
-    if (blockedByRunning()) return
-    prevResultRef.current = result
-    const controller = new AbortController()
-    abortRef.current = controller
-    setResult(null)
-    setOptimizing(true)
-    beginRun()
-    try {
-      const taskRes = await optimize.quick(
-        savedTexts.resumeText, savedTexts.jobText, buildInstructions() || undefined, selectedTemplate, controller.signal,
-      )
-      if (cancelledRef.current) return
-      const taskId = taskRes.data.task_id as string
-      startTaskPolling(taskId, (r) => {
-        setResult(r)
-        setDiffModalOpen(true)
-        message.success('简历优化完成')
-      })
-    } catch (err: unknown) {
-      if (cancelledRef.current) return
-      finishRun()
-      const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '提交优化任务失败'
-      message.error(`优化失败: ${msg}`)
-    }
-  }, [savedTexts, selectedTemplate, result, blockedByRunning, beginRun, finishRun, startTaskPolling, buildInstructions])
-
   /** 全部应用：标记全部建议，并在条件具备时按最新要求重新优化 */
   const handleApplyAll = useCallback(() => {
     if (!suggestions.length) { message.info('当前没有待应用的优化建议'); return }
@@ -727,7 +686,17 @@ export default function Home() {
               <Card
                 className="opt-bottom-card"
                 title={<span className="opt-card-title"><UploadOutlined /> 上传简历文件</span>}
-                extra={<Button type="link" size="small" onClick={() => router.push('/resumes')}>查看全部</Button>}
+                extra={
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<FolderOpenOutlined />}
+                    onClick={handleOpenResumeLibrary}
+                    disabled={resumeLoading}
+                  >
+                    从简历库选择
+                  </Button>
+                }
                 onPaste={(e) => handlePaste(e, 'resume')}
               >
                 <Upload.Dragger
@@ -761,17 +730,7 @@ export default function Home() {
                   </div>
                 )}
                 <div className="opt-bottom-foot">
-                  <Button size="small" icon={<FolderOpenOutlined />} onClick={handleOpenResumeLibrary} disabled={resumeLoading}>
-                    从简历库选择
-                  </Button>
                   <span className="opt-counter">{resumeCount}/{RESUME_LIBRARY_CAP}</span>
-                  {savedTexts.resumeText.trim() && (
-                    <Tooltip title="使用「个人中心 - 我的信息」里保存的简历文本，跳过上传直接生成">
-                      <Button size="small" type="link" icon={<FormOutlined />} loading={optimizing} onClick={handleQuickOptimize}>
-                        一键生成
-                      </Button>
-                    </Tooltip>
-                  )}
                 </div>
               </Card>
 
@@ -779,7 +738,17 @@ export default function Home() {
               <Card
                 className="opt-bottom-card"
                 title={<span className="opt-card-title"><AimOutlined /> 目标职位</span>}
-                extra={<Button type="link" size="small" onClick={() => router.push('/jobs')}>岗位库</Button>}
+                extra={
+                  <Button
+                    type="link"
+                    size="small"
+                    icon={<FolderOpenOutlined />}
+                    onClick={handleOpenJobLibrary}
+                    disabled={jobLoading}
+                  >
+                    从岗位库选择
+                  </Button>
+                }
               >
                 <Input
                   value={targetTitle}
@@ -789,9 +758,12 @@ export default function Home() {
                 />
 
                 <div className="opt-switch-row">
-                  <div>
-                    <div className="opt-switch-title">使用职位描述</div>
-                    <div className="opt-switch-desc">按 JD 精准匹配岗位关键词</div>
+                  <div className="opt-switch-main">
+                    <span className="opt-switch-icon"><FileTextOutlined /></span>
+                    <div>
+                      <div className="opt-switch-title">使用职位描述</div>
+                      <div className="opt-switch-desc">按 JD 精准匹配岗位关键词</div>
+                    </div>
                   </div>
                   <Switch size="small" checked={useJobDesc} onChange={setUseJobDesc} />
                 </div>
@@ -799,55 +771,60 @@ export default function Home() {
                 {useJobDesc && (
                   <div className="opt-job-zone" onPaste={(e) => handlePaste(e, 'job')}>
                     {jobData ? (
-                      <div className="opt-picked">
-                        <CheckCircleFilled style={{ color: 'var(--success-500)' }} />
-                        <span className="opt-picked-name">
-                          {jobData.title || '未命名岗位'}
-                          {jobData.company ? ` · ${jobData.company}` : ''}
-                        </span>
-                        <Button size="small" type="link" onClick={handleOpenJobLibrary}>更换</Button>
-                      </div>
+                      <>
+                        <div className="opt-picked">
+                          <CheckCircleFilled style={{ color: 'var(--success-500)' }} />
+                          <span className="opt-picked-name">
+                            {jobData.title || '未命名岗位'}
+                            {jobData.company ? ` · ${jobData.company}` : ''}
+                          </span>
+                          <Button size="small" type="link" onClick={handleOpenJobLibrary}>更换</Button>
+                        </div>
+                        {jobData.must_have?.skills?.length ? (
+                          <div className="opt-job-skills">
+                            <span className="opt-job-skills-label">已识别必备技能</span>
+                            <div>
+                              {jobData.must_have.skills.slice(0, 4).map((s) => (
+                                <span key={s} className="opt-mini-chip is-primary">{s}</span>
+                              ))}
+                              {jobData.must_have.skills.length > 4 && (
+                                <span className="opt-mini-chip is-primary">+{jobData.must_have.skills.length - 4}</span>
+                              )}
+                            </div>
+                          </div>
+                        ) : null}
+                      </>
                     ) : (
-                      <Upload.Dragger
-                        accept=".png,.jpg,.jpeg,.webp"
-                        beforeUpload={(file) => { handleJobUpload(file); return false }}
-                        showUploadList={false}
-                        disabled={jobLoading}
-                        className="opt-dragger is-slim"
-                      >
-                        {jobLoading ? (
-                          <Spin tip="正在解析岗位需求..."><div style={{ minHeight: 60 }} /></Spin>
-                        ) : (
-                          <p className="app-upload-hint">
-                            <PictureOutlined /> 拖拽岗位截图到此处，或点击上传（支持 Ctrl+V 粘贴）
-                          </p>
-                        )}
-                      </Upload.Dragger>
-                    )}
-                    {jobData?.must_have?.skills?.length ? (
-                      <div className="opt-job-skills">
-                        {jobData.must_have.skills.slice(0, 4).map((s) => (
-                          <span key={s} className="opt-mini-chip">{s}</span>
-                        ))}
-                        {jobData.must_have.skills.length > 4 && (
-                          <span className="opt-mini-chip">+{jobData.must_have.skills.length - 4}</span>
-                        )}
-                      </div>
-                    ) : null}
-                    {!jobData && (
-                      <div style={{ marginTop: 8 }}>
-                        <Button size="small" icon={<FolderOpenOutlined />} onClick={handleOpenJobLibrary} disabled={jobLoading}>
-                          从岗位库选择
-                        </Button>
-                      </div>
+                      <>
+                        <Upload.Dragger
+                          accept=".png,.jpg,.jpeg,.webp"
+                          beforeUpload={(file) => { handleJobUpload(file); return false }}
+                          showUploadList={false}
+                          disabled={jobLoading}
+                          className="opt-dragger opt-jd-drop"
+                        >
+                          {jobLoading ? (
+                            <Spin tip="正在解析岗位需求..."><div style={{ minHeight: 68 }} /></Spin>
+                          ) : (
+                            <div className="opt-jd-drop-inner">
+                              <span className="opt-jd-drop-icon"><PictureOutlined /></span>
+                              <span className="opt-jd-drop-title">拖拽岗位 JD 截图到此处</span>
+                              <span className="opt-jd-drop-sub">或点击上传 · 支持 Ctrl+V 粘贴 · PNG / JPG</span>
+                            </div>
+                          )}
+                        </Upload.Dragger>
+                      </>
                     )}
                   </div>
                 )}
 
                 <div className="opt-switch-row">
-                  <div>
-                    <div className="opt-switch-title">自定义关键词</div>
-                    <div className="opt-switch-desc">强制在简历中体现这些关键词</div>
+                  <div className="opt-switch-main">
+                    <span className="opt-switch-icon"><BulbOutlined /></span>
+                    <div>
+                      <div className="opt-switch-title">自定义关键词</div>
+                      <div className="opt-switch-desc">强制在简历中体现这些关键词</div>
+                    </div>
                   </div>
                   <Switch size="small" checked={useCustomKeywords} onChange={setUseCustomKeywords} />
                 </div>
@@ -1104,7 +1081,7 @@ export default function Home() {
           </Spin>
         </Modal>
 
-        {/* 优化完成 → 前后对比（仅在任务彻底完成后由 runOptimize / handleQuickOptimize 打开）*/}
+        {/* 优化完成 → 前后对比（仅在任务彻底完成后由 runOptimize 打开）*/}
         <OptimizeDiffModal
           open={diffModalOpen}
           onClose={() => setDiffModalOpen(false)}

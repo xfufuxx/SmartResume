@@ -180,6 +180,7 @@ export const messages = {
   list: (page = 1, pageSize = 20, unreadOnly = false) =>
     api.get('/api/messages', { params: { page, page_size: pageSize, unread_only: unreadOnly } }),
   markRead: (id: string) => api.put(`/api/messages/${id}/read`),
+  markUnread: (id: string) => api.put(`/api/messages/${id}/unread`),
   markAllRead: () => api.put('/api/messages/read-all'),
   delete: (id: string) => api.delete(`/api/messages/${id}`),
 }

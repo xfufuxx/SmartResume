@@ -145,8 +145,12 @@ function experienceText(item: ResumeParseResult['experience'][number]): string {
 }
 
 function projectText(item: ResumeParseResult['projects'][number]): string {
-  const tech = (item.tech || []).length ? `技术栈：${item.tech.join('、')}` : ''
-  return [item.name, item.description || '', tech].filter(Boolean).join('\n')
+  const period = [item.start, item.end].filter(Boolean).join(' - ')
+  const head = [item.name, item.role || '', period].filter(Boolean).join(' · ')
+  const points = (item.points || []).map((p) => `· ${p}`).join('\n')
+  const tech = (item.tech || []).length ? `技术栈：${(item.tech || []).join('、')}` : ''
+  const legacy = [item.description || '', tech].filter(Boolean).join('\n')
+  return [head, points, legacy].filter(Boolean).join('\n')
 }
 
 function educationText(item: ResumeParseResult['education'][number]): string {

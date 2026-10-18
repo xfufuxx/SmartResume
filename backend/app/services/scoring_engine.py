@@ -110,8 +110,7 @@ def _score_quantification(resume: dict, suggestions: list[str]) -> int:
             suggestions.append(f"增加「{company}」工作经历的量化结果，如'提升效率30%'")
 
     for proj in projects:
-        desc = proj.get("description", "") or ""
-        all_text = " ".join(proj.get("tech", []) or []) + " " + desc
+        all_text = " ".join(proj.get("points", []) or []) + " " + (proj.get("description", "") or "")
         if _has_quantification(all_text):
             quantified_count += 1
         else:
@@ -192,8 +191,11 @@ def _extract_resume_keywords(resume: dict) -> list[str]:
 
     projects = resume.get("projects", []) or []
     for proj in projects:
-        for tech in proj.get("tech", []):
+        for tech in proj.get("tech", []) or []:
             keywords.add(tech.lower().strip())
+        for point in proj.get("points", []) or []:
+            for tech_term in _extract_tech_terms(point):
+                keywords.add(tech_term.lower())
         desc = proj.get("description", "") or ""
         for tech_term in _extract_tech_terms(desc):
             keywords.add(tech_term.lower())
