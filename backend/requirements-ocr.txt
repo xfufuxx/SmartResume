@@ -1,0 +1,6 @@
+# 本地 OCR 可选依赖：仅在 .env 中 USE_LOCAL_OCR=true 时需要。
+# 默认不装入生产镜像（体积 +1GB 以上），需要时执行：
+#   pip install -r requirements-ocr.txt
+# 注意：paddlepaddle 目前无 Python 3.13 版本（需 3.11/3.12）。
+paddlepaddle>=2.6.0
+paddleocr>=2.8.0

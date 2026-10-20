@@ -33,7 +33,13 @@ export default function RegisterPage() {
       startCountdown()
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      if (detail) message.error(detail)
+      if (detail) {
+        message.error(detail)
+      } else if ((err as { response?: unknown })?.response) {
+        // 有 HTTP 响应但无 detail（网络层错误/超时等）→ 给可见反馈，避免「点了没反应」
+        message.error('验证码发送失败，请稍后重试')
+      }
+      // 无 response：表单校验未过（邮箱为空/格式不对），antd 已在输入框上报错，不重复提示
     } finally {
       setSending(false)
     }

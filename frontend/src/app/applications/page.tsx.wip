@@ -1,0 +1,219 @@
+'use client'
+
+import React, { useCallback, useEffect, useState } from 'react'
+import { Badge, Button, Empty, message, Spin, Tag } from 'antd'
+import { ProjectOutlined, SendOutlined } from '@ant-design/icons'
+import { useRouter } from 'next/navigation'
+import AppLayout from '@/components/AppLayout'
+import AuthGate from '@/components/AuthGate'
+import { applications } from '@/lib/api'
+import { getToken } from '@/lib/auth'
+import { formatDate } from '@/lib/utils'
+import type {
+  ApplicationBoard, ApplicationBoardCard, ApplicationStatus,
+  DeliveryChannel, DeliveryStatus,
+} from '@/types'
+
+const COLUMNS: { key: ApplicationStatus; label: string; color: string }[] = [
+  { key: 'submitted', label: '已投递', color: 'var(--primary-500)' },
+  { key: 'viewed', label: '被查看', color: 'var(--teal-500)' },
+  { key: 'interview', label: '邀面试', color: 'var(--warning-500)' },
+  { key: 'offer', label: '已录用', color: 'var(--success-500)' },
+  { key: 'rejected', label: '不合适', color: 'var(--error-500)' },
+]
+
+const CHANNEL_META: Record<DeliveryChannel, { label: string; color: string }> = {
+  email: { label: '邮件直投', color: 'blue' },
+  manual: { label: '手动投递记录', color: 'default' },
+  form: { label: '官网表单投递', color: 'purple' },
+  guide: { label: '平台引导投递', color: 'cyan' },
+}
+
+const DELIVERY_META: Record<DeliveryStatus, { label: string; color: string }> = {
+  pending: { label: '发送中', color: 'processing' },
+  sent: { label: '已送达', color: 'success' },
+  failed: { label: '发送失败', color: 'error' },
+  bounced: { label: '被退信', color: 'warning' },
+  not_applicable: { label: '记录模式', color: 'default' },
+}
+
+export default function ApplicationsBoardPage() {
+  const router = useRouter()
+  const [token, setToken] = useState<string | null>(null)
+  const [board, setBoard] = useState<ApplicationBoard | null>(null)
+  const [loading, setLoading] = useState(false)
+  const [dragOverCol, setDragOverCol] = useState<ApplicationStatus | null>(null)
+
+  useEffect(() => {
+    const t = getToken()
+    if (!t) { router.push('/login'); return }
+    setToken(t)
+  }, [router])
+
+  const loadBoard = useCallback(async () => {
+    if (!token) return
+    setLoading(true)
+    try {
+      const res = await applications.board()
+      setBoard(res.data as ApplicationBoard)
+    } catch {
+      message.error('加载投递看板失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => {
+    loadBoard()
+  }, [loadBoard])
+
+  const handleDragStart = (e: React.DragEvent, card: ApplicationBoardCard) => {
+    e.dataTransfer.setData('text/plain', card.id)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDrop = async (e: React.DragEvent, targetStatus: ApplicationStatus) => {
+    e.preventDefault()
+    setDragOverCol(null)
+    if (!board) return
+    const id = e.dataTransfer.getData('text/plain')
+    if (!id) return
+    const fromStatus = COLUMNS.map((c) => c.key).find((k) => board[k]?.some((card) => card.id === id))
+    if (!fromStatus || fromStatus === targetStatus) return
+    const card = board[fromStatus].find((c) => c.id === id)
+    if (!card) return
+
+    // 乐观更新：先移动卡片，接口失败再回滚
+    const prev = board
+    setBoard({
+      ...board,
+      [fromStatus]: board[fromStatus].filter((c) => c.id !== id),
+      [targetStatus]: [...board[targetStatus], { ...card, status: targetStatus }],
+    })
+    try {
+      await applications.update(id, { job_image_id: card.job_image_id, status: targetStatus })
+      message.success(`已移至「${COLUMNS.find((c) => c.key === targetStatus)?.label}」`)
+    } catch (err: unknown) {
+      setBoard(prev)
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(detail || '状态更新失败，已回滚')
+    }
+  }
+
+  if (!token) return <AuthGate activeKey="applications" />
+
+  const total = board ? COLUMNS.reduce((sum, c) => sum + (board[c.key]?.length || 0), 0) : 0
+
+  return (
+    <AppLayout
+      activeKey="applications"
+      title="投递看板"
+      subtitle="拖拽卡片更新求职进度，五列状态一目了然"
+    >
+      <div className="app-page-enter">
+        {loading && !board && (
+          <div style={{ textAlign: 'center', padding: 80 }}><Spin size="large" tip="加载中..." /></div>
+        )}
+
+        {board && total === 0 && (
+          <div className="app-card" style={{ padding: 60, textAlign: 'center' }}>
+            <Empty description="还没有任何投递记录">
+              <Button type="primary" icon={<SendOutlined />} onClick={() => router.push('/jobs')}>
+                去岗位页投递
+              </Button>
+            </Empty>
+          </div>
+        )}
+
+        {board && total > 0 && (
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', alignItems: 'flex-start', paddingBottom: 8 }}>
+            {COLUMNS.map((col) => {
+              const cards = board[col.key] || []
+              const isOver = dragOverCol === col.key
+              return (
+                <div
+                  key={col.key}
+                  onDragOver={(e) => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; setDragOverCol(col.key) }}
+                  onDragLeave={() => setDragOverCol((v) => (v === col.key ? null : v))}
+                  onDrop={(e) => handleDrop(e, col.key)}
+                  style={{
+                    flex: '1 0 220px',
+                    minWidth: 220,
+                    background: isOver ? 'var(--bg-active)' : 'var(--bg-page)',
+                    border: isOver ? '1px dashed var(--primary-500)' : '1px solid var(--border-light)',
+                    borderRadius: 'var(--radius-xl)',
+                    padding: 12,
+                    minHeight: 200,
+                    transition: 'background 0.15s, border 0.15s',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 10, padding: '0 2px' }}>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: col.color }}>
+                      <ProjectOutlined style={{ marginRight: 6 }} />
+                      {col.label}
+                    </span>
+                    <Badge count={cards.length} showZero color={col.color} size="small" />
+                  </div>
+
+                  {cards.map((card) => (
+                    <div
+                      key={card.id}
+                      draggable
+                      onDragStart={(e) => handleDragStart(e, card)}
+                      style={{
+                        background: 'var(--bg-card)',
+                        border: '1px solid var(--border-light)',
+                        borderRadius: 'var(--radius-lg)',
+                        boxShadow: 'var(--shadow-sm)',
+                        padding: 12,
+                        marginBottom: 8,
+                        cursor: 'grab',
+                      }}
+                    >
+                      <div style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        color: card.job_title ? 'var(--text-primary)' : 'var(--text-tertiary)',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}>
+                        {card.job_title || '岗位已删除'}
+                      </div>
+                      {card.job_company && (
+                        <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
+                          {card.job_company}
+                        </div>
+                      )}
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 8 }}>
+                        {card.channel && (
+                          <Tag color={CHANNEL_META[card.channel]?.color} style={{ marginInlineEnd: 0, fontSize: 11 }}>
+                            {CHANNEL_META[card.channel]?.label}
+                          </Tag>
+                        )}
+                        {card.channel === 'email' && card.delivery_status && (
+                          <Tag color={DELIVERY_META[card.delivery_status]?.color} style={{ marginInlineEnd: 0, fontSize: 11 }}>
+                            {DELIVERY_META[card.delivery_status]?.label}
+                          </Tag>
+                        )}
+                      </div>
+                      <div style={{ fontSize: 11, color: 'var(--text-quaternary)', marginTop: 8 }}>
+                        {card.updated_at ? formatDate(card.updated_at) : '—'}
+                      </div>
+                    </div>
+                  ))}
+
+                  {!cards.length && (
+                    <div style={{ textAlign: 'center', padding: '24px 0', fontSize: 12, color: 'var(--text-quaternary)' }}>
+                      拖拽卡片到此处
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
+      </div>
+    </AppLayout>
+  )
+}

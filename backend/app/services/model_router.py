@@ -7,7 +7,7 @@ import time
 from datetime import datetime, timezone
 from collections import defaultdict
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, func
+from sqlalchemy import select, func, Integer
 
 from app.models.admin import ModelRouting, AIModelCallLog
 
@@ -149,7 +149,7 @@ async def get_model_stats(db: AsyncSession, hours: int = 24) -> dict:
         select(
             AIModelCallLog.model_name,
             func.count(AIModelCallLog.id).label("total"),
-            func.sum(AIModelCallLog.is_success.cast(int)).label("success"),
+            func.sum(AIModelCallLog.is_success.cast(Integer)).label("success"),
             func.avg(AIModelCallLog.latency_ms).label("avg_latency"),
         ).where(AIModelCallLog.created_at >= cutoff).group_by(AIModelCallLog.model_name)
     )

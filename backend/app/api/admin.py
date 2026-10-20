@@ -80,6 +80,8 @@ async def admin_login(body: dict = Body(...), db: AsyncSession = Depends(get_db)
 
 
 async def _write_admin_log(db: AsyncSession, admin_id: str, action: str, target_type: str = None, target_id: str = None, details: dict = None):
+    # 注意：本函数只 flush 不提交。调用方必须在 db.commit() 之前调用，
+    # 否则日志会被会话关闭时的回滚丢弃（历史 bug：管理操作日志曾全部丢失）。
     log = AdminLog(admin_id=admin_id, action=action, target_type=target_type, target_id=target_id, details=details)
     db.add(log)
     await db.flush()
@@ -114,7 +116,7 @@ async def admin_list_users(
         oc = (await db.execute(select(func.count(OptimizedResume.id)).where(OptimizedResume.user_id == u.id))).scalar() or 0
         qr = await db.execute(select(UserQuota).where(UserQuota.user_id == u.id))
         q = qr.scalar_one_or_none()
-        items.append({"id": u.id, "email": mask_email(u.email), "phone": mask_phone(u.phone) if u.phone else None,
+        items.append({"id": u.id, "email": u.email, "phone": mask_phone(u.phone) if u.phone else None,
                        "nickname": u.nickname, "career_state": u.career_state, "status": u.status,
                        "resume_count": rc, "opt_count": oc,
                        "is_vip": q.is_paid if q else False,
@@ -157,8 +159,8 @@ async def admin_ban_user(
     u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not u: raise HTTPException(404, "用户不存在")
     u.status = "frozen"
-    await db.commit()
     await _write_admin_log(db, admin.id, "user_ban", "user", user_id, {"reason": reason, "duration_days": duration_days})
+    await db.commit()
     return {"detail": "用户已封禁"}
 
 
@@ -169,8 +171,8 @@ async def admin_unban_user(
     u = (await db.execute(select(User).where(User.id == user_id))).scalar_one_or_none()
     if not u: raise HTTPException(404, "用户不存在")
     u.status = "active"
-    await db.commit()
     await _write_admin_log(db, admin.id, "user_unban", "user", user_id)
+    await db.commit()
     return {"detail": "用户已解封"}
 
 
@@ -187,8 +189,8 @@ async def admin_set_vip(
     q.is_paid = is_paid
     if daily_limit is not None: q.daily_limit = daily_limit
     if monthly_limit is not None: q.monthly_limit = monthly_limit
-    await db.commit()
     await _write_admin_log(db, admin.id, "set_vip", "user", user_id, {"is_paid": is_paid})
+    await db.commit()
     return {"detail": "VIP状态已更新"}
 
 
@@ -198,8 +200,8 @@ async def admin_add_user_quota(
     db: AsyncSession = Depends(get_db), admin: Admin = Depends(get_current_admin),
 ):
     remaining = await add_quota(db, user_id, amount, reason)
-    await db.commit()
     await _write_admin_log(db, admin.id, "add_quota", "user", user_id, {"amount": amount, "reason": reason})
+    await db.commit()
     return {"detail": "额度已增加", "remaining_daily": remaining}
 
 
@@ -224,6 +226,7 @@ async def create_template(
                         html_content=html_content, css_content=css_content, created_by=admin.id)
     db.add(t); await db.commit(); await db.refresh(t)
     await _write_admin_log(db, admin.id, "create_template", "template", t.id)
+    await db.commit()
     return {"id": t.id, "detail": "模板已创建"}
 
 
@@ -381,8 +384,8 @@ async def create_prompt(
     db: AsyncSession = Depends(get_db), admin: Admin = Depends(get_current_admin),
 ):
     p = await create_prompt_version(db, name, scene, content, variables, admin.id)
-    await db.commit()
     await _write_admin_log(db, admin.id, "create_prompt", "prompt", p.id, {"version": p.version})
+    await db.commit()
     return {"id": p.id, "version": p.version, "detail": f"Prompt版本 v{p.version} 已创建"}
 
 
@@ -406,8 +409,8 @@ async def deploy_prompt_endpoint(
     db: AsyncSession = Depends(get_db), admin: Admin = Depends(get_current_admin),
 ):
     p = await deploy_prompt(db, prompt_id, gray_ratio, admin.id)
-    await db.commit()
     await _write_admin_log(db, admin.id, "deploy_prompt", "prompt", prompt_id, {"gray_ratio": gray_ratio})
+    await db.commit()
     return {"detail": f"Prompt已部署 (灰度 {gray_ratio}%)"}
 
 
@@ -418,8 +421,8 @@ async def rollback_prompt_endpoint(
 ):
     try:
         p = await rollback_prompt(db, name, scene, target_version)
-        await db.commit()
         await _write_admin_log(db, admin.id, "rollback_prompt", "prompt", p.id)
+        await db.commit()
         return {"detail": f"已回滚到 v{target_version}"}
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -553,9 +556,22 @@ async def dashboard_core(db: AsyncSession = Depends(get_db), admin: Admin = Depe
 
 @router.get("/dashboard/industry")
 async def dashboard_industry(db: AsyncSession = Depends(get_db), admin: Admin = Depends(get_current_admin)):
+    # expectation->'industries' 是 JSON 数组，先 unnest 成行再分组，
+    # 否则会按数组原文（如 ["互联网","金融"]）聚合，图表标签不可读。
+    # 必须用 jsonb_typeof 兜住非数组结构（标量/对象）：真实注册用户可能提交
+    # {"industries": "互联网"} 这类脏数据，jsonb_array_elements_text 遇到非数组
+    # 会直接报错把整个大屏接口带崩（500 → 前端"加载数据大屏失败"）
     rows = (await db.execute(
-        select(User.expectation["industries"].astext, func.count(User.id))
-        .where(User.expectation.isnot(None)).group_by(User.expectation["industries"].astext).limit(20)
+        text("""
+            SELECT elem AS industry, COUNT(DISTINCT u.id) AS cnt
+            FROM users u,
+                 jsonb_array_elements_text(u.expectation -> 'industries') AS elem
+            WHERE u.expectation IS NOT NULL
+              AND jsonb_typeof(u.expectation -> 'industries') = 'array'
+            GROUP BY elem
+            ORDER BY cnt DESC
+            LIMIT 20
+        """)
     )).all()
     return {"industries": [{"name": r[0] or "未知", "count": r[1]} for r in rows]}
 
@@ -588,10 +604,11 @@ async def dashboard_feature_usage(db: AsyncSession = Depends(get_db), admin: Adm
 @router.get("/dashboard/job_trending")
 async def dashboard_job_trending(db: AsyncSession = Depends(get_db), admin: Admin = Depends(get_current_admin)):
     cutoff = datetime.now(TZ_UTC8) - timedelta(days=30)
+    title_expr = JobImage.parsed_job_json["title"].astext
     rows = (await db.execute(
-        select(JobImage.parsed_job_json["title"].astext, func.count(JobImage.id))
+        select(title_expr.label("title"), func.count(JobImage.id).label("cnt"))
         .where(JobImage.created_at >= cutoff, JobImage.parsed_job_json.isnot(None))
-        .group_by(JobImage.parsed_job_json["title"].astext).order_by(func.count(JobImage.id).desc()).limit(10)
+        .group_by(text("1")).order_by(text("cnt DESC")).limit(10)
     )).all()
     total = sum(r[1] for r in rows)
     return {"jobs": [{"title": r[0] or "未知", "count": r[1], "percent": round(r[1] / total * 100, 1) if total else 0} for r in rows]}
@@ -648,8 +665,8 @@ async def refund_order(
 ):
     try:
         result = await process_refund(db, order_id, admin.id, reason)
-        await db.commit()
         await _write_admin_log(db, admin.id, "refund_order", "order", order_id, {"reason": reason})
+        await db.commit()
         return result
     except ValueError as e:
         raise HTTPException(400, str(e))
@@ -837,9 +854,17 @@ async def list_admin_logs(
     base = select(AdminLog)
     if action: base = base.where(AdminLog.action == action)
     if admin_id: base = base.where(AdminLog.admin_id == admin_id)
+    # join admins 取管理员用户名（管理后台审计列表展示用）
+    base = base.join(Admin, Admin.id == AdminLog.admin_id, isouter=True)
     total = (await db.execute(select(func.count()).select_from(base.subquery()))).scalar() or 0
-    rows = (await db.execute(base.order_by(AdminLog.created_at.desc()).offset((page - 1) * page_size).limit(page_size))).scalars().all()
-    return {"items": [{"id": l.id, "admin_id": l.admin_id, "action": l.action,
+    rows = (await db.execute(
+        base.add_columns(Admin.username)
+        .order_by(AdminLog.created_at.desc())
+        .offset((page - 1) * page_size).limit(page_size)
+    )).all()
+    return {"items": [{"id": l.id, "admin_id": l.admin_id, "admin_username": username,
+                        "action": l.action,
                         "target_type": l.target_type, "target_id": l.target_id,
-                        "details": l.details, "created_at": l.created_at.isoformat() if l.created_at else None} for l in rows],
+                        "details": l.details, "ip_address": l.ip_address,
+                        "created_at": l.created_at.isoformat() if l.created_at else None} for l, username in rows],
             "total": total}

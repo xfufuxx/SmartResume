@@ -49,10 +49,47 @@ async function refreshAccessToken(): Promise<boolean> {
   return refreshPromise
 }
 
-function clearAuthAndRedirect() {
+// 认证类端点：它们的 401 代表「凭证错误」（密码错/账号不存在/验证码错），
+// 应由页面自己的 catch 显示提示。绝不能进入下面的刷新/跳转分支——
+// 否则管理端登录失败会被拦截器静默弹到用户登录页（admin 登录无 refreshToken，
+// 必然走进 clearAuthAndRedirect），用户完全看不到真实错误。
+const AUTH_ENDPOINTS = [
+  '/api/auth/login',
+  '/api/auth/register',
+  '/api/auth/refresh',
+  '/api/auth/verify',
+  '/api/admin/login',
+]
+
+function isAuthRequest(url?: string): boolean {
+  if (!url) return false
+  return AUTH_ENDPOINTS.some((p) => url.includes(p))
+}
+
+/**
+ * 管理端接口判断：/api/admin/...（/api/admin/login 属 AUTH_ENDPOINTS，已在前面豁免）。
+ * 用户端接口（/api/messages、/api/user/*、/api/resumes 等）走 get_current_user，
+ * 其 sub 必须在 users 表中存在；管理会话的 JWT sub 是 admins 表 id，必然 401。
+ */
+function isAdminEndpointUrl(url?: string): boolean {
+  if (!url) return false
+  return url.includes('/api/admin/')
+}
+
+function clearAuthAndRedirect(failedUrl?: string) {
+  // 管理员会话（admins JWT，无 refreshToken 体系）：失效时回管理端自己的登录页，
+  // 而不是用户端 /login——否则管理后台一遇到 401 就被弹到用户登录页。
+  const isAdminSession =
+    typeof window !== 'undefined' && !!localStorage.getItem('admin')
+  // 管理会话 + 用户端接口 401 = 「用错令牌类型」，不是「会话失效」：
+  // 历史 bug —— /admin 加载态曾渲染 AppLayout，其 MessageBell 挂载即打
+  // /api/messages（用户端），管理 token 必然 401 → 会话被清 → 弹回登录页，
+  // 表现为「登录成功进首页一秒后被弹走」。此时绝不能清会话，原样拒绝让页面自己提示。
+  if (isAdminSession && !isAdminEndpointUrl(failedUrl)) return
   ;['token', 'refreshToken', 'user', 'deviceId'].forEach((k) => localStorage.removeItem(k))
+  if (isAdminSession) localStorage.removeItem('admin')
   if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
-    window.location.href = '/login'
+    window.location.href = isAdminSession ? '/admin/login' : '/login'
   }
 }
 
@@ -71,8 +108,19 @@ api.interceptors.request.use((config) => {
 // 触发 “Objects are not valid as a React child (found: object with keys ...)”。
 // FastAPI 422 的 detail 形如 [{type, loc, msg, input, ctx}]，直接渲染会崩。
 function normalizeErrorDetail(err: any) {
-  const data = err?.response?.data
-  if (!data) return
+  let data = err?.response?.data
+  // 500/502 等场景 body 常是纯文本/HTML（如 "Internal Server Error"），没有 .detail；
+  // 且给字符串属性赋值会再抛 TypeError，把真实错误吞掉。统一转成 { detail } 对象。
+  if (typeof data === 'string') {
+    const text = data.trim()
+    data = err.response.data = {
+      detail:
+        text && text.length < 200 && !text.startsWith('<')
+          ? text
+          : '服务器开小差了，请稍后重试',
+    }
+  }
+  if (!data || typeof data !== 'object') return
   const detail = data.detail
   if (typeof detail === 'string') return
   if (Array.isArray(detail)) {
@@ -110,10 +158,11 @@ api.interceptors.response.use(
     if (
       err.response?.status === 401 &&
       typeof window !== 'undefined' &&
-      !original._retry
+      !original._retry &&
+      !isAuthRequest(original.url)
     ) {
       if (!localStorage.getItem('refreshToken')) {
-        clearAuthAndRedirect()
+        clearAuthAndRedirect(original.url)
       } else {
         original._retry = true
         const ok = await refreshAccessToken()
@@ -125,7 +174,7 @@ api.interceptors.response.use(
           }
           return api(original)
         }
-        clearAuthAndRedirect()
+        clearAuthAndRedirect(original.url)
       }
     }
     return Promise.reject(err)
@@ -194,6 +243,10 @@ export const admin = {
   banUser: (id: string, reason: string, durationDays?: number) =>
     api.put(`/api/admin/users/${id}/ban`, { reason, duration_days: durationDays }),
   unbanUser: (id: string) => api.put(`/api/admin/users/${id}/unban`),
+  setVip: (id: string, isPaid: boolean, dailyLimit?: number, monthlyLimit?: number) =>
+    api.put(`/api/admin/users/${id}/vip`, { is_paid: isPaid, daily_limit: dailyLimit, monthly_limit: monthlyLimit }),
+  addUserQuota: (id: string, amount: number, reason = '') =>
+    api.post(`/api/admin/users/${id}/quota`, { amount, reason }),
 
   getDashboardCore: () => api.get('/api/admin/dashboard/core'),
   getDashboardIndustry: () => api.get('/api/admin/dashboard/industry'),
@@ -262,6 +315,17 @@ export const admin = {
     api.put(`/api/admin/tickets/${id}/status`, { status, resolution }),
 
   getQuotaConfig: () => api.get('/api/admin/quota/config'),
+  getOrders: (page = 1, pageSize = 20, status = '', userSearch = '') =>
+    api.get('/api/admin/orders', { params: { page, page_size: pageSize, status, user_search: userSearch } }),
+  refundOrder: (id: string, reason = '') =>
+    api.post(`/api/admin/orders/${id}/refund`, { reason }),
+  getRevenue: (days = 30) =>
+    api.get('/api/admin/revenue', { params: { days } }),
+  getPackages: () => api.get('/api/admin/packages'),
+  createPackage: (name: string, packageType: string, price: number, durationDays?: number, quotaAmount?: number) =>
+    api.post('/api/admin/packages', { name, package_type: packageType, price, duration_days: durationDays, quota_amount: quotaAmount }),
+  updatePackage: (id: string, data: { is_active?: boolean; price?: number }) =>
+    api.put(`/api/admin/packages/${id}`, data),
   getAdminLogs: (page = 1, pageSize = 50, action = '', adminId = '') =>
     api.get('/api/admin/admin-logs', { params: { page, page_size: pageSize, action, admin_id: adminId } }),
 }

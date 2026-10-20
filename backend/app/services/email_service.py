@@ -1,7 +1,7 @@
 import smtplib
 import logging
 from email.mime.text import MIMEText
-from email import policy
+from email.utils import formataddr
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -28,10 +28,12 @@ def _send_email(to_email: str, subject: str, body: str) -> bool:
         return True
 
     from_addr = settings.SMTP_FROM or settings.SMTP_USER
-
+    # 带显示名的 From（如「智能简历 <xxx@qq.com>」），避免收件方直接看到裸 QQ 号；
+    # 显示名可在 backend/.env 用 SMTP_FROM_NAME 自定义。
+    # 必须用 formataddr 把中文显示名编码成 RFC2047 encoded-word（=?utf-8?b?...?=），
+    # 直接写中文会被 QQ SMTP 以 550 "From header is missing or invalid" 拒绝。
     msg = MIMEText(body, "plain", "utf-8")
-    msg.policy = policy.SMTP
-    msg["From"] = from_addr
+    msg["From"] = formataddr((settings.SMTP_FROM_NAME, from_addr))
     msg["To"] = to_email
     msg["Subject"] = subject
 

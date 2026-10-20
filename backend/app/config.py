@@ -32,6 +32,13 @@ class Settings(BaseSettings):
     LLM_MODEL_VISION: str = "qwen3.7-plus"
     LLM_MODEL_TEXT: str = "qwen3.7-plus"
     LLM_API_BASE: str = "https://dashscope.aliyuncs.com/compatible-mode/v1"
+    # 计费守卫（详见 app/core/llm_policy.py）：
+    # LLM_ALLOW_PAID=false（默认）时，命中免费额度已过期/不覆盖的模型直接拒绝调用，绝不发请求；
+    # LLM_AUTO_FALLBACK=true 时，付费/过期模型自动降级到仍在免费额度内的替补模型；
+    # LLM_ENABLE_CALL_LOG=true 时，每次调用写 ai_model_call_logs（token/耗时/成败/费用）。
+    LLM_ALLOW_PAID: bool = False
+    LLM_AUTO_FALLBACK: bool = True
+    LLM_ENABLE_CALL_LOG: bool = True
 
     CELERY_BROKER_URL: str = "redis://localhost:6379/1"
     CELERY_RESULT_BACKEND: str = "redis://localhost:6379/1"
@@ -54,6 +61,8 @@ class Settings(BaseSettings):
     SMTP_USER: str = ""
     SMTP_PASSWORD: str = ""
     SMTP_FROM: str = ""
+    # 发件人显示名（收件方邮件列表里显示的名字，隐藏真实邮箱账号前缀）
+    SMTP_FROM_NAME: str = "智能简历"
 
     # ── 真实投递（阶段1：邮件直投）──
     DELIVERY_ENABLED: bool = True          # 总开关（关闭时投递一律走 manual 记录模式）

@@ -93,6 +93,8 @@ services:
       - "80:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
+      # CSView 文档站静态目录（宿主 /opt/csview/dist -> 容器内 /usr/share/nginx/html/csview）
+      - /opt/csview/dist:/usr/share/nginx/html/csview:ro
     depends_on:
       - backend
       - frontend

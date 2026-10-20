@@ -9,11 +9,16 @@
 """
 import asyncio
 import io
+import os
 import sys
 
 import asyncpg
 
-DSN = "postgresql://postgres:root@localhost:5432/smart_resume"
+# 默认使用 docker-compose.yml 中的本地凭据；可用环境变量 DATABASE_URL 覆盖。
+DSN = os.getenv(
+    "DATABASE_URL",
+    "postgresql://postgres:postgres@localhost:5432/smart_resume",
+).replace("postgresql+asyncpg://", "postgresql://")
 
 
 async def main(path: str):

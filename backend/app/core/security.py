@@ -1,8 +1,20 @@
 from datetime import datetime, timedelta, timezone
 from jose import jwt
-from passlib.hash import bcrypt as bcrypt_handler
 
-from app.config import settings
+# 兼容 shim：bcrypt >= 4.1 移除了 __about__，passlib 1.7.4 读取时会打印
+# 一段无害但刺眼的 AttributeError 堆栈。这里补上即可消除噪音。
+import types as _types
+
+import bcrypt as _bcrypt
+
+if not hasattr(_bcrypt, "__about__"):
+    _bcrypt.__about__ = _types.SimpleNamespace(
+        __version__=getattr(_bcrypt, "__version__", "unknown")
+    )
+
+from passlib.hash import bcrypt as bcrypt_handler  # noqa: E402
+
+from app.config import settings  # noqa: E402
 
 
 def hash_password(password: str) -> str:

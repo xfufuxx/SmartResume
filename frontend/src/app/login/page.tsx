@@ -1,8 +1,8 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Card, Form, Input, Button, Typography, Space, message, Checkbox, Divider } from 'antd'
-import { MailOutlined, LockOutlined, WechatOutlined, GoogleOutlined, AlipayCircleOutlined, FileTextOutlined } from '@ant-design/icons'
+import { Card, Form, Input, Button, Typography, Space, message, Checkbox } from 'antd'
+import { MailOutlined, LockOutlined, FileTextOutlined } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { auth } from '@/lib/api'
@@ -110,16 +110,6 @@ export default function LoginPage() {
             </Space>
           </div>
         </Form>
-
-        <Divider plain style={{ borderColor: 'var(--border-default)', color: 'var(--text-tertiary)', fontSize: 12, margin: '20px 0' }}>
-          其他方式登录（敬请期待）
-        </Divider>
-
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 20 }}>
-          <Button shape="circle" icon={<WechatOutlined style={{ color: '#07c160' }} />} size="large" disabled title="微信登录（开发中）" style={{ background: 'rgba(255,255,255,0.8)' }} />
-          <Button shape="circle" icon={<AlipayCircleOutlined style={{ color: '#1677ff' }} />} size="large" disabled title="支付宝登录（开发中）" style={{ background: 'rgba(255,255,255,0.8)' }} />
-          <Button shape="circle" icon={<GoogleOutlined style={{ color: '#ea4335' }} />} size="large" disabled title="Google登录（开发中）" style={{ background: 'rgba(255,255,255,0.8)' }} />
-        </div>
       </Card>
     </div>
   )

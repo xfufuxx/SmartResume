@@ -4,20 +4,28 @@ setlocal EnableExtensions
 set "ROOT=%~dp0"
 set "BACKEND_DIR=%ROOT%backend"
 set "FRONTEND_DIR=%ROOT%frontend"
-set "REDIS_EXE=D:\Redis-x64-3.0.504\redis-server.exe"
+set "REDIS_EXE=C:\Users\fu\AppData\Local\Microsoft\WinGet\Packages\taizod1024.redis-windows-fork_Microsoft.Winget.Source_8wekyb3d8bbwe\Redis-8.8.0-Windows-x64-msys2\redis-server.exe"
 set "LOG_DIR=%ROOT%logs"
 
 :: locate managed node + npm (avoids the Windows Store npm stub)
+:: 优先用托管 node；若其 npm 不存在（本机实测托管 node 的 node_modules/npm 缺失），回退到系统 node
 set "NODE_EXE="
 for /d %%d in ("C:\Users\fu\.workbuddy\binaries\node\versions\*") do (
     if exist "%%d\node.exe" if exist "%%d\node_modules\npm\bin\npm-cli.js" set "NODE_EXE=%%d\node.exe"
 )
 if not defined NODE_EXE (
-    echo ERROR: managed node.exe + npm not found under C:\Users\fu\.workbuddy\binaries\node\versions\
+    if exist "D:\nodejs\node.exe" if exist "D:\nodejs\node_modules\npm\bin\npm-cli.js" (
+        set "NODE_EXE=D:\nodejs\node.exe"
+        echo   (fallback to system node: D:\nodejs\node.exe)
+    )
+)
+if not defined NODE_EXE (
+    echo ERROR: node.exe + npm not found (checked managed versions and D:\nodejs)
     pause
     exit /b 1
 )
 set "NPM_CLI=%NODE_EXE:\node.exe=%\node_modules\npm\bin\npm-cli.js"
+if not exist "%NPM_CLI%" set "NPM_CLI=D:\nodejs\node_modules\npm\bin\npm-cli.js"
 
 :: logs dir so each service window also writes to a file (readable if a window closes)
 if not exist "%LOG_DIR%" mkdir "%LOG_DIR%" >nul 2>&1

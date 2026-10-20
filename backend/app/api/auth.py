@@ -92,9 +92,10 @@ async def register(
     )
 
     await db.refresh(user)
-    await db.commit()
-
+    # 审计日志必须先于 commit 写入：write_audit_log 只 flush 不提交，
+    # 放在 commit 之后会被会话关闭时的回滚丢弃（曾导致全部注册审计丢失）。
     await write_audit_log(db, user.id, "register", detail="用户注册", ip_address=client["ip_address"])
+    await db.commit()
 
     return TokenResponse(
         access_token=access_token,
@@ -137,9 +138,9 @@ async def login(
         refresh_token=refresh_token,
     )
 
-    await db.commit()
-
+    # 审计日志必须先于 commit 写入（write_audit_log 只 flush 不提交）
     await write_audit_log(db, user.id, "login", ip_address=client["ip_address"])
+    await db.commit()
 
     return TokenResponse(
         access_token=access_token,
@@ -220,7 +221,6 @@ async def logout(
     await write_audit_log(db, user.id, "logout", ip_address=client["ip_address"])
     await db.commit()
     return {"detail": "已退出登录"}
-
 
 @router.post("/forgot-password/send-code")
 async def forgot_password_send_code(body: ForgotPasswordRequest, _: None = Depends(RateLimiter(max_requests=3, window_seconds=60)), db: AsyncSession = Depends(get_db)):

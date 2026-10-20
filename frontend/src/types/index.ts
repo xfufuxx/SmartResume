@@ -68,6 +68,8 @@ export interface AdminUser {
   status: string
   resume_count: number
   opt_count: number
+  is_vip: boolean
+  daily_quota: number
   created_at?: string
 }
 
@@ -87,9 +89,11 @@ export interface AdminUserDetail {
     daily_used: number
     monthly_limit: number
     monthly_used: number
+    is_paid: boolean
   }
   created_at?: string
   recent_logs: Array<{ action: string; detail?: string; created_at?: string }>
+  orders: Array<{ order_no: string; package_name?: string; amount: number; status: string; created_at?: string }>
 }
 
 export interface AdminStats {
@@ -109,6 +113,7 @@ export interface DashboardCore {
   today_optimizations: number
   today_uploads: number
   total_optimizations: number
+  paid_conversion_rate: number
 }
 
 export interface IndustryItem {
@@ -263,17 +268,53 @@ export interface TicketDetail {
 export interface AdminLogItem {
   id: string
   admin_id: string
+  admin_username?: string
   action: string
   target_type?: string
   target_id?: string
   details?: any
+  ip_address?: string
   created_at?: string
 }
 
 export interface QuotaConfig {
   free_daily_limit: number
   free_monthly_limit: number
+  vip_unlimited: boolean
   carry_over: boolean
+}
+
+export interface OrderItem {
+  id: string
+  order_no: string
+  user_id: string
+  nickname?: string
+  email?: string
+  package_name?: string
+  package_type: string
+  amount: number
+  payment_method?: string
+  status: string
+  paid_at?: string
+  created_at?: string
+}
+
+export interface RevenueData {
+  total_revenue: number
+  refund_amount: number
+  net_revenue: number
+  order_count: number
+  daily: Array<{ date: string; revenue: number; orders: number }>
+}
+
+export interface QuotaPackageItem {
+  id: string
+  name: string
+  package_type: string
+  price: number
+  duration_days?: number
+  quota_amount?: number
+  is_active: boolean
 }
 
 export interface ResumeParseResult {

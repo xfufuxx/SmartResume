@@ -38,7 +38,11 @@ export default function ForgotPasswordPage() {
       setStep(1)
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      if (detail) message.error(detail)
+      if (detail) {
+        message.error(detail)
+      } else if ((err as { response?: unknown })?.response) {
+        message.error('验证码发送失败，请稍后重试')
+      }
     } finally {
       setSending(false)
     }

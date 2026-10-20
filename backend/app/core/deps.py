@@ -33,6 +33,24 @@ async def get_redis():
     yield _get_redis_client()
 
 
+def get_client_ip(request: Request) -> str:
+    """取真实客户端 IP。
+
+    生产链路是 用户 → nginx(容器) → backend(容器)，request.client.host 只能看到
+    nginx 的 Docker 内网 IP——**所有用户看到的都是同一个值**。限流若按它做 key，
+    就变成「全站共享 3 次/分钟」：几个人同时注册就把额度挤爆，自己多点几次也 429
+    （表现就是「点了获取验证码没反应」，因为旧前端把 429 吞了）。
+
+    nginx 已在 /api/ 设置 X-Forwarded-For $proxy_add_x_forwarded_for，
+    其格式为 <客户端自带的(可伪造), ..., nginx 追加的真实对端 IP>；
+    backend 端口未对宿主暴露（仅 nginx 可达），取**最后一跳**即为真实客户端且防伪造。
+    """
+    forwarded = request.headers.get("x-forwarded-for")
+    if forwarded:
+        return forwarded.split(",")[-1].strip()
+    return request.client.host if request.client else "unknown"
+
+
 class RateLimiter:
     """基于 Redis 的滑动窗口速率限制器"""
 
@@ -41,7 +59,7 @@ class RateLimiter:
         self.window_seconds = window_seconds
 
     async def __call__(self, request: Request, redis: aioredis.Redis = Depends(get_redis)):
-        client_ip = request.client.host if request.client else "unknown"
+        client_ip = get_client_ip(request)
         key = f"rate_limit:{request.url.path}:{client_ip}"
 
         current = await redis.get(key)
@@ -60,7 +78,7 @@ class RateLimiter:
 
 async def get_client_info(request: Request) -> dict:
     return {
-        "ip_address": request.client.host if request.client else "unknown",
+        "ip_address": get_client_ip(request),
         "user_agent": request.headers.get("user-agent", ""),
     }
 
