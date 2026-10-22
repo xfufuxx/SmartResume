@@ -627,7 +627,7 @@ export default function ApplicationsTab({ onRecordCommunication }: Props) {
         okText="保存"
         cancelText="取消"
         confirmLoading={editLoading}
-        destroyOnClose
+        destroyOnHidden
       >
         {editApp && (
           <Space direction="vertical" style={{ width: '100%' }} size="middle">
@@ -711,7 +711,7 @@ export default function ApplicationsTab({ onRecordCommunication }: Props) {
           <Button key="close" onClick={() => setTimelineApp(null)}>关闭</Button>,
         ]}
         onCancel={() => setTimelineApp(null)}
-        destroyOnClose
+        destroyOnHidden
       >
         {timelineApp && (
           <Space direction="vertical" size="small" style={{ width: '100%', marginBottom: 16 }}>
@@ -784,7 +784,7 @@ export default function ApplicationsTab({ onRecordCommunication }: Props) {
         onCancel={() => setSuppressOpen(false)}
         footer={null}
         width={520}
-        destroyOnClose
+        destroyOnHidden
       >
         <div style={{ marginBottom: 12, fontSize: 13, color: 'var(--text-tertiary)' }}>
           退信地址会自动加入此名单并暂停向其投递（尊重对方服务器信号）；确认对方可正常接收后可在此移除。

@@ -18,7 +18,7 @@ export default function RouteLoading() {
         padding: '48px 0',
       }}
     >
-      <Spin size="large" tip="加载中..." />
+      <Spin size="large" tip="加载中..."><div style={{ minHeight: 1 }} /></Spin>
     </div>
   )
 }

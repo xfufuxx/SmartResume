@@ -196,7 +196,7 @@ export default function AtsPage() {
           </Space>
         </div>
 
-        {loading && <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" tip="检查中..." /></div>}
+        {loading && <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" tip="检查中..."><div style={{ minHeight: 1 }} /></Spin></div>}
 
         {!loading && result && (
           <Row gutter={[16, 16]}>

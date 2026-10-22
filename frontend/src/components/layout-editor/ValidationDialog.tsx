@@ -46,7 +46,7 @@ export function ValidationDialog({
       confirmLoading={exporting}
       onOk={() => void onConfirm()}
       onCancel={onCancel}
-      destroyOnClose
+      destroyOnHidden
       width={520}
     >
       {result ? (

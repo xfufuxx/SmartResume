@@ -422,7 +422,7 @@ export default function InterviewProgressTab() {
         cancelText="取消"
         confirmLoading={saving}
         width={640}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="apps-edit-2col" style={{ marginTop: 16 }}>
           <div>

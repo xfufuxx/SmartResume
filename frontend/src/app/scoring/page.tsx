@@ -149,7 +149,7 @@ export default function ScoringPage() {
         </Card>
 
         {scoringLoading ? (
-          <div style={{ textAlign: 'center', padding: 80 }}><Spin tip="正在分析简历..." /></div>
+          <div style={{ textAlign: 'center', padding: 80 }}><Spin tip="正在分析简历..."><div style={{ minHeight: 1 }} /></Spin></div>
         ) : !score ? (
           <Card style={{ borderRadius: 12 }} styles={{ body: { padding: 60 } }}>
             <Empty description="选择简历后自动评分" />

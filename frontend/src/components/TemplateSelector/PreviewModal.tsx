@@ -45,7 +45,7 @@ function ReactTemplatePreview({ meta }: { meta: TemplateMetadata }) {
   if (!Comp) {
     return (
       <div style={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: 360 }}>
-        <Spin tip="正在加载模板组件…" />
+        <Spin tip="正在加载模板组件…"><div style={{ minHeight: 1 }} /></Spin>
       </div>
     )
   }

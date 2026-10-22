@@ -341,7 +341,7 @@ export default function CommunicationsTab({ initialApplicationId }: Props) {
         cancelText="取消"
         confirmLoading={saving}
         width={600}
-        destroyOnClose
+        destroyOnHidden
       >
         <div className="apps-edit-2col" style={{ marginTop: 16 }}>
           <div>

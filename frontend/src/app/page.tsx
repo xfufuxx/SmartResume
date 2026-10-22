@@ -1135,7 +1135,7 @@ export default function Home() {
           wrapClassName="le-fullscreen"
           style={{ top: 0, maxWidth: '100vw', paddingBottom: 0 }}
           styles={{ body: { height: 'calc(100vh - 55px)', padding: 12, overflow: 'hidden' } }}
-          destroyOnClose
+          destroyOnHidden
         >
           {layoutInitialDoc && result ? (
             <LayoutEditor

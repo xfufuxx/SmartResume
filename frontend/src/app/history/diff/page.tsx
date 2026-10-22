@@ -89,7 +89,7 @@ export default function DiffPage() {
     return (
       <AppLayout activeKey="history" hideNav>
         <div className="app-empty-state" style={{ minHeight: '60vh', display: 'flex', flexDirection: 'column', justifyContent: 'center', alignItems: 'center' }}>
-          <Spin size="large" tip="加载中..." />
+          <Spin size="large" tip="加载中..."><div style={{ minHeight: 1 }} /></Spin>
         </div>
       </AppLayout>
     )

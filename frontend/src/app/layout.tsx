@@ -1,11 +1,29 @@
 'use client'
 
 import React, { useMemo } from 'react'
-import { ConfigProvider, theme as antdTheme } from 'antd'
+import { App, ConfigProvider, theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import AntdRegistry from '@/lib/AntdRegistry'
 import { ThemeProvider, useTheme } from '@/lib/theme'
 import './globals.css'
+
+/**
+ * 让静态方法（`message.*` / `notification.*` / `Modal.confirm`）跑在 `<App>` 上下文里。
+ *
+ * 背景：静态方法在 antd 里是脱离 React 树的，拿不到 ConfigProvider 的动态主题，
+ * antd 会在每次调用时打印「Static function can not consume context like dynamic theme」。
+ * 全站有 300+ 处 `message.*` 调用，逐个改造成 `App.useApp()` 收益低、回归面大；
+ * 官方给出的另一条路就是用 `holderRender` 指定这些静态节点的渲染器，
+ * 静态节点被包进 `<App>` 后即可消费主题与全局配置，告警随之消失。
+ *
+ * 注意：antd 5.29 的类型定义里 `holderRender` 只出现在 `GlobalConfigProps`
+ * （即 `ConfigProvider.config`），并未出现在 `ConfigProviderProps`，所以这里用
+ * `ConfigProvider.config({ holderRender })` 而不是把它当 prop 传——两者在运行时等价，
+ * 但前者有完整类型。
+ */
+ConfigProvider.config({
+  holderRender: (node) => <App>{node}</App>,
+})
 
 function ThemedConfig({ children }: { children: React.ReactNode }) {
   const { theme } = useTheme()

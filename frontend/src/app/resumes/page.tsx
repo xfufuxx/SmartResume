@@ -1000,7 +1000,7 @@ export default function ResumeLibrary() {
           footer={<Button onClick={() => setTreeOpen(false)}>关闭</Button>}
           onCancel={() => setTreeOpen(false)}
           width={560}
-          destroyOnClose
+          destroyOnHidden
         >
           {treeLoading ? (
             <div style={{ textAlign: 'center', padding: 32 }}><Spin /></div>

@@ -1208,7 +1208,7 @@ export default function JobLibrary() {
           open={importModalOpen}
           onCancel={() => { setImportModalOpen(false); setImportList([]) }}
           width={760}
-          destroyOnClose
+          destroyOnHidden
           footer={[
             <Button key="cancel" onClick={() => { setImportModalOpen(false); setImportList([]) }}>取消</Button>,
             <Button
@@ -1324,7 +1324,7 @@ export default function JobLibrary() {
           okText="创建职位"
           cancelText="取消"
           confirmLoading={addLoading}
-          destroyOnClose
+          destroyOnHidden
         >
           <div className="job-add-form">
             <div className="job-add-row">
@@ -1524,7 +1524,7 @@ export default function JobLibrary() {
           okText={DELIVERY_CHANNEL_META[activeDeliveryChannel].label}
           cancelText="取消"
           confirmLoading={applyLoading}
-          destroyOnClose
+          destroyOnHidden
         >
           {applyJob && (
             <div className="job-add-form">
@@ -1759,7 +1759,7 @@ export default function JobLibrary() {
           cancelText="返回修改"
           okButtonProps={{ disabled: !(confirmChecks.info && confirmChecks.auth), loading: applyLoading }}
           width={460}
-          destroyOnClose
+          destroyOnHidden
         >
           {applyJob && (
             <div className="job-add-form">
@@ -1816,7 +1816,7 @@ export default function JobLibrary() {
           okText="确认批量投递"
           cancelText="取消"
           confirmLoading={batchApplyLoading}
-          destroyOnClose
+          destroyOnHidden
         >
           <div className="job-add-form">
             <div className="apps-applicant-hint">

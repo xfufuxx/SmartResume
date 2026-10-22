@@ -162,7 +162,7 @@ export default function MatchBoardPage() {
         </div>
 
         {loading && (
-          <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" tip="计算中..." /></div>
+          <div style={{ textAlign: 'center', padding: 60 }}><Spin size="large" tip="计算中..."><div style={{ minHeight: 1 }} /></Spin></div>
         )}
 
         {!loading && result && (
