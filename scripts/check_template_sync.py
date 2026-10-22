@@ -383,7 +383,10 @@ def main() -> int:
         check(f"{tid} 渲染成功", True)
         check(f"{tid} 含 @page", "@page" in html)
         lf = meta.layout_features
-        page_block = html[html.rfind("@page"): html.rfind("@page") + 120]
+        # 必须定位真正的规则块 "@page {"：基座注释里也可能出现 @page 字样，
+        # 用裸 "@page" 做 rfind 会命中注释，导致断言读到注释文本而非规则。
+        _at = html.rfind("@page {")
+        page_block = html[_at: _at + 120]
         # 与 print_css.build_print_css 的条件严格对齐：full_bleed_header **或** 纵向边距为 0
         # 都会输出 `margin: 0`（早期这里只判 full_bleed_header，侧边栏这类「零边距但非全幅头部」
         # 的模板会被误判成期望 `0mm 0mm`）。

@@ -273,6 +273,48 @@ TEMPLATE_META: dict[str, BackendTemplateMeta] = {
             theme={"primary": "#ea580c", "secondary": "#f97316", "bg": "#ffffff", "text": "#ea580c"},
             desc="jadeAI 初创：橙色渐变圆角头部 + 实心技能胶囊，年轻有冲劲",
         ),
+        # ── 批次 B：行业/职业 ──
+        BackendTemplateMeta(
+            id="jade-nordic", name="北欧冷淡版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 10.0, "lineHeight": 1.85, "sectionGapMm": 5.3},
+            layout_features=LayoutFeatures(page_margin_y_mm=18.0, page_margin_x_mm=18.0),
+            category="simple", industries=("设计", "通用", "建筑"), tags=("北欧", "冷淡", "留白"),
+            theme={"primary": "#4a5568", "secondary": "#cbd5e1", "bg": "#ffffff", "text": "#3d4753"},
+            desc="jadeAI 北欧：冷灰蓝调 + 超大留白，竖线标签与淡灰胶囊，克制清爽",
+        ),
+        BackendTemplateMeta(
+            id="jade-corporate", name="企业正式版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 10.0, "lineHeight": 1.7, "sectionGapMm": 4.2},
+            layout_features=LayoutFeatures(page_margin_y_mm=15.0, page_margin_x_mm=16.0),
+            category="business", industries=("制造业", "国企", "行政"), tags=("正式", "单栏", "实心标题条"),
+            theme={"primary": "#1e3a5f", "secondary": "#64748b", "bg": "#ffffff", "text": "#243244"},
+            desc="jadeAI 企业：左侧竖色条页眉 + 实心深蓝分节标题条，稳重正式",
+        ),
+        BackendTemplateMeta(
+            id="jade-consultant", name="咨询顾问版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 10.0, "lineHeight": 1.7, "sectionGapMm": 4.2},
+            layout_features=LayoutFeatures(page_margin_y_mm=15.0, page_margin_x_mm=16.0),
+            category="business", industries=("咨询", "战略", "金融"), tags=("编号章节", "案例式", "铜色"),
+            theme={"primary": "#2b3038", "secondary": "#b45309", "bg": "#ffffff", "text": "#33383f"},
+            desc="jadeAI 咨询：铜色双线页眉 + 编号章节 + 编号要点，结构化案例表达",
+        ),
+        BackendTemplateMeta(
+            id="jade-finance", name="金融投行版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 9.5, "lineHeight": 1.65, "sectionGapMm": 3.7},
+            layout_features=LayoutFeatures(page_margin_y_mm=14.0, page_margin_x_mm=15.0,
+                                           sidebar_side="right", sidebar_width_mm=52.0, two_column=True),
+            category="business", industries=("金融", "投行", "会计"), tags=("深藏蓝", "金色", "右栏"),
+            theme={"primary": "#0f2d52", "secondary": "#b8860b", "bg": "#ffffff", "text": "#1f2937"},
+            desc="jadeAI 金融：深藏蓝页眉 + 金色细线，右侧窄栏放技能与教育，信息密度高",
+        ),
+        BackendTemplateMeta(
+            id="jade-medical", name="医疗健康版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 10.0, "lineHeight": 1.75, "sectionGapMm": 4.2},
+            layout_features=LayoutFeatures(page_margin_y_mm=15.0, page_margin_x_mm=16.0),
+            category="simple", industries=("医疗", "健康", "公益"), tags=("青绿", "亲和", "圆点标题"),
+            theme={"primary": "#0d9488", "secondary": "#5eead4", "bg": "#ffffff", "text": "#33414d"},
+            desc="jadeAI 医疗：淡青底圆角页眉 + 十字装饰 + 青色圆点标题，清爽亲和",
+        ),
     ]
 }
 

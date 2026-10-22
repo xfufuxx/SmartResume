@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+{# 文档属性（WeasyPrint 读取；Playwright 路径由 pdf_metadata 后处理覆盖） #}
+<title>{{ resume.personal_info.name or '姓名' }}的简历</title>
+<meta name="author" content="智能简历">
+<meta name="description" content="医疗健康版简历">
+<meta name="keywords" content="简历,resume">
+<meta name="template-id" content="jade-medical">
+<meta name="template-version" content="1.0.0">
+<style>
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+  }
+  {# @page / print-color-adjust / 条目级分页保护由 print_css 基座按 layout_features 注入，此处不写 #}
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10pt);
+    color: var(--tpl-text, #33414d);
+    line-height: var(--tpl-line-height, 1.75);
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff;
+  }
+
+  /* ── 页眉：淡青底圆角块 + 医疗十字装饰 ── */
+  .header {
+    background: #eefbf8;
+    border-left: 4px solid var(--tpl-primary, #0d9488);
+    border-radius: 0 4px 4px 0;
+    padding: 15px 18px;
+    margin-bottom: 18px;
+    position: relative;
+  }
+  .header .cross {
+    position: absolute;
+    right: 18px;
+    top: 16px;
+    width: 26px;
+    height: 26px;
+  }
+  .header .cross::before,
+  .header .cross::after {
+    content: "";
+    position: absolute;
+    background: var(--tpl-accent, #5eead4);
+    border-radius: 2px;
+  }
+  .header .cross::before { left: 10px; top: 0; width: 6px; height: 26px; }
+  .header .cross::after { left: 0; top: 10px; width: 26px; height: 6px; }
+  .header .name {
+    font-size: 20pt;
+    font-weight: 700;
+    color: var(--tpl-primary, #0d9488);
+    letter-spacing: 1px;
+    margin-bottom: 4px;
+  }
+  .header .headline {
+    font-size: 9.5pt;
+    color: #5b707f;
+    letter-spacing: 0.5px;
+    margin-bottom: 7px;
+  }
+  .header .contact {
+    font-size: 8.5pt;
+    color: #5b707f;
+    letter-spacing: 0.3px;
+  }
+  .header .contact span::after { content: "   |   "; color: #b7d8d1; }
+  .header .contact span:last-child::after { content: ""; }
+
+  /* ── 分节：青色圆点标题 ── */
+  .section { margin-bottom: var(--tpl-section-gap, 16px); }
+  .section-title {
+    font-size: 9.5pt;
+    font-weight: 700;
+    letter-spacing: 1.2px;
+    color: var(--tpl-primary, #0d9488);
+    margin-bottom: 9px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .section-title::before {
+    content: "";
+    width: 7px;
+    height: 7px;
+    border-radius: 50%;
+    background: var(--tpl-accent, #5eead4);
+    flex-shrink: 0;
+  }
+
+  .summary-text {
+    font-size: 9.5pt;
+    color: #40525f;
+    line-height: 1.8;
+    padding-left: 15px;
+  }
+
+  .exp-item { margin-bottom: 12px; padding-left: 15px; }
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 3px;
+  }
+  .exp-header .title {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #2a3944;
+  }
+  .exp-header .company { font-weight: 400; color: #6b8494; font-size: 9pt; }
+  .exp-header .date {
+    font-size: 8.5pt;
+    color: #8aa0ad;
+    white-space: nowrap;
+  }
+  .exp-points { list-style: none; margin-top: 3px; }
+  .exp-points li {
+    font-size: 9pt;
+    color: #40525f;
+    line-height: 1.8;
+    padding-left: 14px;
+    position: relative;
+    margin-bottom: 2px;
+  }
+  .exp-points li::before {
+    content: "＋";
+    position: absolute;
+    left: 0;
+    color: var(--tpl-primary, #0d9488);
+    font-size: 8pt;
+    font-weight: 700;
+  }
+
+  .proj-item { margin-bottom: 12px; padding-left: 15px; }
+  .proj-tech {
+    font-size: 8.5pt;
+    color: #8aa0ad;
+    margin-top: 3px;
+  }
+
+  /* ── 技能：淡青胶囊 ── */
+  .skills-list {
+    padding-left: 15px;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px 7px;
+  }
+  .skills-list span {
+    font-size: 8.5pt;
+    color: #146c5f;
+    background: #eefbf8;
+    border: 1px solid #cdeee7;
+    padding: 2px 10px;
+    border-radius: 11px;
+    letter-spacing: 0.3px;
+  }
+
+  .edu-item { margin-bottom: 8px; padding-left: 15px; }
+  .edu-detail { font-size: 9pt; color: #6b8494; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="cross"></div>
+    <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
+    {% if resume.personal_info.title %}<div class="headline">{{ resume.personal_info.title }}</div>{% endif %}
+    <div class="contact">
+      {% if resume.personal_info.email %}<span>{{ resume.personal_info.email }}</span>{% endif %}
+      {% if resume.personal_info.phone %}<span>{{ resume.personal_info.phone }}</span>{% endif %}
+      {% if resume.personal_info.address %}<span>{{ resume.personal_info.address }}</span>{% endif %}
+    </div>
+  </div>
+
+  {% if resume.summary %}
+  <div class="section">
+    <div class="section-title">个人概述</div>
+    <div class="summary-text">{{ resume.summary }}</div>
+  </div>
+  {% endif %}
+
+  {% if resume.experience %}
+  <div class="section">
+    <div class="section-title">工作经历</div>
+    {% for exp in resume.experience %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <span class="title">{{ exp.title }}{% if exp.company %}<span class="company"> · {{ exp.company }}</span>{% endif %}</span>
+        <span class="date">{% if exp.start %}{{ exp.start }}{% endif %}{% if exp.start and exp.end %} – {% endif %}{% if exp.end %}{{ exp.end }}{% endif %}</span>
+      </div>
+      {% if exp.points %}
+      <ul class="exp-points">
+        {% for point in exp.points %}<li>{{ point }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resume.projects %}
+  <div class="section">
+    <div class="section-title">项目经历</div>
+    {% for proj in resume.projects %}
+    <div class="proj-item">
+      <div class="exp-header">
+        <span class="title">{{ proj.name }}{% if proj.role %}<span class="company"> · {{ proj.role }}</span>{% endif %}</span>
+        <span class="date">{% if proj.start %}{{ proj.start }}{% endif %}{% if proj.start and proj.end %} – {% endif %}{% if proj.end %}{{ proj.end }}{% endif %}</span>
+      </div>
+      {% if proj.points %}
+      <ul class="exp-points">
+        {% for point in proj.points %}<li>{{ point }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if proj.description %}<div class="summary-text">{{ proj.description }}</div>{% endif %}
+      {% if proj.tech %}<div class="proj-tech">技术栈：{{ proj.tech | join(' · ') }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resume.skills %}
+  <div class="section">
+    <div class="section-title">专业技能</div>
+    <div class="skills-list">
+      {% for skill in resume.skills %}<span>{{ skill }}</span>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if resume.education %}
+  <div class="section">
+    <div class="section-title">教育背景</div>
+    {% for edu in resume.education %}
+    <div class="edu-item">
+      <div class="exp-header">
+        <span class="title">{{ edu.school }}</span>
+        <span class="date">{% if edu.start %}{{ edu.start }}{% endif %}{% if edu.start and edu.end %} – {% endif %}{% if edu.end %}{{ edu.end }}{% endif %}</span>
+      </div>
+      <div class="edu-detail">{{ edu.degree }}{% if edu.major %} · {{ edu.major }}{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+</body>
+</html>

@@ -142,11 +142,47 @@ def build_print_css(features: LayoutFeatures | None = None, *, theme: Mapping[st
             "  }"
         )
 
+    # ── 纸张尺寸对齐：消除「body 写死 210mm → Chromium 整体缩放」 ──
+    # 模板 body 一律 `width: 210mm`（且无 padding，页边距全部交给 @page）。
+    # 打印时 @page margin 生效，内容区只有 210-2X mm，body 的 210mm 放不下 →
+    # Chromium 会整体缩放约 (210-2X)/210（X=20mm 时仅 0.81），实测 26pt 姓名
+    # 只渲染成 21pt、9pt 正文成 7.3pt。而 iframe 预览处于屏幕媒体下 @page 不生效、
+    # 不缩放也不留白 —— 于是「预览是 10pt 无边距、导出是 8.1pt 有边距」，
+    # 直接违背所见即所得。
+    # 修法：打印态让 body 退回内容区尺寸（不再被缩放），屏幕态用 padding 还原
+    # 等价页边距 —— 两边内容区宽度、字号、换行位置全部对齐。
+    page_margin_y = 0.0 if (f.full_bleed_header or f.page_margin_y_mm == 0) else f.page_margin_y_mm
+    page_margin_x = 0.0 if (f.full_bleed_header or f.page_margin_y_mm == 0) else f.page_margin_x_mm
+    body_box_rule = (
+        "  /* 纸张盒模型：打印态填满内容区 / 屏幕态用 padding 还原同款页边距。\n"
+        "     目的：预览与导出的内容区宽度、字号、换行位置完全一致（所见即所得）。\n"
+        "     模板 body 若有自定义 padding 会被本段归零——页边距一律以 A4 页边距规则为准。 */\n"
+        "  @media print {\n"
+        "    body {\n"
+        "      box-sizing: border-box;\n"
+        "      width: auto;\n"
+        f"      min-height: calc(297mm - {_mm(2 * page_margin_y)}mm);\n"
+        "      padding: 0;\n"
+        "      margin: 0;\n"
+        "    }\n"
+        "  }\n"
+        "  @media screen {\n"
+        "    html { background: #eceef1; }\n"
+        "    body {\n"
+        "      box-sizing: border-box;\n"
+        f"      min-height: calc(297mm - {_mm(2 * page_margin_y)}mm);\n"
+        f"      padding: {_mm(page_margin_y)}mm {_mm(page_margin_x)}mm;\n"
+        "      margin: 0 auto;\n"
+        "    }\n"
+        "  }"
+    )
+
     blocks: list[str] = [
         "/* ══ 打印基座（print_css.build_print_css 自动生成，勿手改）══\n"
         "   本段位于模板私有样式之后：同名规则以本段为准。\n"
         "   分页策略由 template_meta.layout_features 驱动。 */",
         page_rule,
+        body_box_rule,
         "  /* 背景色必须打印（否则渐变/色块在 PDF 里凭空消失） */\n"
         "  html, body {\n"
         "    -webkit-print-color-adjust: exact;\n"
