@@ -385,3 +385,71 @@ async def generate_pdf(resume_json: dict, template_name: str = "professional.htm
     # 策略 3：ReportLab 回退（模板无关，仅作为最后手段）
     logger.warning("[PDF生成] 所有渲染策略均失败，使用 ReportLab 回退（非模板渲染）")
     return _build_fallback_pdf(resume_json)
+
+
+# ── 可视化排版编辑器：按布局导出（body HTML 由前端共享渲染器生成） ──
+
+_LAYOUT_SHELL_TEMPLATE = "layout_export.html"
+
+
+def _render_layout_shell(body_html: str, css: str) -> str:
+    """把前端生成的 body HTML 包进字体壳：@font-face + @page A4 零边距 + 前端块样式。"""
+    template_path = os.path.join(TEMPLATE_DIR, _LAYOUT_SHELL_TEMPLATE)
+    if not os.path.exists(template_path):
+        raise FileNotFoundError(f"布局导出模板缺失: {_LAYOUT_SHELL_TEMPLATE}")
+    template = env.get_template(_LAYOUT_SHELL_TEMPLATE)
+    return template.render(body_html=body_html, css=css)
+
+
+async def generate_pdf_from_layout_html(
+    body_html: str,
+    css: str = "",
+    resume_json: dict | None = None,
+) -> bytes:
+    """按可视化布局生成 A4 PDF（预览与导出 1:1：同一份 HTML/CSS，只是换了渲染端）。
+
+    渲染链与 generate_pdf 一致：Playwright 异步 → Playwright 同步 → WeasyPrint；
+    全部失败时若有 resume_json 则回退到流式模板 ReportLab 版式（保底能出文件）。
+    """
+    html = _render_layout_shell(body_html, css)
+
+    try:
+        from app.services.resume_renderer import html_to_pdf_async
+        logger.info("[布局导出] 使用 Playwright 异步渲染")
+        result = await html_to_pdf_async(html, base_url=TEMPLATE_DIR)
+        logger.info(f"[布局导出] Playwright 异步成功: {len(result)} bytes")
+        return result
+    except (ImportError, OSError) as e:
+        logger.warning(f"[布局导出] Playwright 不可用: {e}")
+    except Exception as e:
+        logger.error(f"[布局导出] Playwright 异步渲染失败: {type(e).__name__}: {e}", exc_info=True)
+
+    try:
+        import asyncio
+
+        def _sync_render() -> bytes:
+            from app.services.resume_renderer import html_to_pdf
+            return html_to_pdf(html, base_url=TEMPLATE_DIR)
+
+        result = await asyncio.to_thread(_sync_render)
+        logger.info(f"[布局导出] Playwright 同步成功: {len(result)} bytes")
+        return result
+    except Exception as e:
+        logger.error(f"[布局导出] Playwright 同步也失败: {type(e).__name__}: {e}", exc_info=True)
+
+    if settings.USE_WEASYPRINT:
+        try:
+            from weasyprint import HTML
+            result = HTML(string=html, base_url=TEMPLATE_DIR).write_pdf()
+            logger.info(f"[布局导出] WeasyPrint 成功: {len(result)} bytes")
+            return result
+        except (ImportError, OSError) as e:
+            logger.warning(f"[布局导出] WeasyPrint 不可用: {e}")
+        except Exception as e:
+            logger.error(f"[布局导出] WeasyPrint 渲染失败: {type(e).__name__}: {e}", exc_info=True)
+
+    if resume_json is None:
+        raise RuntimeError("所有渲染策略均失败，且无简历数据可回退")
+
+    logger.warning("[布局导出] 所有布局渲染策略均失败，回退到流式模板版式")
+    return _build_fallback_pdf(resume_json)

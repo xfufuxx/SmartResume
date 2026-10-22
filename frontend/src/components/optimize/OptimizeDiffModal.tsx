@@ -3,7 +3,7 @@
 import React, { useMemo } from 'react'
 import { Modal, Button, Tag, Empty, Space } from 'antd'
 import {
-  CheckCircleFilled, DownloadOutlined, SwapOutlined, ThunderboltOutlined,
+  CheckCircleFilled, DownloadOutlined, SwapOutlined, ThunderboltOutlined, LayoutOutlined,
 } from '@ant-design/icons'
 import { buildResumeDiff, diffSegments } from '@/lib/diff'
 import type { DiffEntry, DiffSegment } from '@/lib/diff'
@@ -21,6 +21,8 @@ interface OptimizeDiffModalProps {
   scoreAfter?: number | null
   /** 跳转「逐条对比」详情页 */
   onOpenDetail?: () => void
+  /** 打开「可视化排版编辑器」（AI 优化完成 → 导出 PDF 之间的排版步骤） */
+  onOpenLayoutEditor?: () => void
   /** 打开「逐条确认 AI 修改」弹窗（接受/拒绝/编辑后接受 → 生成新版本） */
   onOpenReview?: () => void
   /** 下载优化后的 PDF */
@@ -52,7 +54,7 @@ function Segments({ segments }: { segments: DiffSegment[] }) {
  * 只呈现确有变化的条目，新增/改动文字用高亮标出，方便一眼看出改了什么。
  */
 export default function OptimizeDiffModal({
-  open, onClose, result, before, scoreBefore, scoreAfter, onOpenDetail, onOpenReview, onExport, exporting,
+  open, onClose, result, before, scoreBefore, scoreAfter, onOpenDetail, onOpenLayoutEditor, onOpenReview, onExport, exporting,
 }: OptimizeDiffModalProps) {
   const diff = useMemo(
     () => buildResumeDiff(before || result?.original_json || null, result?.optimized_json || null),
@@ -174,6 +176,9 @@ export default function OptimizeDiffModal({
             )}
             {onOpenDetail && (
               <Button icon={<SwapOutlined />} onClick={onOpenDetail}>查看逐条对比</Button>
+            )}
+            {onOpenLayoutEditor && (
+              <Button icon={<LayoutOutlined />} onClick={onOpenLayoutEditor}>可视化排版</Button>
             )}
             {onExport && (
               <Button type="primary" icon={<DownloadOutlined />} loading={exporting} onClick={onExport}>

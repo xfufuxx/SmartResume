@@ -21,6 +21,7 @@ import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
 import { jobs, applications, emailTemplates, resumes, user, toBackendUrl } from '@/lib/api'
 import { getToken } from '@/lib/auth'
+import { useTheme } from '@/lib/theme'
 import { formatDate } from '@/lib/utils'
 import type {
   ApplicationPayload, DeliveryContactHint, EmailTemplate, FormProbeResult, GuidePack,
@@ -79,7 +80,7 @@ const DEFAULT_CATEGORY_META = { icon: <FileSearchOutlined />, color: '#007AFF' }
    后端通道决策优先级为 guide > email > form > manual，前端展示保持一致。 */
 const DELIVERY_CHANNEL_META: Record<
   'email' | 'form' | 'guide' | 'manual',
-  { label: string; level: string; desc: string; icon: React.ReactNode; tagColor: string; tagBg: string }
+  { label: string; level: string; desc: string; icon: React.ReactNode; tagColor: string; tagBg: string; tagColorDark: string; tagBgDark: string }
 > = {
   email: {
     label: '邮件直接投递',
@@ -88,6 +89,8 @@ const DELIVERY_CHANNEL_META: Record<
     icon: <SendOutlined />,
     tagColor: '#389e0d',
     tagBg: '#f6ffed',
+    tagColorDark: '#95DE64',
+    tagBgDark: 'rgba(48, 209, 88, 0.12)',
   },
   form: {
     label: 'AI 帮你填写',
@@ -96,6 +99,8 @@ const DELIVERY_CHANNEL_META: Record<
     icon: <FormOutlined />,
     tagColor: '#0958d9',
     tagBg: '#e6f4ff',
+    tagColorDark: '#69C0FF',
+    tagBgDark: 'rgba(10, 132, 255, 0.12)',
   },
   guide: {
     label: '前往招聘平台投递',
@@ -104,6 +109,8 @@ const DELIVERY_CHANNEL_META: Record<
     icon: <ExportOutlined />,
     tagColor: '#d46b08',
     tagBg: '#fff7e6',
+    tagColorDark: '#FFC069',
+    tagBgDark: 'rgba(255, 149, 0, 0.12)',
   },
   manual: {
     label: '记录这次投递',
@@ -112,6 +119,8 @@ const DELIVERY_CHANNEL_META: Record<
     icon: <FileTextOutlined />,
     tagColor: '#595959',
     tagBg: '#fafafa',
+    tagColorDark: 'rgba(235, 235, 245, 0.60)',
+    tagBgDark: '#2C2C2E',
   },
 }
 
@@ -138,6 +147,8 @@ function MatchRing({ value }: { value: number }) {
 
 export default function JobLibrary() {
   const router = useRouter()
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
   const [token, setToken] = useState<string | null>(null)
 
   // 数据：allJobs 为全量在库岗位（用于统计卡与 Tab 计数），list 为当前 Tab 原始数据
@@ -1520,22 +1531,24 @@ export default function JobLibrary() {
               {/* 本次投递方式与自动化程度：根据用户选择实时反映，明确系统能力边界，消除心理落差 */}
               {(() => {
                 const m = DELIVERY_CHANNEL_META[activeDeliveryChannel]
+                const tagColor = isDark ? m.tagColorDark : m.tagColor
+                const tagBg = isDark ? m.tagBgDark : m.tagBg
                 return (
                   <div
                     style={{
                       display: 'flex', gap: 12, alignItems: 'flex-start',
                       padding: '12px 14px', marginBottom: 16, borderRadius: 8,
-                      border: `1px solid ${m.tagColor}`, background: m.tagBg,
+                      border: `1px solid ${tagColor}`, background: tagBg,
                     }}
                   >
-                    <span style={{ fontSize: 22, lineHeight: 1.2, color: m.tagColor }}>{m.icon}</span>
+                    <span style={{ fontSize: 22, lineHeight: 1.2, color: tagColor }}>{m.icon}</span>
                     <div style={{ flex: 1, minWidth: 0 }}>
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                         <b style={{ fontSize: 14, color: 'var(--text-primary)' }}>{m.label}</b>
                         <span
                           style={{
-                            fontSize: 12, fontWeight: 600, color: m.tagColor,
-                            background: '#fff', border: `1px solid ${m.tagColor}`,
+                            fontSize: 12, fontWeight: 600, color: tagColor,
+                            background: isDark ? '#1C1C1E' : '#fff', border: `1px solid ${tagColor}`,
                             borderRadius: 4, padding: '0 6px', lineHeight: '18px',
                           }}
                         >

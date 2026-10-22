@@ -29,6 +29,9 @@ import MatchGauge, { levelMeta } from '@/components/optimize/MatchGauge'
 import MetricStat from '@/components/optimize/MetricStat'
 import OptimizeDiffModal from '@/components/optimize/OptimizeDiffModal'
 import ChangeReviewModal from '@/components/optimize/ChangeReviewModal'
+import { LayoutEditor } from '@/components/layout-editor'
+import { buildLayout, type ResumeLike } from '@/lib/layout/buildLayout'
+import { parseLayout } from '@/lib/layout/serialize'
 import type {
   ResumeParseResult, JobParseResult, OptimizeResult, ResumeRecord, ResumeAnalysis,
 } from '@/types'
@@ -99,6 +102,8 @@ export default function Home() {
   const [diffModalOpen, setDiffModalOpen] = useState(false)
   /** 逐条确认弹窗（AI 建议 → 用户确认 → 新版本） */
   const [reviewModalOpen, setReviewModalOpen] = useState(false)
+  /** 可视化排版编辑器（全屏模态）：优化完成 → 导出 PDF 之间的排版步骤 */
+  const [layoutEditorOpen, setLayoutEditorOpen] = useState(false)
   /** 本次运行已用时长（秒）：只反映「还在进行中」，不伪装成进度 */
   const [runningSeconds, setRunningSeconds] = useState(0)
   const pollingRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -489,6 +494,12 @@ export default function Home() {
       message.error(msg)
     }
   }, [result, resumeId, selectedTemplate, blockedByRunning, beginRun, finishRun, startTaskPolling])
+
+  /** 可视化排版编辑器的初始布局：已保存过排版 → 读档；否则按当前优化结果生成默认布局 */
+  const layoutInitialDoc = useMemo(() => {
+    if (!result) return null
+    return parseLayout(result.layout_json) ?? buildLayout(result.optimized_json as ResumeLike | undefined)
+  }, [result])
 
   /**
    * 停止优化（AI 优化 / 一键生成 / PDF 渲染共用）。
@@ -1091,6 +1102,7 @@ export default function Home() {
           scoreAfter={optimizedAnalysis?.match_rate ?? null}
           onOpenDetail={result ? () => router.push(`/history/${result.id}`) : undefined}
           onOpenReview={result ? () => setReviewModalOpen(true) : undefined}
+          onOpenLayoutEditor={result?.optimized_json ? () => setLayoutEditorOpen(true) : undefined}
           onExport={handleExportPdf}
           exporting={exporting}
         />
@@ -1107,6 +1119,37 @@ export default function Home() {
             } catch { /* 新版本加载失败不影响主流程 */ }
           }}
         />
+
+        {/* 可视化排版编辑器：全屏模态。预览与导出共用 mm 物理单位，1:1 */}
+        <Modal
+          open={layoutEditorOpen}
+          onCancel={() => setLayoutEditorOpen(false)}
+          footer={null}
+          width="100%"
+          wrapClassName="le-fullscreen"
+          style={{ top: 0, maxWidth: '100vw', paddingBottom: 0 }}
+          styles={{ body: { height: 'calc(100vh - 55px)', padding: 12, overflow: 'hidden' } }}
+          destroyOnClose
+        >
+          {layoutInitialDoc && result ? (
+            <LayoutEditor
+              optId={result.id}
+              initialDoc={layoutInitialDoc}
+              onClose={() => setLayoutEditorOpen(false)}
+              onExported={(pdfUrl) =>
+                setResult((prev) => (prev ? { ...prev, pdf_url: pdfUrl } : prev))
+              }
+              onSaved={() => {
+                if (!result?.id) return
+                optimize.get(result.id)
+                  .then((res) => setResult(res.data || null))
+                  .catch(() => { /* 刷新失败不影响已保存的布局 */ })
+              }}
+            />
+          ) : (
+            <Empty description="暂无可排版的内容" />
+          )}
+        </Modal>
 
         <TemplateSelector open={showTemplateModal} onClose={() => setShowTemplateModal(false)} selected={selectedTemplate} onSelect={setSelectedTemplate} options={TEMPLATE_OPTIONS} />
       </div>

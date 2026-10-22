@@ -15,6 +15,8 @@ class OptimizedResume(Base):
     job_image_id: Mapped[str | None] = mapped_column(String(36), ForeignKey("job_images.id"), nullable=True)
     original_json: Mapped[dict] = mapped_column(JSONB, nullable=True)
     optimized_json: Mapped[dict] = mapped_column(JSONB, nullable=True)
+    # 可视化排版编辑器保存的布局文档（LayoutDocument）；null = 未排版过
+    layout_json: Mapped[dict | None] = mapped_column(JSONB, nullable=True)
     match_score: Mapped[int] = mapped_column(Integer, nullable=True)
     pdf_url: Mapped[str] = mapped_column(String(1024), nullable=True)
     changes_description: Mapped[str] = mapped_column(Text, nullable=True)

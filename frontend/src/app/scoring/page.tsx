@@ -11,6 +11,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { resumes, jobs, scoring } from '@/lib/api'
 import { getToken } from '@/lib/auth'
+import { useTheme } from '@/lib/theme'
 import type { ResumeRecord, ResumeScore } from '@/types'
 import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
@@ -34,6 +35,8 @@ const SCORE_COLOR = (s: number) => (s >= 80 ? '#10B981' : s >= 60 ? '#F59E0B' : 
 
 export default function ScoringPage() {
   const router = useRouter()
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
   const [token, setToken] = useState<string | null>(null)
   const [resumeList, setResumeList] = useState<ResumeRecord[]>([])
   const [jobList, setJobList] = useState<JobOption[]>([])
@@ -179,7 +182,7 @@ export default function ScoringPage() {
                   {dimensions.map((d) => (
                     <div key={d.key}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 6, fontSize: 13 }}>
-                        <span style={{ color: '#374151' }}>{d.label}</span>
+                        <span style={{ color: isDark ? 'rgba(235, 235, 245, 0.85)' : '#374151' }}>{d.label}</span>
                         <strong style={{ color: d.color }}>{d.value} 分</strong>
                       </div>
                       <Progress percent={d.value} showInfo={false} strokeColor={d.color} strokeWidth={8} />
@@ -200,7 +203,7 @@ export default function ScoringPage() {
                 {score.suggestions?.length ? (
                   <div className="stagger-list" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
                     {score.suggestions.map((s, i) => (
-                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 16px', background: '#F8FAFC', borderRadius: 10 }}>
+                      <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'flex-start', padding: '12px 16px', background: isDark ? '#2C2C2E' : '#F8FAFC', borderRadius: 10 }}>
                         <CheckCircleOutlined style={{ color: '#10B981', marginTop: 3 }} />
                         <Text style={{ fontSize: 13, lineHeight: 1.6 }}>{s}</Text>
                       </div>

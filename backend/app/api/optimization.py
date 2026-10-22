@@ -1,11 +1,13 @@
 import uuid
 import json
+import os
 import logging
 import asyncio
 from datetime import datetime, timedelta, timezone
 
 logger = logging.getLogger(__name__)
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
+from fastapi.responses import FileResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, or_
 
@@ -19,7 +21,8 @@ from app.models.optimized_resume import OptimizedResume
 from app.schemas.optimization import (
     OptimizeRequest, OptimizeResponse, MatchAnalysis, DiffResponse,
     SatisfactionFeedbackRequest, QuickOptimizeRequest, RenderRequest, RenderTextRequest,
-    UpdateContentRequest, ChangeReviewResponse, ChangeApplyRequest,
+    UpdateContentRequest, SaveLayoutRequest, ExportLayoutRequest,
+    ChangeReviewResponse, ChangeApplyRequest,
 )
 from app.services.agent_optimizer import analyze_match, optimize_resume, generate_changes_description
 from app.services.change_review import apply_decisions, compute_changes
@@ -43,6 +46,7 @@ def _to_response(r: OptimizedResume) -> OptimizeResponse:
     return OptimizeResponse(
         id=r.id, resume_id=r.resume_id, job_image_id=r.job_image_id,
         optimized_json=r.optimized_json, original_json=r.original_json,
+        layout_json=r.layout_json,
         changes_description=r.changes_description, custom_instructions=r.custom_instructions,
         pdf_url=r.pdf_url, match_score=r.match_score,
         job_title=r.job_title, company=r.company, category=r.category,
@@ -450,6 +454,40 @@ _ALLOWED_TEMPLATES = {
     "ocean", "sunset", "violet", "academic",
 }
 
+# ── 可视化排版编辑器：预览字体（与 PDF 同一份 Noto Sans SC，保证 1:1） ──
+
+_LAYOUT_FONT_FILES = {"NotoSansSC-Regular.ttf", "NotoSansSC-Bold.ttf"}
+_LAYOUT_FONTS_DIR = os.path.join(os.path.dirname(__file__), "..", "fonts")
+
+
+@router.get("/layout/fonts.css")
+async def layout_fonts_css():
+    """预览用字体样式表：@font-face 指向本路由的字体文件（跨域由 CORS 中间件放行）"""
+    css = (
+        "@font-face{font-family:'Noto Sans SC';"
+        "src:url('/api/optimize/layout/fonts/NotoSansSC-Regular.ttf') format('truetype');"
+        "font-weight:400;font-style:normal;}"
+        "@font-face{font-family:'Noto Sans SC';"
+        "src:url('/api/optimize/layout/fonts/NotoSansSC-Bold.ttf') format('truetype');"
+        "font-weight:700;font-style:normal;}"
+    )
+    return Response(content=css, media_type="text/css", headers={"Cache-Control": "public, max-age=3600"})
+
+
+@router.get("/layout/fonts/{filename}")
+async def layout_font_file(filename: str):
+    """字体文件（白名单直出，禁目录穿越）"""
+    if filename not in _LAYOUT_FONT_FILES:
+        raise HTTPException(status_code=404, detail="字体不存在")
+    path = os.path.join(_LAYOUT_FONTS_DIR, filename)
+    if not os.path.isfile(path):
+        raise HTTPException(status_code=404, detail="字体文件缺失")
+    return FileResponse(
+        path,
+        media_type="font/ttf",
+        headers={"Cache-Control": "public, max-age=31536000, immutable"},
+    )
+
 
 @router.put("/{opt_id}/content", response_model=OptimizeResponse)
 async def update_optimized_content(
@@ -523,6 +561,99 @@ async def reexport_pdf(
             pass  # 旧文件清理失败不影响主流程
 
     return {"pdf_url": new_url, "template": template}
+
+
+# ── 可视化排版编辑器：布局存取 + 按布局导出 ──
+
+
+def _is_valid_layout(value) -> bool:
+    """最基础的形状校验：version/canvas/blocks 三要素齐备即接受（细校验在前端 validateLayout）"""
+    if not isinstance(value, dict):
+        return False
+    if not isinstance(value.get("version"), int):
+        return False
+    canvas = value.get("canvas")
+    if not isinstance(canvas, dict) or not isinstance(canvas.get("width"), (int, float)):
+        return False
+    blocks = value.get("blocks")
+    return isinstance(blocks, list) and len(blocks) <= 500
+
+
+@router.put("/{opt_id}/layout")
+async def save_layout(
+    opt_id: str,
+    body: SaveLayoutRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """保存可视化排版布局（与 optimized_json 正交存储，互不改写）。"""
+    if not _is_valid_layout(body.layout):
+        raise HTTPException(status_code=400, detail="布局数据不合法")
+
+    result = await db.execute(
+        select(OptimizedResume).where(OptimizedResume.id == opt_id, OptimizedResume.user_id == user.id)
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="优化记录不存在")
+
+    record.layout_json = body.layout
+    await db.commit()
+    return {"detail": "布局已保存"}
+
+
+@router.post("/{opt_id}/export-layout")
+async def export_layout_pdf(
+    opt_id: str,
+    body: ExportLayoutRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """按可视化布局导出 PDF：前端生成 body HTML + CSS，后端包字体壳后走 Playwright A4。"""
+    result = await db.execute(
+        select(OptimizedResume).where(OptimizedResume.id == opt_id, OptimizedResume.user_id == user.id)
+    )
+    record = result.scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="优化记录不存在")
+    if not record.optimized_json:
+        raise HTTPException(status_code=400, detail="该记录没有可导出的内容")
+    if not body.html.strip():
+        raise HTTPException(status_code=400, detail="导出内容为空")
+    if len(body.html) > 2_000_000:
+        raise HTTPException(status_code=413, detail="导出内容过大")
+
+    # 顺带持久化布局（导出即存档，下次打开排版不丢）
+    if body.layout is not None:
+        if _is_valid_layout(body.layout):
+            record.layout_json = body.layout
+        else:
+            raise HTTPException(status_code=400, detail="布局数据不合法")
+
+    from app.services.pdf_generator import generate_pdf_from_layout_html
+
+    try:
+        pdf_bytes = await generate_pdf_from_layout_html(
+            body.html, body.css, record.optimized_json,
+        )
+    except Exception as e:
+        logger.error(f"[布局导出] PDF 生成失败 opt={opt_id}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"PDF 生成失败: {type(e).__name__}")
+
+    pdf_key = f"optimized/{user.id}/{uuid.uuid4()}.pdf"
+    new_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
+
+    old_url = record.pdf_url
+    record.pdf_url = new_url
+    await db.commit()
+
+    if old_url:
+        try:
+            await storage.delete(old_url)
+        except Exception:
+            pass  # 旧文件清理失败不影响主流程
+
+    return {"pdf_url": new_url, "template": "layout"}
 
 
 # ── 异步优化（任务队列 + 轮询） ──

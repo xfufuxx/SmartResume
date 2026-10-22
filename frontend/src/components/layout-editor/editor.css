@@ -1,0 +1,674 @@
+/* 可视化排版编辑器 —— chrome 样式（选区/手柄/参考线/网格/工具栏）。
+   只影响预览，永不进入导出 HTML（导出由 layoutBodyHtml 从 doc 生成）。
+   类名前缀 le- / is- / lk-handle / lk-guide，与内容层 .lk-* 不冲突。 */
+
+.le-layout {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* 全屏模态载体（首页「优化完成」流）：flex 布局吃满 modal body，画布内部滚动 */
+.le-fullscreen .ant-modal-body {
+  height: calc(100vh - 55px);
+  padding: 12px;
+  overflow: hidden;
+}
+.le-fullscreen .le-layout {
+  height: 100%;
+  min-height: 0;
+}
+.le-fullscreen .le-body {
+  flex: 1;
+  min-height: 0;
+}
+.le-fullscreen .le-canvas-wrap {
+  max-height: 100%;
+}
+
+.le-toolbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 12px;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-light, #eee);
+  border-radius: var(--radius-md, 8px);
+}
+
+/* ── 多页简历：页签栏（单页视图 + 页签切换） ── */
+.le-page-tabs {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 10px;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-light, #eee);
+  border-radius: var(--radius-md, 8px);
+}
+.le-page-tab {
+  display: inline-flex;
+  align-items: center;
+  border: 1px solid var(--border-light, #eee);
+  border-radius: var(--radius-sm, 6px);
+  overflow: hidden;
+  background: var(--bg-card, #fff);
+}
+.le-page-tab > button:first-child {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary, #555);
+  cursor: pointer;
+}
+.le-page-tab.is-active {
+  border-color: var(--primary-600, #2c6fbb);
+}
+.le-page-tab.is-active > button:first-child {
+  color: var(--primary-600, #2c6fbb);
+  font-weight: 600;
+  background: color-mix(in srgb, var(--primary-600, #2c6fbb) 8%, transparent);
+}
+.le-page-tab-count {
+  font-size: 11px;
+  color: var(--text-tertiary, #999);
+}
+.le-page-tab-close {
+  border: none;
+  background: transparent;
+  color: var(--text-tertiary, #999);
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 12px;
+  line-height: 1;
+}
+.le-page-tab-close:hover {
+  color: var(--error-500, #f5222d);
+}
+.le-page-tab-add {
+  border-style: dashed;
+}
+.le-page-tab-add > button,
+button.le-page-tab-add {
+  border: none;
+  background: transparent;
+  padding: 4px 10px;
+  font-size: 12px;
+  color: var(--text-secondary, #555);
+  cursor: pointer;
+}
+
+.le-body {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.le-canvas-wrap {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  padding: 16px;
+  background: var(--gray-100, #f5f5f5);
+  border: 1px solid var(--border-light, #eee);
+  border-radius: var(--radius-md, 8px);
+}
+
+/*
+  工作区栅格：把标尺与舞台拼成一个整体，随滚动容器一起滚，
+  缩放时标尺与页面天然对齐（不用再同步 scrollPos）。
+    [角标][横向标尺]
+    [纵向标尺][舞台]
+*/
+.le-workspace {
+  display: grid;
+  grid-template-columns: 22px auto;
+  grid-template-rows: 22px auto;
+  width: -moz-fit-content;
+  width: fit-content;
+  margin: 0 auto;
+}
+
+.le-ruler-corner {
+  grid-area: 1 / 1;
+  border-right: 1px solid var(--border-light, #eee);
+  border-bottom: 1px solid var(--border-light, #eee);
+  box-sizing: border-box;
+}
+
+.le-ruler {
+  position: relative;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.le-ruler-h {
+  grid-area: 1 / 2;
+  border-bottom: 1px solid var(--border-light, #eee);
+}
+
+.le-ruler-v {
+  grid-area: 2 / 1;
+  border-right: 1px solid var(--border-light, #eee);
+}
+
+/* Guides 会往容器里塞自己的元素，撑满即可 */
+.le-ruler > * {
+  display: block;
+}
+
+.le-stage {
+  grid-area: 2 / 2;
+  margin: 0;
+}
+
+.le-page {
+  position: relative;
+  transform-origin: top left;
+  background: #fff;
+  box-shadow: 0 2px 16px rgba(0, 0, 0, 0.12);
+  flex: none;
+}
+
+.le-page .lk-blk {
+  touch-action: none;
+}
+
+.le-page .lk-blk.is-movable {
+  cursor: move;
+}
+
+.le-page .lk-blk.is-locked {
+  cursor: default;
+}
+
+.le-page .lk-blk:focus-visible {
+  outline: none;
+}
+
+/* 选区框：hover 浅蓝 / 选中主色 / 重叠红色虚线（三层互不覆盖） */
+.le-page .lk-blk.is-overlapping {
+  outline: 2px dashed #ff4d4f;
+  outline-offset: 1px;
+}
+
+.le-page .lk-blk:hover:not(.is-selected):not(.is-overlapping) {
+  outline: 1px solid #91caff;
+  outline-offset: 1px;
+}
+
+.le-page .lk-blk.is-selected {
+  outline: 2px solid var(--primary-600, #0066d6);
+  outline-offset: 1px;
+}
+
+/* 越界：红色实线框，优先级高于上面的选中蓝框与重叠红虚线——
+   越界是「导出会被裁」的硬问题，必须压过一切状态色 */
+.le-page .lk-blk.is-overflow {
+  outline: 2px solid #ff4d4f;
+  outline-offset: 1px;
+}
+
+.le-page .lk-blk.is-overflow.is-offpage {
+  outline-width: 3px;
+}
+
+/* 越界的那几条边单独描红（红点只有一个，不足以看出是哪条边出去了） */
+.lk-of-edge {
+  position: absolute;
+  background: #ff4d4f;
+  pointer-events: none;
+  z-index: 12;
+}
+
+.lk-of-left { left: 0; top: 0; bottom: 0; width: 2px; }
+.lk-of-right { right: 0; top: 0; bottom: 0; width: 2px; }
+.lk-of-top { top: 0; left: 0; right: 0; height: 2px; }
+.lk-of-bottom { bottom: 0; left: 0; right: 0; height: 2px; }
+
+/* 内容从底部溢出（块装不下文字）：底边琥珀线，与「位置越界」的红线区分 */
+.lk-of-content {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: repeating-linear-gradient(
+    90deg,
+    #faad14 0,
+    #faad14 4px,
+    transparent 4px,
+    transparent 8px
+  );
+  pointer-events: none;
+  z-index: 12;
+}
+
+/* 右上角红点：hover 看 tooltip（超出多少 mm / 是否已出纸） */
+.lk-overflow-dot {
+  position: absolute;
+  top: -5px;
+  right: -5px;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #ff4d4f;
+  border: 1.5px solid #fff;
+  box-shadow: 0 0 0 1px rgba(255, 77, 79, 0.35);
+  z-index: 13;
+}
+
+/* 仅内容溢出（位置没越界）：琥珀点，警告级 */
+.lk-overflow-dot.is-content {
+  background: #faad14;
+  box-shadow: 0 0 0 1px rgba(250, 173, 20, 0.35);
+}
+
+/* 已掉出纸张物理边界：加深 + 脉冲（导出必被裁掉，值得更强烈） */
+.lk-overflow-dot.is-offpage {
+  background: #cf1322;
+  border-color: #fff;
+  animation: lk-of-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes lk-of-pulse {
+  0%, 100% { box-shadow: 0 0 0 1px rgba(207, 19, 34, 0.4); }
+  50% { box-shadow: 0 0 0 6px rgba(207, 19, 34, 0.16); }
+}
+
+/* 鼠标游标十字线：与标尺读数对应，mm 定位在页面内 */
+.le-cursor {
+  position: absolute;
+  background: rgba(0, 102, 214, 0.45);
+  pointer-events: none;
+  z-index: 15;
+}
+
+.le-cursor-x { top: 0; bottom: 0; width: 1px; }
+.le-cursor-y { left: 0; right: 0; height: 1px; }
+
+/* 缩放手柄（四角，负偏移露在块外——.lk-blk 已不放 overflow:hidden） */
+.lk-handle {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  background: #fff;
+  border: 2px solid var(--primary-600, #0066d6);
+  border-radius: 2px;
+  z-index: 10;
+}
+
+.lk-handle-nw { left: -6px; top: -6px; cursor: nwse-resize; }
+.lk-handle-ne { right: -6px; top: -6px; cursor: nesw-resize; }
+.lk-handle-sw { left: -6px; bottom: -6px; cursor: nesw-resize; }
+.lk-handle-se { right: -6px; bottom: -6px; cursor: nwse-resize; }
+
+/* 吸附参考线 */
+.le-guide {
+  position: absolute;
+  background: #ff4d4f;
+  pointer-events: none;
+  z-index: 20;
+}
+
+.le-guide-x { width: 1px; top: 0; bottom: 0; }
+.le-guide-y { height: 1px; left: 0; right: 0; }
+
+/* 网格覆盖层（5mm） */
+.le-grid {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 1;
+  background-image:
+    linear-gradient(to right, rgba(0, 0, 0, 0.05) 1px, transparent 1px),
+    linear-gradient(to bottom, rgba(0, 0, 0, 0.05) 1px, transparent 1px);
+  background-size: 5mm 5mm;
+}
+
+.le-empty {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.le-mobile-hint {
+  margin-top: 8px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary, #999);
+}
+
+/* 右侧属性面板 */
+.le-inspector {
+  width: 264px;
+  flex: none;
+  padding: 12px;
+  background: var(--bg-card, #fff);
+  border: 1px solid var(--border-light, #eee);
+  border-radius: var(--radius-md, 8px);
+}
+
+.le-inspector-label {
+  font-size: 12px;
+  color: var(--text-tertiary, #999);
+  margin-bottom: 4px;
+}
+
+.le-inspector-tip {
+  font-size: 12px;
+  color: var(--text-tertiary, #999);
+  line-height: 1.6;
+  border-top: 1px dashed var(--border-light, #eee);
+  padding-top: 8px;
+}
+
+@media (max-width: 1023px) {
+  .le-body { flex-direction: column; }
+  .le-inspector { width: 100%; }
+}
+
+/* ── 行内编辑（InlineEditor） ─────────────────────────────
+   容器铺满 .lk-blk（绝对定位、mm 盒模型），表单在缩放容器内，
+   所以控件尺寸是「逻辑 px」，视觉随 zoom 一起缩放——与内容一致。
+   编辑态底色微亮，让用户立刻看出「这块正在被编辑」。 */
+.le-page .lk-blk.is-editing {
+  outline: 2px solid var(--primary-600, #0066d6);
+  outline-offset: 1px;
+  background: rgba(255, 255, 255, 0.96);
+  z-index: 20; /* 压住相邻块的 hover 描边与红点 chrome */
+  overflow: visible; /* 表单比块高时允许探出，由块自身长高消化 */
+  cursor: text;
+}
+
+.le-inline-editor {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  padding: 0 1mm;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  /* 编辑态的块不参与拖拽：指针事件全留给表单 */
+  touch-action: auto;
+}
+
+.le-inline-editor .le-ie-input.ant-input,
+.le-inline-editor .le-ie-input .ant-input {
+  font-size: 10pt;
+  line-height: 1.5;
+  padding-inline: 0;
+  background: transparent;
+}
+
+.le-inline-editor .le-ie-input:hover,
+.le-inline-editor .le-ie-input:focus,
+.le-inline-editor .le-ie-input.ant-input:focus,
+.le-inline-editor .le-ie-input .ant-input:focus {
+  background: rgba(0, 102, 214, 0.06);
+  box-shadow: none;
+}
+
+.le-ie-grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0 2mm;
+}
+
+.le-ie-points {
+  display: flex;
+  flex-direction: column;
+}
+
+.le-ie-point-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.le-ie-point-row .le-ie-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.le-ie-point-del.ant-btn {
+  flex: none;
+  width: 20px;
+  color: var(--text-tertiary, #999);
+}
+
+.le-ie-point-del.ant-btn:hover {
+  color: #ff4d4f;
+}
+
+.le-ie-point-add.ant-btn {
+  align-self: flex-start;
+  font-size: 10pt;
+  padding-inline: 0;
+  height: 22px;
+}
+
+.le-ie-tags {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0 0.6mm;
+}
+
+.le-ie-tags .ant-tag {
+  margin-inline-end: 0.6mm;
+  font-size: 10pt;
+  line-height: 1.5;
+}
+
+.le-ie-tags .le-ie-input {
+  flex: 1;
+  min-width: 60px;
+}
+
+/* 深色主题：编辑态底色换成半透明深色（跟随项目的 dark class） */
+.dark .le-page .lk-blk.is-editing {
+  background: rgba(30, 30, 30, 0.96);
+}
+
+.dark .le-inline-editor .le-ie-input:hover,
+.dark .le-inline-editor .le-ie-input:focus {
+  background: rgba(64, 150, 255, 0.12);
+}
+
+/* ── 块顺序面板（SortablePanel，窄屏拖拽降级） ─────────────
+   仅 ≤1023px 渲染（JS 侧 useMediaQuery 控制，这里再兜底一层）。
+   行结构：[grip][序号][类型+摘要][操作按钮]，触控目标 ≥36px。 */
+.le-sortable {
+  width: 100%;
+  max-height: 46vh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  border: 1px solid var(--border-light, #eee);
+  border-radius: 8px;
+  background: var(--bg-secondary, #fff);
+}
+
+.le-sortable-title {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  padding: 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary, #333);
+  border-bottom: 1px solid var(--border-light, #eee);
+  position: sticky;
+  top: 0;
+  background: var(--bg-secondary, #fff);
+  z-index: 1;
+}
+
+.le-sortable-hint {
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--text-tertiary, #999);
+}
+
+.le-sortable-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.le-sort-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+  padding: 4px 8px;
+  border-bottom: 1px solid var(--border-light, #eee);
+  cursor: pointer;
+  background: transparent;
+  touch-action: none; /* 交给 dnd-kit 的 PointerSensor，别触发页面滚动 */
+}
+
+.le-sort-row:last-child {
+  border-bottom: none;
+}
+
+.le-sort-row.is-selected {
+  background: rgba(64, 150, 255, 0.08);
+  box-shadow: inset 2px 0 0 var(--primary-600, #0066d6);
+}
+
+.le-sort-row.is-dragging {
+  opacity: 0.5;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.18);
+  border-radius: 6px;
+}
+
+.le-sort-row.is-hidden .le-sort-summary,
+.le-sort-row.is-hidden .le-sort-index {
+  opacity: 0.45;
+  text-decoration: line-through;
+}
+
+.le-sort-grip {
+  flex: none;
+  width: 32px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: none;
+  color: var(--text-tertiary, #999);
+  cursor: grab;
+  touch-action: none;
+}
+
+.le-sort-grip:disabled {
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.le-sort-index {
+  flex: none;
+  width: 20px;
+  text-align: center;
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-tertiary, #999);
+}
+
+.le-sort-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.le-sort-type {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--primary-600, #0066d6);
+}
+
+.le-sort-summary {
+  font-size: 13px;
+  color: var(--text-primary, #333);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.le-sort-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.le-sort-actions button {
+  width: 32px;
+  height: 32px;
+  display: grid;
+  place-items: center;
+  border: none;
+  border-radius: 6px;
+  background: none;
+  color: var(--text-secondary, #666);
+  cursor: pointer;
+}
+
+.le-sort-actions button:hover:not(:disabled) {
+  background: rgba(64, 150, 255, 0.12);
+  color: var(--primary-600, #0066d6);
+}
+
+.le-sort-actions button:disabled {
+  opacity: 0.3;
+  cursor: not-allowed;
+}
+
+.le-sortable-empty {
+  padding: 24px;
+  text-align: center;
+  font-size: 13px;
+  color: var(--text-tertiary, #999);
+}
+
+/* 宽屏双保险：JS 不渲染，CSS 也不显形 */
+@media (min-width: 1024px) {
+  .le-sortable {
+    display: none;
+  }
+}
+
+/* 深色主题行配色 */
+.dark .le-sort-row.is-selected {
+  background: rgba(64, 150, 255, 0.16);
+}
+
+
+/* ── 排序面板：页码徽标（多页） ── */
+.le-sort-page {
+  flex: none;
+  font-size: 11px;
+  color: var(--primary-600, #2c6fbb);
+  background: color-mix(in srgb, var(--primary-600, #2c6fbb) 10%, transparent);
+  border-radius: 4px;
+  padding: 1px 5px;
+  margin-right: 4px;
+}
+.dark .le-sort-page {
+  color: #69b1ff;
+  background: rgba(105, 177, 255, 0.15);
+}

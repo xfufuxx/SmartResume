@@ -7,6 +7,7 @@ import {
   ThunderboltOutlined, CrownOutlined, CodeOutlined, ToolOutlined,
   RocketOutlined, ExperimentOutlined, HighlightOutlined,
 } from '@ant-design/icons'
+import { useTheme } from '@/lib/theme'
 
 export interface TemplateOption {
   key: string
@@ -118,6 +119,8 @@ function MiniPreview({ preview }: { preview: TemplateOption['preview'] }) {
 export default function TemplateSelector({
   open, onClose, selected, onSelect, options,
 }: TemplateSelectorProps) {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
   return (
     <Modal
       title="选择简历模板风格"
@@ -127,7 +130,7 @@ export default function TemplateSelector({
       width={800}
       styles={{ body: { padding: '14px 20px 20px', maxHeight: '76vh', overflowY: 'auto' } }}
     >
-      <Typography.Paragraph style={{ marginBottom: 16, color: '#6B7280', fontSize: 13 }}>
+      <Typography.Paragraph style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 13 }}>
         共 {options.length} 种风格，点击卡片即可选中（内容较多时可滚动查看全部）。
       </Typography.Paragraph>
 
@@ -144,10 +147,10 @@ export default function TemplateSelector({
                   borderRadius: 16,
                   border: isSelected
                     ? `2px solid ${opt.preview.primary}`
-                    : '1px solid rgba(0, 0, 0, 0.05)',
+                    : isDark ? '1px solid rgba(84, 84, 88, 0.6)' : '1px solid rgba(0, 0, 0, 0.05)',
                   background: isSelected
                     ? `linear-gradient(135deg, ${opt.preview.primary}08, ${opt.preview.secondary}08)`
-                    : 'rgba(255, 255, 255, 0.85)',
+                    : isDark ? '#1C1C1E' : 'rgba(255, 255, 255, 0.85)',
                   boxShadow: isSelected
                     ? `0 8px 24px ${opt.preview.primary}22, 0 0 0 1px ${opt.preview.primary}33`
                     : '0 4px 12px rgba(0, 0, 0, 0.06)',
@@ -160,15 +163,15 @@ export default function TemplateSelector({
                 <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
                   <span style={{
                     width: 28, height: 28, borderRadius: 7,
-                    background: isSelected ? opt.preview.primary : '#E5E7EB',
+                    background: isSelected ? opt.preview.primary : isDark ? '#3A3A3C' : '#E5E7EB',
                     display: 'flex', alignItems: 'center', justifyContent: 'center',
                     transition: 'background 0.3s, color 0.3s',
                   }}>
                     {React.cloneElement(opt.icon as React.ReactElement, {
-                      style: { color: isSelected ? '#fff' : '#6B7280', fontSize: 14 }
+                      style: { color: isSelected ? '#fff' : isDark ? '#AEAEB2' : '#6B7280', fontSize: 14 }
                     })}
                   </span>
-                  <Typography.Text strong style={{ fontSize: 13, color: '#111827' }}>{opt.label}</Typography.Text>
+                  <Typography.Text strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{opt.label}</Typography.Text>
                   {isSelected && (
                     <Tag color="blue" style={{
                       marginLeft: 'auto', fontSize: 10,
@@ -181,7 +184,7 @@ export default function TemplateSelector({
                 </div>
                 <Typography.Text style={{
                   fontSize: 10, display: '-webkit-box', marginTop: 4,
-                  color: '#6B7280', lineHeight: 1.35,
+                  color: 'var(--text-secondary)', lineHeight: 1.35,
                   WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden',
                 }}>
                   {opt.preview.desc}

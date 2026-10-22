@@ -22,6 +22,8 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("applications", "consent_at", "TIMESTAMP WITH TIME ZONE"),
     # 阶段3：官网表单半自动投递（通道 B）
     ("applications", "apply_url", "VARCHAR(500)"),
+    # 可视化排版编辑器：布局文档（内容/排版正交，互不改写）
+    ("optimized_resumes", "layout_json", "JSONB"),
 ]
 
 
@@ -34,4 +36,4 @@ async def run_lightweight_migrations(engine: AsyncEngine) -> None:
                 await conn.execute(stmt)
             except Exception as e:  # noqa: BLE001 —— 单列失败不阻断启动
                 logger.warning("轻量迁移跳过 %s.%s: %s", table, column, e)
-    logger.info("轻量迁移检查完成（applications 邮件直投列）")
+    logger.info("轻量迁移检查完成（applications 邮件直投列 + optimized_resumes 布局列）")

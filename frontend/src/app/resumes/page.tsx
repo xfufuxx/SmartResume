@@ -16,6 +16,7 @@ import {
 import { useRouter } from 'next/navigation'
 import { resumes, toBackendUrl } from '@/lib/api'
 import { getToken } from '@/lib/auth'
+import { useTheme } from '@/lib/theme'
 import { formatDate } from '@/lib/utils'
 import type { ResumeRecord, ResumeStats, ResumeVersionTree, VersionNode } from '@/types'
 import AppLayout from '@/components/AppLayout'
@@ -23,11 +24,11 @@ import AuthGate from '@/components/AuthGate'
 
 const { Text, Title } = Typography
 
-// 状态 → 标签映射
-const STATUS_MAP: Record<string, { text: string; color: string; bg: string }> = {
-  optimized: { text: '已优化', color: '#059669', bg: '#ECFDF5' },
-  draft: { text: '草稿', color: '#475569', bg: '#F1F5F9' },
-  unoptimized: { text: '未优化', color: '#64748B', bg: '#F8FAFC' },
+// 状态 → 标签映射（暗色用半透明同色系底 + 亮色字，避免浅底亮岛）
+const STATUS_MAP: Record<string, { text: string; color: string; bg: string; colorDark: string; bgDark: string }> = {
+  optimized: { text: '已优化', color: '#059669', bg: '#ECFDF5', colorDark: '#30D158', bgDark: 'rgba(48, 209, 88, 0.14)' },
+  draft: { text: '草稿', color: '#475569', bg: '#F1F5F9', colorDark: 'rgba(235, 235, 245, 0.60)', bgDark: '#2C2C2E' },
+  unoptimized: { text: '未优化', color: '#64748B', bg: '#F8FAFC', colorDark: 'rgba(235, 235, 245, 0.60)', bgDark: '#2C2C2E' },
 }
 
 const SCORE_COLOR = (score?: number | null) =>
@@ -50,6 +51,8 @@ const SUGGESTIONS = [
 
 export default function ResumeLibrary() {
   const router = useRouter()
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
   const [token, setToken] = useState<string | null>(null)
   const [list, setList] = useState<ResumeRecord[]>([])
   const [stats, setStats] = useState<ResumeStats>({ total: 0, optimized: 0, draft: 0, unoptimized: 0, favorite: 0 })
@@ -479,11 +482,16 @@ export default function ResumeLibrary() {
   const donutBackground = `conic-gradient(
     #10B981 0 ${donutPct.optimized}%,
     #3B82F6 ${donutPct.optimized}% ${donutPct.optimized + donutPct.draft}%,
-    #E2E8F0 ${donutPct.optimized + donutPct.draft}% 100%
+    ${isDark ? '#3A3A3C' : '#E2E8F0'} ${donutPct.optimized + donutPct.draft}% 100%
   )`
 
   const renderResumeCard = (resume: ResumeRecord) => {
-    const status = STATUS_MAP[resume.status || 'draft'] || STATUS_MAP.draft
+    const statusMeta = STATUS_MAP[resume.status || 'draft'] || STATUS_MAP.draft
+    const status = {
+      text: statusMeta.text,
+      color: isDark ? statusMeta.colorDark : statusMeta.color,
+      bg: isDark ? statusMeta.bgDark : statusMeta.bg,
+    }
     const targetText = [resume.target_position, resume.target_company].filter(Boolean).join(' @ ') || '未设置目标职位'
     const isTrash = activeTab === 'recycle'
     const actions = isTrash
@@ -545,9 +553,9 @@ export default function ResumeLibrary() {
           {/* 缩略图 / 图标占位 */}
           <div style={{
             width: 60, height: 76, borderRadius: 10, flexShrink: 0, alignSelf: 'center',
-            background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
+            background: isDark ? 'linear-gradient(135deg, rgba(10, 132, 255, 0.18), rgba(10, 132, 255, 0.08))' : 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
-            color: '#2563EB', fontSize: 24,
+            color: isDark ? '#409CFF' : '#2563EB', fontSize: 24,
           }}>
             <FileTextOutlined />
           </div>
@@ -557,7 +565,7 @@ export default function ResumeLibrary() {
               {resume.title || resume.id.slice(0, 8) + '...'}
               {resume.version && resume.version > 1 ? ` v${resume.version}` : ''}
             </Text>
-            <div style={{ fontSize: 12, color: '#64748B', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 3, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               {targetText}
             </div>
             <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
@@ -647,8 +655,8 @@ export default function ResumeLibrary() {
           )}
           <div style={{
             width: 40, height: 40, borderRadius: 8, flexShrink: 0,
-            background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
-            display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2563EB',
+            background: isDark ? 'linear-gradient(135deg, rgba(10, 132, 255, 0.18), rgba(10, 132, 255, 0.08))' : 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', color: isDark ? '#409CFF' : '#2563EB',
           }}>
             <FileTextOutlined />
           </div>
@@ -660,7 +668,7 @@ export default function ResumeLibrary() {
               {resume.is_primary && <Tag color="gold" style={{ margin: 0 }}>默认</Tag>}
               <Tag style={{ color: status.color, background: status.bg, border: 'none', margin: 0 }}>{status.text}</Tag>
             </Space>
-            <div style={{ fontSize: 12, color: '#64748B', marginTop: 4 }}>
+            <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginTop: 4 }}>
               {[resume.target_position, resume.target_company].filter(Boolean).join(' @ ') || '未设置目标职位'}
               {' · '}{resume.file_type?.toUpperCase()}
               {' · '}{resume.updated_at || resume.created_at ? formatDate(resume.updated_at || resume.created_at) : ''}
@@ -886,25 +894,25 @@ export default function ResumeLibrary() {
               <div style={{ display: 'flex', justifyContent: 'center' }}>
                 <div style={{ position: 'relative', width: 150, height: 150, borderRadius: '50%', background: donutBackground }}>
                   <div style={{
-                    position: 'absolute', inset: 22, background: '#fff', borderRadius: '50%',
+                    position: 'absolute', inset: 22, background: isDark ? '#1C1C1E' : '#fff', borderRadius: '50%',
                     display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
                   }}>
-                    <div style={{ fontSize: 32, fontWeight: 700, color: '#1E293B', lineHeight: 1 }}>{stats.total}</div>
-                    <div style={{ fontSize: 12, color: '#94A3B8' }}>份简历</div>
+                    <div style={{ fontSize: 32, fontWeight: 700, color: isDark ? '#FFFFFF' : '#1E293B', lineHeight: 1 }}>{stats.total}</div>
+                    <div style={{ fontSize: 12, color: isDark ? 'rgba(235, 235, 245, 0.6)' : '#94A3B8' }}>份简历</div>
                   </div>
                 </div>
               </div>
               <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span style={{ color: '#64748B' }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#10B981', marginRight: 6 }} />已优化</span>
+                  <span style={{ color: 'var(--text-secondary)' }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#10B981', marginRight: 6 }} />已优化</span>
                   <strong>{stats.optimized}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span style={{ color: '#64748B' }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#3B82F6', marginRight: 6 }} />草稿</span>
+                  <span style={{ color: 'var(--text-secondary)' }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#3B82F6', marginRight: 6 }} />草稿</span>
                   <strong>{stats.draft}</strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13 }}>
-                  <span style={{ color: '#64748B' }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#E2E8F0', marginRight: 6 }} />未优化</span>
+                  <span style={{ color: 'var(--text-secondary)' }}><span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: isDark ? '#3A3A3C' : '#E2E8F0', marginRight: 6 }} />未优化</span>
                   <strong>{stats.unoptimized}</strong>
                 </div>
               </div>
@@ -917,12 +925,12 @@ export default function ResumeLibrary() {
                 <a style={{ fontSize: 12 }}>查看全部</a>
               </div>
               {SUGGESTIONS.map((s, i) => (
-                <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 0', borderTop: i > 0 ? '1px solid #F1F5F9' : 'none' }}>
-                  <div style={{ width: 32, height: 32, borderRadius: 8, background: '#EFF6FF', color: '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                <div key={i} style={{ display: 'flex', gap: 12, padding: '10px 0', borderTop: i > 0 ? '1px solid var(--gray-100)' : 'none' }}>
+                  <div style={{ width: 32, height: 32, borderRadius: 8, background: isDark ? 'rgba(10, 132, 255, 0.16)' : '#EFF6FF', color: isDark ? '#409CFF' : '#2563EB', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                     {s.icon}
                   </div>
                   <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: 13, fontWeight: 500, color: '#1E293B' }}>{s.title}</div>
+                    <div style={{ fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>{s.title}</div>
                     <div style={{ fontSize: 12, color: '#94A3B8', marginTop: 2 }}>{s.desc}</div>
                   </div>
                 </div>
@@ -935,38 +943,38 @@ export default function ResumeLibrary() {
               <Row gutter={[12, 12]}>
                 <Col span={12}>
                   <div
-                    style={{ borderRadius: 12, padding: 16, background: 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', cursor: 'pointer', textAlign: 'center' }}
+                    style={{ borderRadius: 12, padding: 16, background: isDark ? 'linear-gradient(135deg, rgba(10, 132, 255, 0.20), rgba(10, 132, 255, 0.08))' : 'linear-gradient(135deg, #EFF6FF, #DBEAFE)', cursor: 'pointer', textAlign: 'center' }}
                     onClick={() => router.push('/')}
                   >
-                    <ThunderboltOutlined style={{ fontSize: 20, color: '#2563EB' }} />
-                    <div style={{ fontSize: 13, marginTop: 6, color: '#1E293B' }}>AI 优化</div>
+                    <ThunderboltOutlined style={{ fontSize: 20, color: isDark ? '#409CFF' : '#2563EB' }} />
+                    <div style={{ fontSize: 13, marginTop: 6, color: 'var(--text-primary)' }}>AI 优化</div>
                   </div>
                 </Col>
                 <Col span={12}>
                   <div
-                    style={{ borderRadius: 12, padding: 16, background: 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', cursor: 'pointer', textAlign: 'center' }}
+                    style={{ borderRadius: 12, padding: 16, background: isDark ? 'linear-gradient(135deg, rgba(48, 209, 88, 0.18), rgba(48, 209, 88, 0.08))' : 'linear-gradient(135deg, #F0FDF4, #DCFCE7)', cursor: 'pointer', textAlign: 'center' }}
                     onClick={() => router.push('/dashboard')}
                   >
-                    <TrophyOutlined style={{ fontSize: 20, color: '#10B981' }} />
-                    <div style={{ fontSize: 13, marginTop: 6, color: '#1E293B' }}>简历评分</div>
+                    <TrophyOutlined style={{ fontSize: 20, color: isDark ? '#34C759' : '#10B981' }} />
+                    <div style={{ fontSize: 13, marginTop: 6, color: 'var(--text-primary)' }}>简历评分</div>
                   </div>
                 </Col>
                 <Col span={12}>
                   <div
-                    style={{ borderRadius: 12, padding: 16, background: 'linear-gradient(135deg, #FFF7ED, #FFEDD5)', cursor: 'pointer', textAlign: 'center' }}
+                    style={{ borderRadius: 12, padding: 16, background: isDark ? 'linear-gradient(135deg, rgba(255, 149, 0, 0.18), rgba(255, 149, 0, 0.08))' : 'linear-gradient(135deg, #FFF7ED, #FFEDD5)', cursor: 'pointer', textAlign: 'center' }}
                     onClick={() => router.push('/dashboard')}
                   >
-                    <FireOutlined style={{ fontSize: 20, color: '#F59E0B' }} />
-                    <div style={{ fontSize: 13, marginTop: 6, color: '#1E293B' }}>批量优化</div>
+                    <FireOutlined style={{ fontSize: 20, color: isDark ? '#FF9500' : '#F59E0B' }} />
+                    <div style={{ fontSize: 13, marginTop: 6, color: 'var(--text-primary)' }}>批量优化</div>
                   </div>
                 </Col>
                 <Col span={12}>
                   <div
-                    style={{ borderRadius: 12, padding: 16, background: 'linear-gradient(135deg, #F5F3FF, #EDE9FE)', cursor: 'pointer', textAlign: 'center' }}
+                    style={{ borderRadius: 12, padding: 16, background: isDark ? 'linear-gradient(135deg, rgba(124, 58, 237, 0.22), rgba(124, 58, 237, 0.10))' : 'linear-gradient(135deg, #F5F3FF, #EDE9FE)', cursor: 'pointer', textAlign: 'center' }}
                     onClick={() => router.push('/')}
                   >
-                    <FileTextOutlined style={{ fontSize: 20, color: '#7C3AED' }} />
-                    <div style={{ fontSize: 13, marginTop: 6, color: '#1E293B' }}>模板库</div>
+                    <FileTextOutlined style={{ fontSize: 20, color: isDark ? '#A78BFA' : '#7C3AED' }} />
+                    <div style={{ fontSize: 13, marginTop: 6, color: 'var(--text-primary)' }}>模板库</div>
                   </div>
                 </Col>
               </Row>
@@ -1079,7 +1087,7 @@ export default function ResumeLibrary() {
                   ))}
                   <Divider />
                   <Title level={5}>技能</Title>
-                  <Space wrap>{(previewResume.parsed_json.skills || []).map((s) => <Tag key={s} style={{ color: '#475569', background: '#F1F5F9', border: 'none' }}>{s}</Tag>)}</Space>
+                  <Space wrap>{(previewResume.parsed_json.skills || []).map((s) => <Tag key={s} style={{ color: 'var(--text-secondary)', background: 'var(--gray-100)', border: 'none' }}>{s}</Tag>)}</Space>
                 </div>
               ) : <Empty description="暂无解析内容" />}
             </div>
@@ -1089,7 +1097,7 @@ export default function ResumeLibrary() {
               {previewResume.parsed_json && (
                 <div style={{ marginTop: 16 }}>
                   <Title level={5}>解析后的内容</Title>
-                  <pre style={{ whiteSpace: 'pre-wrap', background: '#F1F5F9', padding: 12, borderRadius: 8 }}>
+                  <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--gray-50)', padding: 12, borderRadius: 8 }}>
                     {JSON.stringify(previewResume.parsed_json, null, 2)}
                   </pre>
                 </div>

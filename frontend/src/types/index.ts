@@ -420,6 +420,8 @@ export interface OptimizeResult {
   match_analysis?: MatchAnalysis
   original_json?: ResumeParseResult
   optimized_json?: ResumeParseResult
+  /** 可视化排版编辑器保存的布局文档（LayoutDocument）；null = 未排版过 */
+  layout_json?: Record<string, unknown> | null
   changes_description?: string
   custom_instructions?: string
   pdf_url?: string

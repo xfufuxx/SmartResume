@@ -4,6 +4,9 @@ import type { InterviewTrackPayload, ApplicationPayload, CommunicationPayload, A
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
+/** 暴露 base URL：可视化排版编辑器预览要拉取后端中文字体（与 PDF 同一份 Noto Sans SC） */
+export const API_BASE_URL = API_BASE
+
 const api = axios.create({
   baseURL: API_BASE,
   timeout: 20000,
@@ -646,4 +649,13 @@ export const editor = {
     api.put(`/api/optimize/${optId}/content`, { optimized_json: optimizedJson }),
   reexport: (optId: string, template = 'professional') =>
     api.post(`/api/optimize/${optId}/reexport`, null, { params: { template } }),
+  /** 可视化排版：保存布局文档（layout_json） */
+  saveLayout: (optId: string, layout: Record<string, unknown>) =>
+    api.put(`/api/optimize/${optId}/layout`, { layout }),
+  /**
+   * 可视化排版：按当前布局导出 PDF。
+   * html/css 由前端共享渲染器生成（预览与导出同一实现），后端只包字体壳。
+   */
+  exportLayout: (optId: string, html: string, css: string, layout?: Record<string, unknown> | null) =>
+    api.post(`/api/optimize/${optId}/export-layout`, { html, css, layout: layout ?? null }),
 }

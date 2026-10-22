@@ -44,6 +44,7 @@ class OptimizeResponse(BaseModel):
     match_analysis: Optional[MatchAnalysis] = None
     original_json: Optional[dict] = None
     optimized_json: Optional[dict] = None
+    layout_json: Optional[dict] = None
     changes_description: Optional[str] = None
     custom_instructions: Optional[str] = None
     pdf_url: Optional[str] = None
@@ -70,6 +71,22 @@ class SatisfactionFeedbackRequest(BaseModel):
 class UpdateContentRequest(BaseModel):
     """在线编辑优化结果：整体替换 optimized_json（前端保证结构与解析结果一致）。"""
     optimized_json: dict
+
+
+class SaveLayoutRequest(BaseModel):
+    """可视化排版：保存布局文档（前端保证结构合法，后端只做最基础的形状校验）。"""
+    layout: dict
+
+
+class ExportLayoutRequest(BaseModel):
+    """可视化排版导出：前端共享渲染器生成的 body HTML + 块样式 CSS。
+
+    html/css 是预览所用的同一实现（renderHtml.ts），后端只负责包字体壳
+    并用 Playwright 出 A4 PDF，保证导出与预览 1:1。
+    """
+    html: str
+    css: str = ""
+    layout: Optional[dict] = None
 
 
 class DiffRequest(BaseModel):

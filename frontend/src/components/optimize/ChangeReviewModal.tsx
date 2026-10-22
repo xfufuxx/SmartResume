@@ -18,6 +18,7 @@ import {
 } from '@ant-design/icons'
 import { optimize } from '@/lib/api'
 import { diffSegments } from '@/lib/diff'
+import { useTheme } from '@/lib/theme'
 import type { ChangeItem, ChangeApplyDecision, FactCheck } from '@/types'
 
 interface ChangeReviewModalProps {
@@ -93,6 +94,8 @@ function Segments({ segments, mode }: { segments: Array<{ text: string; type: st
 }
 
 export default function ChangeReviewModal({ open, recordId, onClose, onApplied }: ChangeReviewModalProps) {
+  const { theme } = useTheme()
+  const isDark = theme === 'dark'
   const [loading, setLoading] = useState(false)
   const [changes, setChanges] = useState<ChangeItem[]>([])
   const [counts, setCounts] = useState<Record<string, number>>({})
@@ -199,7 +202,13 @@ export default function ChangeReviewModal({ open, recordId, onClose, onApplied }
         AI 共提出 {changes.length} 条修改建议（改写 {counts.modified || 0} · 新增 {counts.added || 0} · 移除 {counts.removed || 0}）。
         未确认的修改不会写入——应用后将以原简历为底生成「人工确认版」，原优化结果保持不变。
         {warnCount > 0 && (
-          <div style={{ marginTop: 6, color: '#AD6800', background: '#FFFBE6', border: '1px solid #FFE58F', borderRadius: 8, padding: '6px 10px' }}>
+          <div style={{
+            marginTop: 6,
+            color: isDark ? '#FFB340' : '#AD6800',
+            background: isDark ? 'rgba(255, 149, 0, 0.12)' : '#FFFBE6',
+            border: `1px solid ${isDark ? 'rgba(255, 149, 0, 0.35)' : '#FFE58F'}`,
+            borderRadius: 8, padding: '6px 10px',
+          }}>
             <SafetyCertificateOutlined style={{ marginRight: 6 }} />
             事实核验提示：{warnCount} 条建议包含 AI 新增的数字 / 技能 / 强主张表述（已用 ⚠ 标出），建议逐条核对后确认，避免简历出现未经证实的内容。
           </div>

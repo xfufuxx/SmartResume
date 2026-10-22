@@ -1,12 +1,12 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
   Button, Card, Typography, Spin, message, Space,
   Row, Col, Divider, Tag, Progress, Empty,
 } from 'antd'
 import {
-  DownloadOutlined, EditOutlined, SaveOutlined, CloseOutlined, FileSyncOutlined,
+  DownloadOutlined, EditOutlined, SaveOutlined, CloseOutlined, FileSyncOutlined, LayoutOutlined,
 } from '@ant-design/icons'
 import { useRouter, useParams } from 'next/navigation'
 import { optimize, toBackendUrl, editor } from '@/lib/api'
@@ -17,6 +17,9 @@ import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
 import ResumeEditor from '@/components/ResumeEditor'
 import TemplateSelector from '@/components/TemplateSelector'
+import { LayoutEditor } from '@/components/layout-editor'
+import { buildLayout, type ResumeLike } from '@/lib/layout/buildLayout'
+import { parseLayout } from '@/lib/layout/serialize'
 import { TEMPLATE_OPTIONS, TEMPLATE_LABELS, DEFAULT_TEMPLATE } from '@/lib/templates'
 
 function ExperienceDiff({ original, optimized }: { original: ResumeParseResult; optimized: ResumeParseResult }) {
@@ -165,6 +168,8 @@ export default function OptimizationDetailPage() {
   const [exporting, setExporting] = useState(false)
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
+  // ── 可视化排版编辑器（独立模式，与内容编辑互斥） ──
+  const [layoutEditing, setLayoutEditing] = useState(false)
 
   useEffect(() => {
     const t = getToken()
@@ -193,6 +198,20 @@ export default function OptimizationDetailPage() {
     setDraft(JSON.parse(JSON.stringify(detail.optimized_json)) as ResumeParseResult)
     setEditing(true)
   }
+
+  const startLayoutEdit = () => {
+    if (!detail?.optimized_json) {
+      message.warning('该记录没有可排版的内容')
+      return
+    }
+    setLayoutEditing(true)
+  }
+
+  /** 布局文档：已保存过排版 → 读档；否则按内容生成默认布局 */
+  const initialLayoutDoc = useMemo(() => {
+    if (!detail) return null
+    return parseLayout(detail.layout_json) ?? buildLayout(detail.optimized_json as ResumeLike | undefined)
+  }, [detail?.layout_json, detail?.optimized_json])
 
   const handleSave = async () => {
     if (!draft || !id) return
@@ -315,9 +334,12 @@ export default function OptimizationDetailPage() {
                       重新导出 PDF
                     </Button>
                   </Space>
-                ) : (
-                  <Button icon={<EditOutlined />} onClick={startEdit}>编辑内容</Button>
-                )}
+                ) : !layoutEditing ? (
+                  <Space wrap>
+                    <Button icon={<EditOutlined />} onClick={startEdit}>编辑内容</Button>
+                    <Button icon={<LayoutOutlined />} onClick={startLayoutEdit}>可视化排版</Button>
+                  </Space>
+                ) : null}
               </div>
             </Card>
           </Col>
@@ -350,7 +372,20 @@ export default function OptimizationDetailPage() {
 
         <Divider />
 
-        {editing && draft ? (
+        {layoutEditing && initialLayoutDoc ? (
+          <LayoutEditor
+            optId={id}
+            initialDoc={initialLayoutDoc}
+            initialContent={detail.optimized_json as Record<string, unknown> | undefined}
+            onClose={() => setLayoutEditing(false)}
+            onExported={(pdfUrl) =>
+              setDetail((prev) => (prev ? { ...prev, pdf_url: pdfUrl } : prev))
+            }
+            onSaved={() =>
+              optimize.get(id).then((res) => setDetail(res.data)).catch(() => {})
+            }
+          />
+        ) : editing && draft ? (
           <Card
             title="编辑优化结果"
             style={{ marginTop: 16 }}
