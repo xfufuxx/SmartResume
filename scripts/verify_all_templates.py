@@ -1,4 +1,4 @@
-"""全模板渲染冒烟：14 套模板逐一生成 PDF + 文档属性断言（不走 HTTP，免限流）。
+"""全模板渲染冒烟：27 套模板逐一生成 PDF + 文档属性断言（不走 HTTP，免限流）。
 
 用法（backend/.venv）：
     .venv/Scripts/python.exe ../scripts/verify_all_templates.py

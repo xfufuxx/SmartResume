@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{ resume.personal_info.name or '姓名' }}的简历</title>
+<meta name="author" content="智能简历">
+<meta name="description" content="设计师作品集版简历">
+<meta name="keywords" content="简历,resume,designer">
+<meta name="template-id" content="jade-designer">
+<meta name="template-version" content="1.0.0">
+<style>
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Regular.ttf') format('truetype');
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Bold.ttf') format('truetype');
+    font-weight: 700;
+  }
+  {# @page / 打印保护由 print_css 基座按 layout_features 注入 #}
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10pt);
+    color: var(--tpl-primary, #111827);
+    line-height: var(--tpl-line-height, 1.62);
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff;
+  }
+
+  /* ── 头部：超大轻量字重姓名（作品集封面感）── */
+  .header { margin-bottom: 24px; }
+  .header .name {
+    font-size: 30pt;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    line-height: 1.1;
+    color: #000000;
+    margin-bottom: 9px;
+  }
+  .header .contact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 2px 18px;
+    font-size: 8.5pt;
+    letter-spacing: 1px;
+    color: var(--tpl-accent, #6b7280);
+  }
+
+  /* ── 分节：左侧固定宽标签 + 右侧内容（作品集网格感）── */
+  .section {
+    display: flex;
+    gap: 10px;
+    margin-bottom: var(--tpl-section-gap, 16px);
+  }
+  .sec-label {
+    width: 30mm;
+    flex: 0 0 30mm;
+    font-size: 8.5pt;
+    font-weight: 700;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--tpl-primary, #111827);
+    padding-top: 1px;
+  }
+  .sec-body { flex: 1; }
+  .summary-text { font-size: 9.5pt; color: #374151; line-height: 1.7; }
+
+  .exp-item { margin-bottom: 12px; }
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 2px;
+  }
+  .exp-header .title { font-weight: 700; font-size: 10.5pt; color: #000000; }
+  .exp-header .date { font-size: 8.5pt; color: var(--tpl-accent, #6b7280); white-space: nowrap; }
+  .exp-sub { font-size: 9pt; color: #4b5563; margin-bottom: 3px; }
+  .exp-points { list-style: none; margin-top: 3px; }
+  .exp-points li {
+    font-size: 9.5pt;
+    color: #4b5563;
+    line-height: 1.62;
+    padding-left: 12px;
+    position: relative;
+    margin-bottom: 2px;
+  }
+  .exp-points li::before {
+    content: "—";
+    position: absolute;
+    left: 0;
+    color: var(--tpl-accent, #9ca3af);
+  }
+  .proj-tech { font-size: 8.5pt; color: var(--tpl-accent, #6b7280); margin-top: 3px; letter-spacing: 0.5px; }
+
+  /* ── 技能：纯文本竖排列表（设计师的克制）── */
+  .skills-list { display: flex; flex-wrap: wrap; gap: 3px 16px; }
+  .skills-list span {
+    font-size: 9pt;
+    color: #111827;
+    border-bottom: 1px solid #e5e7eb;
+    padding-bottom: 1px;
+  }
+  .edu-item { margin-bottom: 8px; }
+  .edu-detail { font-size: 9pt; color: var(--tpl-accent, #6b7280); }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
+    <div class="contact">
+      {% if resume.personal_info.email %}<span>{{ resume.personal_info.email }}</span>{% endif %}
+      {% if resume.personal_info.phone %}<span>{{ resume.personal_info.phone }}</span>{% endif %}
+      {% if resume.personal_info.address %}<span>{{ resume.personal_info.address }}</span>{% endif %}
+    </div>
+  </div>
+
+  {% if resume.summary %}
+  <div class="section">
+    <div class="sec-label">概述</div>
+    <div class="sec-body"><div class="summary-text">{{ resume.summary }}</div></div>
+  </div>
+  {% endif %}
+
+  {% if resume.experience %}
+  <div class="section">
+    <div class="sec-label">经历</div>
+    <div class="sec-body">
+      {% for exp in resume.experience %}
+      <div class="exp-item">
+        <div class="exp-header">
+          <span class="title">{{ exp.title }}</span>
+          <span class="date">{% if exp.start %}{{ exp.start }}{% endif %}{% if exp.start and exp.end %} – {% endif %}{% if exp.end %}{{ exp.end }}{% endif %}</span>
+        </div>
+        {% if exp.company %}<div class="exp-sub">{{ exp.company }}</div>{% endif %}
+        {% if exp.points %}
+        <ul class="exp-points">
+          {% for point in exp.points %}<li>{{ point }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if resume.projects %}
+  <div class="section">
+    <div class="sec-label">项目</div>
+    <div class="sec-body">
+      {% for proj in resume.projects %}
+      <div class="exp-item">
+        <div class="exp-header">
+          <span class="title">{{ proj.name }}{% if proj.role %} · {{ proj.role }}{% endif %}</span>
+          <span class="date">{% if proj.start %}{{ proj.start }}{% endif %}{% if proj.start and proj.end %} – {% endif %}{% if proj.end %}{{ proj.end }}{% endif %}</span>
+        </div>
+        {% if proj.points %}
+        <ul class="exp-points">
+          {% for point in proj.points %}<li>{{ point }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if proj.description %}<div class="summary-text">{{ proj.description }}</div>{% endif %}
+        {% if proj.tech %}<div class="proj-tech">{{ proj.tech | join(' / ') }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+  {% if resume.skills %}
+  <div class="section">
+    <div class="sec-label">技能</div>
+    <div class="sec-body">
+      <div class="skills-list">
+        {% for skill in resume.skills %}<span>{{ skill }}</span>{% endfor %}
+      </div>
+    </div>
+  </div>
+  {% endif %}
+
+  {% if resume.education %}
+  <div class="section">
+    <div class="sec-label">教育</div>
+    <div class="sec-body">
+      {% for edu in resume.education %}
+      <div class="edu-item">
+        <div class="exp-header">
+          <span class="title">{{ edu.school }}</span>
+          <span class="date">{% if edu.start %}{{ edu.start }}{% endif %}{% if edu.start and edu.end %} – {% endif %}{% if edu.end %}{{ edu.end }}{% endif %}</span>
+        </div>
+        <div class="edu-detail">{{ edu.degree }}{% if edu.major %} · {{ edu.major }}{% endif %}</div>
+      </div>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</body>
+</html>

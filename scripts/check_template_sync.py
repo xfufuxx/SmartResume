@@ -384,8 +384,11 @@ def main() -> int:
         check(f"{tid} 含 @page", "@page" in html)
         lf = meta.layout_features
         page_block = html[html.rfind("@page"): html.rfind("@page") + 120]
-        if lf.full_bleed_header:
-            check(f"{tid} @page 边距为 0（全幅头部）", re.search(r"margin:\s*0", page_block) is not None, page_block[:60])
+        # 与 print_css.build_print_css 的条件严格对齐：full_bleed_header **或** 纵向边距为 0
+        # 都会输出 `margin: 0`（早期这里只判 full_bleed_header，侧边栏这类「零边距但非全幅头部」
+        # 的模板会被误判成期望 `0mm 0mm`）。
+        if lf.full_bleed_header or lf.page_margin_y_mm == 0:
+            check(f"{tid} @page 边距为 0（全幅/零边距）", re.search(r"margin:\s*0", page_block) is not None, page_block[:60])
         else:
             expect = f"margin: {lf.page_margin_y_mm:g}mm {lf.page_margin_x_mm:g}mm"
             check(f"{tid} @page 边距符合特征（{expect}）", expect in page_block, page_block[:60])

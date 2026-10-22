@@ -313,3 +313,65 @@ cd backend && .venv/Scripts/python.exe ../scripts/verify_template_consistency.py
 2. **`previewImageUrl` 未使用**：当前预览走 CSS/组件/iframe 三通道；若后续引入静态缩略图 CDN，在元数据里补 URL 并在选择器加一层懒加载 `<img>` 即可。
 3. **模板版本号目前均为 1.0.0**：后续改版时同步 `template_meta.py` 与前端 registry 的 `version`，PDF 文档属性会自动反映。
 4. **i18n**：模板名/分类为中文硬编码，与全站一致；如做多语言需把 `CATEGORY_LABELS` 与元数据提为字典表。
+
+---
+
+## 7. 批次 A 移植完成记录（2026-10-22，15 套全部落地）
+
+按任务书「任务 4」的批次 A 清单推进，15 套全部落地，模板总数 **14 → 27**。
+
+### 7.1 实现方式：Jinja 单实现 + iframe 真实排版
+
+批次 A 的 13 套新增模板统一采用**后端 Jinja 单实现**（`renderMode: 'css'`），而非 jade-classic/twocol 那套「React 组件 + Jinja」双实现。理由：
+
+- 预览弹窗的「真实排版」页签直接打 `/api/templates/{id}/preview`，走的是**与 PDF 导出完全相同的 `render_template_html` 链路**——预览与导出是同一份 HTML，所见即所得是结构性保证，比两套实现各自维护更不容易漂移；
+- 单套只需同步 3 处（元数据 / Jinja HTML / 前端注册表），不必再写 React 组件，边际成本大幅下降。
+
+两处配套约定（新增模板必须遵守）：
+
+- **不写 `@page` / `break-inside` / `print-color-adjust`**：全部由 `print_css.build_print_css` 按 `layout_features` 注入（基座插在模板私有样式之后，同名规则以基座为准）；条目容器沿用 `.exp-item` / `.proj-item` / `.edu-item` / `.timeline-item` / `.side-block` 之一即可自动获得分页保护。
+- **零边距模板用 `.sidebar` / `aside` 类名**：`sidebar_dark=True` 时基座会补 `box-decoration-break: clone`，保证深色侧栏跨页不断色。
+
+### 7.2 模板清单（15 套）
+
+| ID | 名称 | 版式特征（`layout_features`） | 分类 |
+|---|---|---|---|
+| `jade-classic` | 经典单栏专业版 | 单栏 15/16mm | business |
+| `jade-twocol` | 现代双栏创意版 | 全幅 + 左深侧栏 73.5mm + 时间轴 | creative |
+| `jade-minimal` | 极简留白版 | 单栏 18/20mm | simple |
+| `jade-modern` | 现代渐变头部版 | 全幅头部 | business |
+| `jade-timeline` | 时间线版 | 时间轴 | business |
+| `jade-sidebar` | 浅色侧边栏双栏版 | 零边距 + 左浅侧栏 65mm | business |
+| `jade-executive` | 高管稳重版 | 全幅头部 | business |
+| `jade-professional` | 专业深蓝版 | 单栏 15/16mm | business |
+| `jade-creative` | 创意渐变版 | 单栏 14/15mm | creative |
+| `jade-ats` | ATS 友好纯文本版 | 单栏 15/16mm | simple |
+| `jade-academic` | 学术版 | 单栏（教育前置 + 编号章节） | academic |
+| `jade-elegant` | 优雅柔和版 | 单栏 17/18mm | business |
+| `jade-developer` | 开发者双栏版 | 零边距 + 左深侧栏 68mm | tech |
+| `jade-designer` | 设计师作品集版 | 单栏 18/18mm（左标签网格） | creative |
+| `jade-startup` | 初创活力版 | 单栏 14/15mm 圆角头部 | business |
+
+主题变量一律写成 `var(--tpl-primary, <原值>)` 等六变量形式，`text_defaults` 登记各自基线（`sectionGapMm ≈ CSS 回退 px ÷ 3.78`）。
+
+### 7.3 回归结果
+
+| 验证项 | 结果 |
+|---|---|
+| `check_template_sync.py` | **858/858**（454 → 858，新增 13 套 × 31 项） |
+| `verify_all_templates.py`（27 套全量 PDF + 文档属性） | **27/27** |
+| `verify_template_consistency.py`（含批次 A 全量 15 套 PDF 导出） | **54/54**（41 → 54） |
+| `verify_template_gallery.py` | **13/13** |
+| 前端 `tsc --noEmit` | 0 错误 |
+
+批次 A 的 15 套均用**唯一 marker 打进简历内容**，断言其出现在导出 PDF 的文本层——证明导出确由该模板渲染器产出，而非静默回退默认模板（即任务书验收 #4「绝不出现预览是 A、PDF 是默认模板」）。
+
+### 7.4 本批踩坑
+
+1. **`test-template` 限流 10 次/分钟**：全量 15 套连跑必然触发，第 10 套起返回 429（84 字节 JSON），被当 PDF 传给 PyMuPDF 会抛 `FileDataError`——**极易误判成模板渲染失败**。E2E 已加 429 退避（等满 62s 窗口重试）。
+2. **快测与打印基座条件不一致**：`check_template_sync.py` 判 `@page` 边距时只看了 `full_bleed_header`，漏了基座里 `page_margin_y_mm == 0` 也会输出 `margin: 0` 的分支，导致 `jade-sidebar` 这类「零边距但非全幅头部」的模板被误判。已对齐条件。
+3. **名称断言未归一化**：E2E 提取卡片文本时会去掉全部空白，而 `EXPECTED` 里「ATS 友好纯文本版」含空格，比较前必须同样 `re.sub(r"\s+", "", e)`，否则恒不匹配。
+
+### 7.5 剩余批次
+
+批次 B–G（行业/职业、现代/科技、创意/艺术、风格/文化、专业领域、版式变体，共 29 套）尚未开始，按 §4 SOP 与 §7.1 的单实现模式继续推进即可。

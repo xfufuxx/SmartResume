@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>{{ resume.personal_info.name or '姓名' }}的简历</title>
+<meta name="author" content="智能简历">
+<meta name="description" content="ATS 友好纯文本版简历">
+<meta name="keywords" content="简历,resume,ATS">
+<meta name="template-id" content="jade-ats">
+<meta name="template-version" content="1.0.0">
+<style>
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Regular.ttf') format('truetype');
+    font-weight: 400;
+  }
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Bold.ttf') format('truetype');
+    font-weight: 700;
+  }
+  {# ATS 约定：不用 CSS content 伪元素承载语义文本，不用表格/多栏/图形，
+     只用标准标题 + 原生列表，保证 PDF 文本层可被解析器逐段提取 #}
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10.5pt);
+    color: #000000;
+    line-height: var(--tpl-line-height, 1.5);
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff;
+  }
+
+  /* ── 头部：纯文本，无任何色块 ── */
+  .header { margin-bottom: 14px; }
+  .header .name {
+    font-size: 20pt;
+    font-weight: 700;
+    color: #000000;
+    margin-bottom: 5px;
+  }
+  .header .contact {
+    font-size: 9pt;
+    color: #000000;
+    line-height: 1.5;
+  }
+  .header .contact span { margin-right: 10px; }
+
+  .section { margin-bottom: var(--tpl-section-gap, 11px); }
+  /* 标准标题：粗体 + 下边框，ATS 解析为章节分隔 */
+  .section-title {
+    font-size: 11pt;
+    font-weight: 700;
+    color: #000000;
+    border-bottom: 1px solid #000000;
+    padding-bottom: 2px;
+    margin-bottom: 7px;
+  }
+  .summary-text { font-size: 10pt; color: #000000; line-height: 1.55; }
+
+  .exp-item { margin-bottom: 9px; }
+  .exp-header { margin-bottom: 1px; }
+  .exp-header .title { font-weight: 700; font-size: 10.5pt; color: #000000; }
+  .exp-header .date { font-size: 9.5pt; color: #000000; }
+  .exp-sub { font-size: 10pt; color: #000000; margin-bottom: 2px; }
+  /* 原生列表（非伪元素），文本层可直接提取 */
+  .exp-points { list-style: disc; margin: 2px 0 0 18px; }
+  .exp-points li { font-size: 10pt; color: #000000; line-height: 1.5; margin-bottom: 1px; }
+  .proj-tech { font-size: 9.5pt; color: #000000; margin-top: 2px; }
+
+  .skills-list { font-size: 10pt; color: #000000; line-height: 1.6; }
+  .skills-list span { margin-right: 6px; }
+  .skills-list span::after { content: ","; }
+  .skills-list span:last-child::after { content: ""; }
+
+  .edu-item { margin-bottom: 6px; }
+  .edu-detail { font-size: 9.5pt; color: #000000; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
+    <div class="contact">
+      {% if resume.personal_info.email %}<span>{{ resume.personal_info.email }}</span>{% endif %}
+      {% if resume.personal_info.phone %}<span>{{ resume.personal_info.phone }}</span>{% endif %}
+      {% if resume.personal_info.address %}<span>{{ resume.personal_info.address }}</span>{% endif %}
+    </div>
+  </div>
+
+  {% if resume.summary %}
+  <div class="section">
+    <div class="section-title">个人概述</div>
+    <div class="summary-text">{{ resume.summary }}</div>
+  </div>
+  {% endif %}
+
+  {% if resume.experience %}
+  <div class="section">
+    <div class="section-title">工作经历</div>
+    {% for exp in resume.experience %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <span class="title">{{ exp.title }}</span>
+        <span class="date">（{% if exp.start %}{{ exp.start }}{% endif %}{% if exp.start and exp.end %} – {% endif %}{% if exp.end %}{{ exp.end }}{% endif %}）</span>
+      </div>
+      {% if exp.company %}<div class="exp-sub">{{ exp.company }}</div>{% endif %}
+      {% if exp.points %}
+      <ul class="exp-points">
+        {% for point in exp.points %}<li>{{ point }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resume.projects %}
+  <div class="section">
+    <div class="section-title">项目经历</div>
+    {% for proj in resume.projects %}
+    <div class="exp-item">
+      <div class="exp-header">
+        <span class="title">{{ proj.name }}{% if proj.role %} · {{ proj.role }}{% endif %}</span>
+        <span class="date">（{% if proj.start %}{{ proj.start }}{% endif %}{% if proj.start and proj.end %} – {% endif %}{% if proj.end %}{{ proj.end }}{% endif %}）</span>
+      </div>
+      {% if proj.points %}
+      <ul class="exp-points">
+        {% for point in proj.points %}<li>{{ point }}</li>{% endfor %}
+      </ul>
+      {% endif %}
+      {% if proj.description %}<div class="summary-text">{{ proj.description }}</div>{% endif %}
+      {% if proj.tech %}<div class="proj-tech">技术栈：{{ proj.tech | join(', ') }}</div>{% endif %}
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resume.education %}
+  <div class="section">
+    <div class="section-title">教育背景</div>
+    {% for edu in resume.education %}
+    <div class="edu-item">
+      <div class="exp-header">
+        <span class="title">{{ edu.school }}</span>
+        <span class="date">（{% if edu.start %}{{ edu.start }}{% endif %}{% if edu.start and edu.end %} – {% endif %}{% if edu.end %}{{ edu.end }}{% endif %}）</span>
+      </div>
+      <div class="edu-detail">{{ edu.degree }}{% if edu.major %} · {{ edu.major }}{% endif %}</div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+
+  {% if resume.skills %}
+  <div class="section">
+    <div class="section-title">专业技能</div>
+    <div class="skills-list">
+      {% for skill in resume.skills %}<span>{{ skill }}</span>{% endfor %}
+    </div>
+  </div>
+  {% endif %}
+</body>
+</html>

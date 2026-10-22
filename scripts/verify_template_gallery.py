@@ -24,7 +24,11 @@ EMAIL, PASSWORD = "demo@smart-resume.com", "Demo@123456"
 EXPECTED = [
     "专业分栏", "简约单栏", "现代渐变", "紧凑高效", "优雅金边", "深色科技",
     "清新绿意", "经典黑白", "海洋之蓝", "暖阳落日", "紫韵流光", "学术严谨",
+    # ── jadeAI 迁移批次 A（15 套）──
     "经典单栏专业版", "现代双栏创意版",
+    "极简留白版", "现代渐变头部版", "时间线版", "浅色侧边栏双栏版", "高管稳重版",
+    "专业深蓝版", "创意渐变版", "ATS 友好纯文本版", "学术版", "优雅柔和版",
+    "开发者双栏版", "设计师作品集版", "初创活力版",
 ]
 
 passed, failed = 0, 0
@@ -120,7 +124,8 @@ def main() -> int:
         page.fill('input[placeholder="搜索模板 / 行业 / 标签"]', "jade")
         page.wait_for_timeout(600)
         labels_jade = gallery_cards(page)
-        check("搜索 jade → 2 张卡（jade 双模板）", len(labels_jade) == 2, f"got {len(labels_jade)}")
+        # 搜索命中模板 id：批次 A 共 15 套 jade-* 模板
+        check("搜索 jade → 15 张卡（jadeAI 批次 A）", len(labels_jade) == 15, f"got {len(labels_jade)}")
         page.fill('input[placeholder="搜索模板 / 行业 / 标签"]', "")
         page.wait_for_timeout(500)
 

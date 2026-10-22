@@ -1,7 +1,7 @@
-"""模板一致性 E2E：优化页与优化详情页共用同一模板清单（14 套），选择器形态一致。
+"""模板一致性 E2E：优化页与优化详情页共用同一模板清单（27 套），选择器形态一致。
 
 覆盖：
-1. 优化页「/」模板选择器：14 张卡片、名称正确、选中后面包屑按钮同步
+1. 优化页「/」模板选择器：27 张卡片、名称正确、选中后面包屑按钮同步
 2. 优化详情页「/history/{id}」编辑态：模板按钮 + 卡片选择器（与优化页一致）
 3. 详情页选择新模板（海洋之蓝）后重新导出 PDF：后端 200 且为合法 PDF
 4. 新模板（学术严谨）后端渲染：PDF 文字含项目要点
@@ -30,7 +30,11 @@ PASSWORD = "Demo@123456"
 EXPECTED = [
     "专业分栏", "简约单栏", "现代渐变", "紧凑高效", "优雅金边", "深色科技",
     "清新绿意", "经典黑白", "海洋之蓝", "暖阳落日", "紫韵流光", "学术严谨",
+    # ── jadeAI 迁移（批次 A 共 15 套：下列 13 套 + 上面已有的经典单栏/现代双栏）──
     "经典单栏专业版", "现代双栏创意版",
+    "极简留白版", "现代渐变头部版", "时间线版", "浅色侧边栏双栏版", "高管稳重版",
+    "专业深蓝版", "创意渐变版", "ATS 友好纯文本版", "学术版", "优雅柔和版",
+    "开发者双栏版", "设计师作品集版", "初创活力版",
 ]
 
 # 模板 ID → 展示名（详情页按钮显示「记录里保存的模板」，不再是硬编码默认值）
@@ -40,6 +44,13 @@ TEMPLATE_LABEL = {
     "academic": "学术严谨", "compact": "紧凑高效", "elegant": "优雅金边",
     "dark": "深色科技", "fresh": "清新绿意", "classic": "经典黑白",
     "jade-classic": "经典单栏专业版", "jade-twocol": "现代双栏创意版",
+    "jade-minimal": "极简留白版", "jade-modern": "现代渐变头部版",
+    "jade-timeline": "时间线版", "jade-sidebar": "浅色侧边栏双栏版",
+    "jade-executive": "高管稳重版", "jade-professional": "专业深蓝版",
+    "jade-creative": "创意渐变版", "jade-ats": "ATS 友好纯文本版",
+    "jade-academic": "学术版", "jade-elegant": "优雅柔和版",
+    "jade-developer": "开发者双栏版", "jade-designer": "设计师作品集版",
+    "jade-startup": "初创活力版",
 }
 
 passed, failed = 0, 0
@@ -101,10 +112,12 @@ with sync_playwright() as p:
 
     modal_cards = page.locator(".ant-modal-body .ant-card")
     n = modal_cards.count()
-    check("优化页-卡片数量=14", n == 14, f"got {n}")
+    check("优化页-卡片数量=27", n == 27, f"got {n}")
     labels = [re.sub(r"\s+", "", modal_cards.nth(i).inner_text()) for i in range(n)]
-    missing = [e for e in EXPECTED if not any(e in l for l in labels)]
-    check("优化页-14 模板名称齐全", not missing, f"missing={missing}")
+    # labels 已去掉全部空白，EXPECTED 侧必须同样归一化，否则含空格的名称
+    # （如「ATS 友好纯文本版」）永远匹配不上
+    missing = [e for e in EXPECTED if not any(re.sub(r"\s+", "", e) in l for l in labels)]
+    check("优化页-27 模板名称齐全", not missing, f"missing={missing}")
     jade_cards = [l for l in labels if "jadeAI" in l or "高保真" in l]
     check("优化页-jadeAI 迁移模板带高保真标记", len(jade_cards) >= 2, f"got {jade_cards}")
     check("优化页-默认模板带使用中高亮", "当前使用中" in labels[0], labels[0])
@@ -117,27 +130,28 @@ with sync_playwright() as p:
     page.locator(".ant-segmented-item", has_text="列表").first.click()
     page.wait_for_timeout(400)
     list_cards = page.locator(".ant-modal-body .ant-card")
-    check("UI-列表视图仍为 14 张", list_cards.count() == 14, f"got {list_cards.count()}")
+    check("UI-列表视图仍为 27 张", list_cards.count() == 27, f"got {list_cards.count()}")
     page.locator(".ant-segmented-item", has_text="网格").first.click()
     page.wait_for_timeout(400)
-    check("UI-切回网格视图", modal_cards.count() == 14)
+    check("UI-切回网格视图", modal_cards.count() == 27)
 
-    # 分类过滤：商务通用 = professional + ocean + elegant + jade-classic = 4
+    # 分类过滤：商务通用 = professional + ocean + elegant + jade-classic
+    #           + jade-modern/professional/executive/timeline/sidebar/elegant/startup = 11
     page.locator(".ant-tabs-tab", has_text="商务通用").first.click()
     page.wait_for_timeout(400)
     biz = modal_cards.count()
-    check("UI-分类过滤(商务通用)=4", biz == 4, f"got {biz}")
+    check("UI-分类过滤(商务通用)=11", biz == 11, f"got {biz}")
     biz_labels = [re.sub(r"\s+", "", modal_cards.nth(i).inner_text()) for i in range(biz)]
     check("UI-分类过滤含 jade 经典单栏", any("经典单栏专业版" in l for l in biz_labels), str(biz_labels))
     page.locator(".ant-tabs-tab", has_text="全部").first.click()
     page.wait_for_timeout(400)
-    check("UI-切回全部恢复 14", modal_cards.count() == 14)
+    check("UI-切回全部恢复 27", modal_cards.count() == 27)
 
-    # 标签过滤：双栏 = professional + violet + elegant + jade-twocol = 4
+    # 标签过滤：双栏 = professional + violet + elegant + jade-twocol + jade-sidebar + jade-developer = 6
     page.locator(".ant-tag-checkable", has_text="#双栏").first.click()
     page.wait_for_timeout(400)
     dual = modal_cards.count()
-    check("UI-标签过滤(#双栏)=4", dual == 4, f"got {dual}")
+    check("UI-标签过滤(#双栏)=6", dual == 6, f"got {dual}")
     page.locator(".ant-tag-checkable", has_text="#双栏").first.click()
     page.wait_for_timeout(400)
 
@@ -151,7 +165,7 @@ with sync_playwright() as p:
     check("UI-搜索无结果显示空态", modal_cards.count() == 0 and page.locator(".ant-empty").count() > 0)
     page.fill('input[placeholder*="搜索模板"]', "")
     page.wait_for_timeout(400)
-    check("UI-清空搜索恢复 14", modal_cards.count() == 14)
+    check("UI-清空搜索恢复 27", modal_cards.count() == 27)
 
     # 预览弹窗（眼睛图标，不触发选中）
     page.locator('.ant-modal-body .anticon-eye[title="预览"]').first.click()
@@ -225,10 +239,10 @@ with sync_playwright() as p:
     page.wait_for_timeout(500)
     d_cards = page.locator(".ant-modal-body .ant-card")
     dn = d_cards.count()
-    check("详情页-卡片数量=14", dn == 14, f"got {dn}")
+    check("详情页-卡片数量=27", dn == 27, f"got {dn}")
     d_labels = [re.sub(r"\s+", "", d_cards.nth(i).inner_text()) for i in range(dn)]
-    d_missing = [e for e in EXPECTED if not any(e in l for l in d_labels)]
-    check("详情页-14 模板名称齐全", not d_missing, f"missing={d_missing}")
+    d_missing = [e for e in EXPECTED if not any(re.sub(r"\s+", "", e) in l for l in d_labels)]
+    check("详情页-27 模板名称齐全", not d_missing, f"missing={d_missing}")
     # 「当前使用中」徽标随两页各自选中项变化，比较顺序前先剔除徽标文本
     norm = lambda xs: [x.replace("当前使用中", "") for x in xs]
     check("两处选择器顺序完全一致", norm(labels) == norm(d_labels))
@@ -294,19 +308,39 @@ with sync_playwright() as p:
     print("[5.5] jadeAI 迁移模板渲染 + PDF 文档属性")
     try:
         import fitz
-        for tpl, marker in (("jade-classic", "UNIQUEJADECLS"), ("jade-twocol", "UNIQUEJADETWO")):
-            st, pdf = api("POST", f"/api/optimize/test-template?template={tpl}", {
-                "resume_data": {
-                    "personal_info": {"name": "模板验证"},
-                    "summary": "验证摘要",
-                    "experience": [{"title": "工程师", "company": "A", "start": "2020", "end": "2022",
-                                    "points": [f"负责核心系统开发{marker}。"]}],
-                    "education": [{"school": "S", "degree": "本科", "major": "CS", "start": "2016", "end": "2020"}],
-                    "skills": ["Python"],
-                    "projects": [{"name": "验证平台", "role": "负责人", "start": "2022.03", "end": "2023.08",
-                                  "points": [f"主导架构{marker}。"]}],
-                }
-            }, token=token)
+        # 批次 A 全量 15 套：marker 必须出现在 PDF 文本层，证明导出确由该模板渲染器产出
+        # （而不是静默回退到默认模板）——这是「预览 = 导出」最硬的一条断言
+        for tpl, marker in (
+            ("jade-classic", "UNIQUEJADECLS"), ("jade-twocol", "UNIQUEJADETWO"),
+            ("jade-minimal", "UQJMIN"), ("jade-modern", "UQJMOD"),
+            ("jade-timeline", "UQJTL"), ("jade-sidebar", "UQJSB"),
+            ("jade-executive", "UQJEXEC"), ("jade-professional", "UQJPROF"),
+            ("jade-creative", "UQJCRE"), ("jade-ats", "UQJATS"),
+            ("jade-academic", "UQJACA"), ("jade-elegant", "UQJELE"),
+            ("jade-developer", "UQJDEV"), ("jade-designer", "UQJDES"),
+            ("jade-startup", "UQJSTU"),
+        ):
+            # test-template 限 10 次/分钟：15 套必然跨两次限流窗口。
+            # 命中 429 必须等满一个窗口再重试——否则拿到的是 84 字节 JSON，
+            # 传给 PyMuPDF 会抛 FileDataError（曾误判成模板渲染失败）。
+            # retry=1 避免 api() 内部再 sleep 8 白等。
+            st, pdf = 429, b""
+            for _attempt in range(5):
+                st, pdf = api("POST", f"/api/optimize/test-template?template={tpl}", {
+                    "resume_data": {
+                        "personal_info": {"name": "模板验证"},
+                        "summary": "验证摘要",
+                        "experience": [{"title": "工程师", "company": "A", "start": "2020", "end": "2022",
+                                        "points": [f"负责核心系统开发{marker}。"]}],
+                        "education": [{"school": "S", "degree": "本科", "major": "CS", "start": "2016", "end": "2020"}],
+                        "skills": ["Python"],
+                        "projects": [{"name": "验证平台", "role": "负责人", "start": "2022.03", "end": "2023.08",
+                                      "points": [f"主导架构{marker}。"]}],
+                    }
+                }, token=token, retry=1)
+                if st != 429:
+                    break
+                time.sleep(62)
             doc = fitz.open(stream=pdf, filetype="pdf")
             md = doc.metadata
             text = "".join(pg.get_text() for pg in doc)
