@@ -475,6 +475,50 @@ cd backend && .venv/Scripts/python.exe ../scripts/verify_template_consistency.py
 主体内边距由模板自己的 `.content { padding: 14mm 18mm 16mm }` 提供——这是全幅
 模板与常规模板唯一的结构差异（常规模板靠 `@page` 给边距，主体不需要额外 padding）。
 
-### 10.1 剩余批次
+## 十一、批次 D 完成记录（创意/艺术 5 套）
 
-批次 D–G（创意/艺术、风格/文化、专业领域、版式变体，共 19 套）尚未开始。
+模板总数 **37 → 42**，jade 系列达 **30 套**。
+
+| ID | 名称 | 版式 | 设计语言 |
+|---|---|---|---|
+| `jade-magazine` | 杂志排版版 | 不对称双栏（左窄 52mm） | 双线 masthead 刊头 + 衬线标题 + 首字放大引言 + 栏目条 |
+| `jade-artistic` | 艺术创想版 | 单栏 14/16mm | 色块拼贴页眉 + 斜体粗条标题 + 圆点技能胶囊 |
+| `jade-retro` | 复古雅致版 | 单栏 15/16mm | 米黄纸质底 + 衬线居中刊头 + 菱形装饰标题 |
+| `jade-neon` | 霓虹暗夜版 | 全幅深色 | 整页深色底 + 青紫霓虹描边/发光标题 + 描边胶囊 |
+| `jade-watercolor` | 水彩晕染版 | 单栏 15/16mm | 多层径向渐变模拟晕染页眉 + 大圆角柔色卡片 |
+
+### 11.1 本批两个新场景
+
+**整页深色模板**（`jade-neon`）：沿用 `dark` 模板的既有惯例——
+`full_bleed_header=True` + `dark_background=True`，`@page` 边距为 0 让深色铺满整页，
+内边距**必须由 `.content` 自给**（`padding: 13mm 15mm 14mm`）。
+若误用 `@page` 边距，深色 body 只覆盖内容区，四周会露出白边。
+
+**首字放大**（`jade-magazine`）：`::first-letter` 只放大字号、**不 float**。
+浮动首字在分页时可能异常，非浮动的放大已足够表达杂志感。
+
+### 11.2 踩坑：元数据构造名
+
+`template_meta.py` 的元数据构造类是 **`BackendTemplateMeta`**（不是 `TemplateMeta`）。
+写错时 `python -c "import"` 直接 `NameError`，快测会以 traceback 而非 FAIL 收尾——
+看到 traceback 先查类名/字段名，不要先怀疑模板文件。
+
+### 11.3 修复：多层半透明渐变导致 PDF 体积暴涨 26 倍
+
+`jade-watercolor` 初版用 **4 层半透明 `radial-gradient`** 叠加模拟晕染，导出 PDF 达
+**814KB**，而同期所有其它模板都在 25–35KB。
+
+根因：多层半透明渐变叠加会让 Chromium 把整块区域**栅格化成位图**嵌入 PDF，
+而不是输出矢量 shading。对照实验证明**不是"渐变必然膨胀"**——
+同样带全幅渐变的 `jade-gradient`（35.5KB）、`jade-neon`（33.3KB）都正常，
+只有叠层 radial 的那一套失控。
+
+修法：改用**不透明色 + 单层横向 `linear-gradient`** 表达晕染，视觉观感保留，
+体积回落到 **51.9KB**（-94%）。
+
+守护：`verify_all_templates.py` 新增体积断言（单页 PDF ≤ 200KB），
+任何模板再触发栅格化膨胀会直接 FAIL。
+
+### 11.4 剩余批次
+
+批次 E–G（风格/文化 5 套、专业领域 5 套、版式变体 4 套，共 14 套）尚未开始。

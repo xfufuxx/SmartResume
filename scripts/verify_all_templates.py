@@ -25,6 +25,9 @@ RESUME = {
     "skills": ["Python", "Go"],
 }
 
+#: 单页简历 PDF 体积上限（字节）。正常模板 25–55KB；渐变被栅格化时会飙到 800KB+。
+MAX_PDF_BYTES = 200 * 1024
+
 passed = failed = 0
 
 
@@ -61,6 +64,10 @@ async def main() -> int:
             )
             check(f"{tid} 渲染 + 文档属性", good,
                   f"pages={pages} size={len(pdf)} title={md.get('title')!r}")
+            # 体积守护：多层半透明渐变叠加会让 Chromium 把整块区域栅格化成位图，
+            # 单页 PDF 可从 ~30KB 膨胀到 ~800KB（用户无法上传招聘系统）。
+            check(f"{tid} PDF 体积 ≤ {MAX_PDF_BYTES // 1024}KB（无渐变栅格化膨胀）",
+                  len(pdf) <= MAX_PDF_BYTES, f"got {len(pdf) / 1024:.1f}KB")
         except Exception as e:  # noqa: BLE001
             check(f"{tid} 渲染 + 文档属性", False, f"{type(e).__name__}: {e}")
 

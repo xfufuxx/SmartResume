@@ -356,6 +356,49 @@ TEMPLATE_META: dict[str, BackendTemplateMeta] = {
             theme={"primary": "#2563eb", "secondary": "#60a5fa", "bg": "#ffffff", "text": "#26313d"},
             desc="jadeAI 块状：蓝色块页眉 + 序号方块标题 + 浅底卡片条目，网格感强",
         ),
+        BackendTemplateMeta(
+            id="jade-magazine", name="杂志排版版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 10.0, "lineHeight": 1.72, "sectionGapMm": 6.0},
+            layout_features=LayoutFeatures(
+                two_column=True, sidebar_side="left", sidebar_width_mm=52.0,
+                page_margin_y_mm=14.0, page_margin_x_mm=15.0,
+            ),
+            category="creative", industries=("传媒", "杂志", "广告", "设计"), tags=("杂志", "不对称双栏", "衬线"),
+            theme={"primary": "#b4345c", "secondary": "#2b2b2b", "bg": "#ffffff", "text": "#2b2b2b"},
+            desc="jadeAI 杂志：刊头式双线 masthead + 不对称双栏，衬线标题与首字放大，编辑感强",
+        ),
+        BackendTemplateMeta(
+            id="jade-artistic", name="艺术创想版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 10.0, "lineHeight": 1.7, "sectionGapMm": 6.0},
+            layout_features=LayoutFeatures(page_margin_y_mm=14.0, page_margin_x_mm=16.0),
+            category="creative", industries=("设计", "艺术", "传媒", "广告"), tags=("色块", "拼贴", "艺术"),
+            theme={"primary": "#e0682f", "secondary": "#f2b03c", "bg": "#ffffff", "text": "#33302e"},
+            desc="jadeAI 艺术：色块拼贴页眉 + 斜体粗条标题 + 圆点技能胶囊，视觉张力大",
+        ),
+        BackendTemplateMeta(
+            id="jade-retro", name="复古雅致版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 10.0, "lineHeight": 1.72, "sectionGapMm": 6.0},
+            layout_features=LayoutFeatures(page_margin_y_mm=15.0, page_margin_x_mm=16.0),
+            category="creative", industries=("文化", "教育", "出版", "设计"), tags=("复古", "衬线", "纸质"),
+            theme={"primary": "#8c5a2b", "secondary": "#c8b48d", "bg": "#faf3e3", "text": "#4a3728"},
+            desc="jadeAI 复古：米黄纸质底 + 衬线居中刊头 + 菱形装饰标题，怀旧雅致",
+        ),
+        BackendTemplateMeta(
+            id="jade-neon", name="霓虹暗夜版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 10.0, "lineHeight": 1.7, "sectionGapMm": 6.0},
+            layout_features=LayoutFeatures(full_bleed_header=True, dark_background=True),
+            category="tech", industries=("技术", "互联网", "游戏", "直播"), tags=("霓虹", "暗夜", "青紫"),
+            theme={"primary": "#00e5ff", "secondary": "#b14aff", "bg": "#0a0a16", "text": "#dff6ff"},
+            desc="jadeAI 霓虹：整页深色底 + 青紫霓虹描边与发光标题，暗夜赛博感",
+        ),
+        BackendTemplateMeta(
+            id="jade-watercolor", name="水彩晕染版", author="jadeAI (twwch/JadeAI) 迁移", version="1.0.0",
+            text_defaults={"baseFontSizePt": 10.0, "lineHeight": 1.75, "sectionGapMm": 6.0},
+            layout_features=LayoutFeatures(page_margin_y_mm=15.0, page_margin_x_mm=16.0),
+            category="creative", industries=("设计", "艺术", "教育", "文化"), tags=("水彩", "晕染", "柔和"),
+            theme={"primary": "#c97f9c", "secondary": "#a78bcd", "bg": "#fdfaf8", "text": "#554a52"},
+            desc="jadeAI 水彩：多层径向渐变模拟晕染页眉 + 大圆角柔色卡片，温润轻盈",
+        ),
     ]
 }
 

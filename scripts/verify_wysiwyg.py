@@ -47,6 +47,7 @@ CASES = [
     ("jade-corporate", 22.0),
     ("jade-medical", 20.0),
     ("jade-finance", 20.0),
+    ("jade-neon", 24.0),      # 全幅深色：页边距 0，内边距由 .content 自给
     ("classic", None),
 ]
 
@@ -167,7 +168,16 @@ def main() -> None:
             f"PDF {pdf_max_pt:.2f}pt vs 屏幕 {font_pt:.2f}pt（差 {abs(pdf_max_pt - font_pt):.2f}）",
         )
         # 文本左边界 = 页边距 + 模板内部 padding，故按下界断言：
-        # 不得小于声明页边距（证明 @page 生效），也不得超出过多（证明没被缩放/偏移）
+        # 不得小于声明页边距（证明 @page 生效），也不得超出过多（证明没被缩放/偏移）。
+        # 特例：全幅模板 @page 边距为 0，内边距完全由模板自己的 .content padding 决定
+        # （如 jade-neon 为 15mm），此时下界无从校验，改为只校验上界（内容不贴边过头）。
+        if margin_x == 0.0:
+            check(
+                f"{tid} PDF 左内边距合理（全幅模板自给，≤25mm）",
+                left_mm <= 25.0,
+                f"got {left_mm:.1f}mm",
+            )
+            continue
         check(
             f"{tid} PDF 左页边距 ≥ {margin_x:.0f}mm 且未过度右移",
             margin_x - 0.5 <= left_mm <= margin_x + 6.0,
