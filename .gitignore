@@ -49,3 +49,6 @@ test_*.png
 
 # Alembic
 backend/alembic/versions/*.pyc
+
+# 本地视觉校验产物（每次跑都会重绘）
+docs/verify-antd/

@@ -94,6 +94,12 @@ function ThemedConfig({ children }: { children: React.ReactNode }) {
     [isDark],
   )
 
+  // 静态方法的 holder 渲染在 React 树之外，只能读到 ConfigProvider.config 登记的全局主题；
+  // 主题只当 prop 传的话，静态 message 永远按 antd 默认浅色画（暗色模式下白底黑字）。
+  React.useEffect(() => {
+    ConfigProvider.config({ theme: antdThemeObj })
+  }, [antdThemeObj])
+
   return (
     <ConfigProvider locale={zhCN} theme={antdThemeObj}>
       {children}
