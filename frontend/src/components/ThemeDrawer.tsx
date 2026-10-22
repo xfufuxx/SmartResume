@@ -14,7 +14,7 @@ import {
   Drawer, ColorPicker, Select, Slider, Button, Space, Typography, Tag, message, Tooltip,
 } from 'antd'
 import { ReloadOutlined, SaveOutlined } from '@ant-design/icons'
-import { TemplateRegistry } from '@/lib/template-registry'
+import { TemplateRegistry } from '@/lib/templates-register'
 import { editor } from '@/lib/api'
 
 /** 字体白名单（与后端 resume_theme.FONT_WHITELIST 一致） */

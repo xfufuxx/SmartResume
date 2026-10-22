@@ -3,6 +3,10 @@ import type { ResumeParseResult } from '@/types'
 /**
  * 模板预览专用演示简历（前后端共用同一套字段形状）。
  * 仅用于模板选择面板的高保真预览，不写入任何业务数据。
+ *
+ * 注意：这是后端 `app/api/templates.py::_DEMO_RESUME`（GET /api/templates/demo
+ * 下发）的静态副本——React 组件预览需要同步导入、不走网络。两侧内容由
+ * `scripts/check_template_sync.py` 第 5 节逐字段守护，改任一侧必须同步另一侧。
  */
 export const DEMO_RESUME: ResumeParseResult = {
   personal_info: {

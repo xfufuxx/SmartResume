@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import type { TemplatePreviewProps } from '@/lib/template-registry'
+import type { TemplatePreviewProps } from '@/lib/templates-register'
 
 /**
  * 经典单栏专业版（jadeAI classic 迁移）

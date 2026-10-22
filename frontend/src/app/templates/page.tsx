@@ -28,7 +28,7 @@ import {
   CATEGORY_LABELS,
   type TemplateMetadata,
   type TemplateCategory,
-} from '@/lib/template-registry'
+} from '@/lib/templates-register'
 import { TEMPLATE_OPTIONS, DEFAULT_TEMPLATE } from '@/lib/templates'
 import { editor, optimize } from '@/lib/api'
 import { MiniPreview, TemplatePreviewModal } from '@/components/TemplateSelector'

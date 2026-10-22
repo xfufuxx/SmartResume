@@ -13,6 +13,13 @@
 4. **渲染产物**：每个模板渲染一次（Jinja + 打印基座），断言 ``@page`` 边距与
    layoutFeatures 相符、含 ``print-color-adjust`` / ``break-inside`` /
    ``<meta name="template-id">``、深色侧栏含 ``box-decoration-break``。
+5. **演示数据一致**：后端 ``app/api/templates.py::_DEMO_RESUME``（经
+   ``GET /api/templates/demo`` 下发）与前端 ``lib/template-demo-data.ts``
+   （React 组件预览的静态副本）逐字段深比较——两侧是同一数据的双形态，
+   任一侧漂移都会被这里拦下（iframe 预览走后端、组件预览走前端）。
+6. **Registry 入口纪律**：纯模块 ``lib/template-registry.ts`` 不含注册动作，
+   任何源码不得绕过 ``lib/templates-register.tsx`` 直接 import 它
+   （否则得到空 Registry——编译期不报错、运行期模板全失踪）。
 
 为什么检查渲染产物而不是 HTML 源文件
 ------------------------------------
@@ -38,7 +45,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 BACKEND = ROOT / "backend"
 FRONTEND = ROOT / "frontend"
-REGISTRY_FILE = FRONTEND / "src" / "lib" / "template-registry.tsx"
+REGISTRY_FILE = FRONTEND / "src" / "lib" / "templates-register.tsx"
+DEMO_FILE = FRONTEND / "src" / "lib" / "template-demo-data.ts"
 TEMPLATE_DIR = BACKEND / "app" / "templates"
 
 #: 非「风格模板」的渲染壳（布局导出用），不参与模板集合比对
@@ -170,6 +178,70 @@ def parse_registry() -> dict[str, dict]:
             "textDefaults": _parse_td(td.group(1)) if td else None,
         }
     return out
+
+
+# ══════════════════════════════════════════════════════════════════════
+# 演示数据（后端 _DEMO_RESUME vs 前端 template-demo-data.ts）
+# ══════════════════════════════════════════════════════════════════════
+
+def _extract_object_literal(src: str, anchor: str, *, quote_keys: bool) -> dict | None:
+    """从源码中截取 `anchor = { ... }` 的对象字面量并求值为 dict。
+
+    - 后端是合法 Python 字典字面量（支持括号内隐式字符串拼接），直接 ``literal_eval``；
+    - 前端是 TS 对象字面量，与 Python 字面量的唯一差异是「键未加引号」，
+      先给裸键补引号再求值（``quote_keys=True``）。
+    解析失败一律返回 None——调用方按断言失败处理，绝不静默跳过。
+    """
+    import ast
+
+    m = re.search(anchor + r"\s*=\s*\{", src)
+    if not m:
+        return None
+    start = m.end() - 1  # 第一个 {
+    depth = 0
+    body = None
+    for i in range(start, len(src)):
+        ch = src[i]
+        if ch == "{":
+            depth += 1
+        elif ch == "}":
+            depth -= 1
+            if depth == 0:
+                body = src[start:i + 1]
+                break
+    if body is None:
+        return None
+    if quote_keys:
+        # {key: / ,key: / [后 key: → "key":（误匹配字符串内容会致求值失败，属安全失败）
+        body = re.sub(r"([{,]\s*)([A-Za-z_]\w*)\s*:", r'\1"\2":', body)
+    try:
+        value = ast.literal_eval(body)
+    except (ValueError, SyntaxError):
+        return None
+    return value if isinstance(value, dict) else None
+
+
+def _diff_path(a, b, path: str = "") -> str:
+    """递归找出两个结构第一处差异，返回可读路径（用于失败详情）。"""
+    if type(a) is not type(b):
+        return f"{path or '.'}: {type(a).__name__} vs {type(b).__name__}"
+    if isinstance(a, dict):
+        for k in sorted(set(a) | set(b)):
+            if k not in a or k not in b:
+                return f"{path}.{k}: 仅一侧存在"
+            sub = _diff_path(a[k], b[k], f"{path}.{k}")
+            if sub:
+                return sub
+        return ""
+    if isinstance(a, list):
+        if len(a) != len(b):
+            return f"{path}: 长度 {len(a)} vs {len(b)}"
+        for i, (x, y) in enumerate(zip(a, b)):
+            sub = _diff_path(x, y, f"{path}[{i}]")
+            if sub:
+                return sub
+        return ""
+    return "" if a == b else f"{path}: {a!r} vs {b!r}"
 
 
 # ══════════════════════════════════════════════════════════════════════
@@ -337,6 +409,39 @@ def main() -> int:
               f"--tpl-section-gap: {td['sectionGapMm']:g}mm" in html)
         themed = render_template_html(f"{tid}.html", demo, theme_config={"primary": "#abcdef"})
         check(f"{tid} 用户主题覆盖 --tpl-primary", "--tpl-primary: #abcdef" in themed)
+
+    print("\n[5] 演示数据一致性（后端 _DEMO_RESUME vs 前端 template-demo-data.ts）")
+    templates_src = (BACKEND / "app" / "api" / "templates.py").read_text(encoding="utf-8")
+    demo_back = _extract_object_literal(templates_src, r"_DEMO_RESUME", quote_keys=False)
+    check("后端 _DEMO_RESUME 可解析", demo_back is not None and bool(demo_back))
+    demo_front = _extract_object_literal(
+        DEMO_FILE.read_text(encoding="utf-8"), r"export const DEMO_RESUME[^=]*", quote_keys=True
+    )
+    check("前端 DEMO_RESUME 可解析", demo_front is not None and bool(demo_front))
+    if demo_back and demo_front:
+        diff = _diff_path(demo_back, demo_front)
+        check("演示数据前后端逐字段一致", not diff,
+              diff or "（改任一侧都必须同步另一侧，否则预览与导出漂移）")
+    check("GET /api/templates/demo 端点已注册", '@router.get("/demo")' in templates_src)
+
+    print("\n[6] Registry 入口纪律（问题 14：纯模块不得被直接 import）")
+    # 纯 .ts 不含注册动作：绕过 templates-register 直接 import 它会得到空 Registry
+    # （编译期不报错、运行期模板全失踪——曾因 .ts/.tsx 同名解析差异真实踩过）。
+    bad_imports: list[str] = []
+    for path in FRONTEND.rglob("*.ts*"):
+        rel = path.relative_to(FRONTEND).as_posix()
+        if rel in ("src/lib/templates-register.tsx", "src/lib/template-registry.ts"):
+            continue  # 注册文件自身 + 纯模块自身
+        if not path.is_file() or "node_modules" in rel or rel.startswith(".next"):
+            continue
+        text = path.read_text(encoding="utf-8", errors="replace")
+        for m in re.finditer(r"""from\s+['"]([^'"]*template-registry)['"]""", text):
+            spec = m.group(1)
+            if spec.endswith("templates-register"):
+                continue
+            bad_imports.append(f"{rel} → {spec}")
+    check("无源码绕过 templates-register 直接 import 纯 registry 模块",
+          not bad_imports, "; ".join(bad_imports[:5]))
 
     return report(args.quiet)
 

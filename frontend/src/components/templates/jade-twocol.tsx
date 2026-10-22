@@ -1,7 +1,7 @@
 'use client'
 
 import React from 'react'
-import type { TemplatePreviewProps } from '@/lib/template-registry'
+import type { TemplatePreviewProps } from '@/lib/templates-register'
 
 /**
  * 现代双栏创意版（jadeAI two-column 迁移）

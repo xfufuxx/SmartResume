@@ -5,6 +5,7 @@
 元数据的单一事实源在 app/services/template_meta.py，两边靠 key 关联。
 
 - GET /api/templates              全量模板元数据（分类/行业/标签/主题色/版本）
+- GET /api/templates/demo         预览专用演示数据（单一事实源，前端静态副本由快测守护）
 - GET /api/templates/{key}/preview  用演示数据渲染模板 HTML（供 iframe 高保真预览）
 
 缓存策略（问题 10）：
@@ -172,6 +173,17 @@ async def list_templates(request: Request):
     if _etag_matches(request.headers.get("if-none-match"), etag):
         return Response(status_code=304, headers=headers)
     return JSONResponse(content=payload, headers=headers)
+
+
+@router.get("/demo")
+async def demo_resume():
+    """模板预览专用演示数据（单一事实源）。
+
+    前端 `lib/template-demo-data.ts` 是同一数据的静态副本（React 组件预览需要
+    同步导入，不走网络），两份之间由 `scripts/check_template_sync.py` 的
+    「演示数据一致性」断言守护——改这里必须同步改前端，否则提交被拦。
+    """
+    return _DEMO_RESUME
 
 
 @router.get("/{template_id}/preview", response_class=HTMLResponse)
