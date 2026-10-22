@@ -25,6 +25,7 @@ import {
   SafetyCertificateOutlined,
   AimOutlined,
   ExperimentOutlined,
+  PictureOutlined,
 } from '@ant-design/icons'
 import { useRouter, usePathname } from 'next/navigation'
 import { clearAuth } from '@/lib/auth'
@@ -75,6 +76,7 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
   {
     label: '求职工具',
     items: [
+      { key: 'templates', label: '模板库', icon: <PictureOutlined />, path: '/templates' },
       { key: 'interview', label: 'AI 面试押题', icon: <TeamOutlined />, path: '/interview' },
       { key: 'match', label: '岗位匹配罗盘', icon: <AimOutlined />, path: '/match' },
       { key: 'ats', label: 'ATS 体检', icon: <SafetyCertificateOutlined />, path: '/ats' },

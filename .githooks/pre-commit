@@ -1,0 +1,31 @@
+#!/bin/sh
+# 提交前快测：模板体系一致性（四集合相等 + 字段完备 + 渲染产物打印规则）
+#
+# 启用一次即可：
+#   git config core.hooksPath .githooks
+# 临时跳过（不推荐）：
+#   git commit --no-verify
+#
+# 说明：检查是纯本地静态解析 + 14 次 Jinja 渲染，约 2 秒，无网络/无浏览器。
+
+set -e
+
+ROOT="$(git rev-parse --show-toplevel 2>/dev/null || echo .)"
+cd "$ROOT"
+
+PY="$ROOT/backend/.venv/Scripts/python.exe"          # Windows（venv）
+[ -x "$PY" ] || PY="$ROOT/backend/.venv/bin/python"   # macOS / Linux
+[ -x "$PY" ] || PY="$(command -v python3 || command -v python)"
+
+if [ -z "$PY" ]; then
+  echo "[pre-commit] 未找到 Python，跳过模板一致性检查" >&2
+  exit 0
+fi
+
+if ! "$PY" "$ROOT/scripts/check_template_sync.py" -q; then
+  echo "" >&2
+  echo "[pre-commit] 模板体系一致性检查未通过。" >&2
+  echo "  常见原因：新增模板只改了一半（registry / template_meta / templates 目录 / isLayoutFeatures）。" >&2
+  echo "  SOP: docs/jadeAI模板体系升级交付文档.md" >&2
+  exit 1
+fi

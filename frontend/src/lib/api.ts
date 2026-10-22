@@ -193,6 +193,9 @@ export const auth = {
     api.post('/api/auth/register', { email, password, code }),
   login: (email: string, password: string, deviceId?: string) =>
     api.post('/api/auth/login', { email, password, device_id: deviceId || undefined }),
+  /** 启动 QQ 登录：拿 QQ 授权页 URL（后端持有 appid，前端只负责跳转） */
+  qqAuthorize: () =>
+    api.get<{ authorize_url: string }>('/api/auth/qq/authorize'),
   refresh: (refreshToken: string) =>
     api.post('/api/auth/refresh', { refresh_token: refreshToken }),
   logout: () => api.post('/api/auth/logout'),
@@ -647,8 +650,17 @@ export const analysis = {
 export const editor = {
   updateContent: (optId: string, optimizedJson: Record<string, unknown>) =>
     api.put(`/api/optimize/${optId}/content`, { optimized_json: optimizedJson }),
-  reexport: (optId: string, template = 'professional') =>
-    api.post(`/api/optimize/${optId}/reexport`, null, { params: { template } }),
+  /** 重新导出 PDF；不传 template 时使用记录中已保存的模板 */
+  reexport: (optId: string, template?: string) =>
+    api.post(`/api/optimize/${optId}/reexport`, null, {
+      params: template ? { template } : {},
+    }),
+  /** 切换记录使用的模板（模板 ID 落库，成为预览/导出的唯一事实来源） */
+  setTemplate: (optId: string, template: string) =>
+    api.put(`/api/optimize/${optId}/template`, { template }),
+  /** 更新记录的主题定制（与模板默认合并落库；保存即重导出，保持文件与记录一致） */
+  setTheme: (optId: string, theme: Record<string, string | number>) =>
+    api.put(`/api/optimize/${optId}/theme`, theme, { params: { reexport: true } }),
   /** 可视化排版：保存布局文档（layout_json） */
   saveLayout: (optId: string, layout: Record<string, unknown>) =>
     api.put(`/api/optimize/${optId}/layout`, { layout }),

@@ -28,7 +28,7 @@ def _sign_key(key: str) -> str:
     """
     exp = int(time.time()) + settings.FILE_URL_TTL
     raw = f"{key}:{exp}".encode("utf-8")
-    sig = hmac.new(settings.SECRET_KEY.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+    sig = hmac.new(settings.FILE_URL_SECRET.encode("utf-8"), raw, hashlib.sha256).hexdigest()
     return f"{settings.BACKEND_URL}/api/files/{key}?exp={exp}&sig={sig}"
 
 
@@ -40,7 +40,7 @@ def verify_signed_key(key: str, exp: int, sig: str) -> bool:
     except (TypeError, ValueError):
         return False
     raw = f"{key}:{exp}".encode("utf-8")
-    expected = hmac.new(settings.SECRET_KEY.encode("utf-8"), raw, hashlib.sha256).hexdigest()
+    expected = hmac.new(settings.FILE_URL_SECRET.encode("utf-8"), raw, hashlib.sha256).hexdigest()
     return hmac.compare_digest(expected, sig)
 
 

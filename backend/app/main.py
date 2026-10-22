@@ -13,6 +13,7 @@ from app.api import auth, resumes, jobs, optimization, scoring, matching, batch,
 from app.api import files, export, ats
 from app.api import insights, interview, interview_tracks, search, analysis, applications, communications
 from app.api import capability
+from app.api import templates as templates_api
 from app.core.log_filter import install_sensitive_log_filter
 
 # 确保 uploads 目录存在（模块加载时创建）
@@ -44,6 +45,12 @@ async def lifespan(app: FastAPI):
     except Exception:
         logging.getLogger(__name__).warning("[任务恢复] 启动恢复执行失败", exc_info=True)
     yield
+    # 退出收尾：释放常驻 Chromium（不释放会留下孤儿进程，占内存且拖慢重启）
+    try:
+        from app.services.browser_pool import shutdown_browser
+        await shutdown_browser()
+    except Exception:
+        logging.getLogger(__name__).warning("[浏览器池] 释放失败", exc_info=True)
 
 
 app = FastAPI(
@@ -89,6 +96,7 @@ app.include_router(interview.router, tags=["Interview"])
 app.include_router(search.router, tags=["Search"])
 app.include_router(analysis.router, tags=["Analysis"])
 app.include_router(capability.router)
+app.include_router(templates_api.router, prefix="/api/templates", tags=["Templates"])
 
 
 @app.get("/health")

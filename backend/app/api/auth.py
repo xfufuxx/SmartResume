@@ -1,17 +1,27 @@
 import json
+import logging
+import secrets
 from datetime import datetime, timedelta, timezone
+from urllib.parse import urlencode
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi.responses import RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
+from app.config import settings
 from app.database import get_db
 from app.core.security import (
     hash_password, verify_password,
     create_access_token, create_refresh_token, decode_refresh_token,
 )
 from app.core.audit import write_audit_log, hash_token
-from app.core.deps import get_current_user, get_client_info, RateLimiter
+from app.core.deps import get_current_user, get_client_info, get_redis, RateLimiter
 from app.models.user import User, UserDevice
+from app.services.qq_auth import (
+    qq_enabled, make_state, save_state, verify_and_consume_state,
+    build_authorize_url, fetch_access_token, fetch_openid, fetch_user_info,
+    synthetic_email, error_fragment,
+)
 from app.schemas.user import (
     UserRegister, UserLogin, TokenResponse, UserResponse,
     SendCodeRequest, ForgotPasswordRequest, ResetPasswordRequest,
@@ -23,6 +33,105 @@ from app.services.email_service import send_verification_email
 
 router = APIRouter()
 TZ_UTC8 = timezone(timedelta(hours=8))
+logger = logging.getLogger(__name__)
+
+
+@router.get("/qq/authorize")
+async def qq_authorize(redis=Depends(get_redis)):
+    """启动 QQ 登录：生成一次性 state 并返回 QQ 授权页 URL（前端整体跳转）。
+
+    appid/appkey 只留在后端，浏览器不接触；未配置时返回 503，
+    前端据此提示「QQ 登录暂未开放」。
+    """
+    if not qq_enabled():
+        raise HTTPException(status_code=503, detail="QQ 登录未配置，暂时无法使用")
+    state = make_state()
+    await save_state(redis, state)
+    return {"authorize_url": build_authorize_url(state)}
+
+
+@router.get("/qq/callback")
+async def qq_callback(
+    request: Request,
+    code: str | None = None,
+    state: str | None = None,
+    error: str | None = None,
+    db: AsyncSession = Depends(get_db),
+    redis=Depends(get_redis),
+):
+    """QQ 授权回调：校验 state → 换 token → 取 openid → 找/建用户 → 签发本站 JWT
+    → 令牌经 hash 片段跳回前端 /login/qq-callback。
+
+    所有失败路径都带中文原因跳回前端，不把用户晾在 QQ 侧。
+    """
+    frontend = settings.FRONTEND_URL.rstrip("/")
+
+    def _fail(msg: str) -> RedirectResponse:
+        return RedirectResponse(f"{frontend}/login/qq-callback{error_fragment(msg)}")
+
+    if error:
+        return _fail("你已取消 QQ 授权，可以重试或使用邮箱登录")
+    if not code or not state:
+        return _fail("QQ 回调参数缺失，请重新登录")
+    if not await verify_and_consume_state(redis, state):
+        return _fail("登录状态已失效或重复提交，请重新点击 QQ 登录")
+
+    try:
+        access_token = await fetch_access_token(code)
+        openid = await fetch_openid(access_token)
+        info = await fetch_user_info(access_token, openid)
+    except Exception as e:  # noqa: BLE001 —— QQ 侧异常统一转成友好跳转
+        logger.warning("QQ 登录链路失败: %s", e)
+        return _fail(f"QQ 登录失败：{e}")
+
+    # 按 openid 找用户；找不到则自动注册（与邮箱注册互不干扰）
+    result = await db.execute(select(User).where(User.qq_openid == openid))
+    user = result.scalar_one_or_none()
+    if user is None:
+        user = User(
+            email=synthetic_email(openid),
+            # 随机不可用密码：纯 QQ 用户没有密码，但 password_hash 非空
+            password_hash=hash_password(secrets.token_urlsafe(32)),
+            qq_openid=openid,
+            nickname=(info.get("nickname") or f"QQ用户{openid[-4:]}"),
+            avatar_url=info.get("figureurl_qq_1") or info.get("figureurl") or None,
+            is_verified=True,  # QQ 侧已完成身份确认
+        )
+        db.add(user)
+        await db.flush()
+    else:
+        # 同步 QQ 侧最新昵称/头像；注销冻结期内重新登录视为恢复账号
+        if info.get("nickname"):
+            user.nickname = info["nickname"]
+        if info.get("figureurl_qq_1") or info.get("figureurl"):
+            user.avatar_url = info.get("figureurl_qq_1") or info.get("figureurl")
+        if user.status == "deleted_pending":
+            user.status = "active"
+            user.deleted_at = None
+        await db.flush()
+
+    if user.status != "active":
+        return _fail("账号已被冻结，请联系管理员")
+
+    client = await get_client_info(request)
+    # 固定设备 ID：同一用户多次 QQ 登录不会无限创建设备记录
+    device_id = f"web-qq-{user.id}"
+    access_jwt = create_access_token(user.id)
+    refresh_jwt = create_refresh_token(user.id, device_id)
+    await register_device(
+        db, user.id, device_id,
+        platform="web",
+        ip_address=client["ip_address"],
+        user_agent=client["user_agent"],
+        refresh_token=refresh_jwt,
+    )
+    # 审计日志必须先于 commit 写入（write_audit_log 只 flush 不提交）
+    await write_audit_log(db, user.id, "qq_login", detail="QQ 登录", ip_address=client["ip_address"])
+    await db.commit()
+
+    # 令牌走 hash 回传：不进服务器访问日志与 Referer，比 query 参数安全
+    fragment = urlencode({"access_token": access_jwt, "refresh_token": refresh_jwt})
+    return RedirectResponse(f"{frontend}/login/qq-callback#{fragment}")
 
 
 @router.post("/send-code")

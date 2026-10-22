@@ -20,17 +20,17 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
-    font-size: 10pt;
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10pt);
     color: #44403c;
-    line-height: 1.6;
+    line-height: var(--tpl-line-height, 1.6);
     width: 210mm;
     background: #fffbeb;
   }
 
   /* ── 顶部暖阳渐变 ── */
   .header {
-    background: linear-gradient(135deg, #9a3412 0%, #ea580c 50%, #fb923c 100%);
+    background: linear-gradient(135deg, var(--tpl-accent, #9a3412) 0%, var(--tpl-primary, #ea580c) 50%, #fb923c 100%);
     color: #fff;
     padding: 26px 32px 20px;
     text-align: center;
@@ -78,10 +78,10 @@
   }
   .sidebar h3 {
     font-size: 11pt;
-    color: #9a3412;
+    color: var(--tpl-accent, #9a3412);
     font-weight: 700;
     letter-spacing: 1px;
-    border-bottom: 2px solid #ea580c;
+    border-bottom: 2px solid var(--tpl-primary, #ea580c);
     padding-bottom: 3px;
     margin-bottom: 8px;
     margin-top: 12px;
@@ -108,13 +108,13 @@
   }
   .content h3 {
     font-size: 13pt;
-    color: #9a3412;
+    color: var(--tpl-accent, #9a3412);
     font-weight: 700;
     letter-spacing: 1px;
-    border-bottom: 2px solid #ea580c;
+    border-bottom: 2px solid var(--tpl-primary, #ea580c);
     padding-bottom: 3px;
     margin-bottom: 10px;
-    margin-top: 16px;
+    margin-top: var(--tpl-section-gap, 16px);
   }
   .content h3:first-child { margin-top: 0; }
 
@@ -137,7 +137,7 @@
   .exp-header {
     font-weight: 700;
     font-size: 10.5pt;
-    color: #9a3412;
+    color: var(--tpl-accent, #9a3412);
     margin-bottom: 2px;
   }
   .exp-sub {
@@ -163,7 +163,7 @@
     left: 0;
     font-size: 6pt;
     top: 3px;
-    color: #ea580c;
+    color: var(--tpl-primary, #ea580c);
   }
 
   .edu-item {
@@ -172,7 +172,7 @@
   .edu-item .school {
     font-weight: 700;
     font-size: 10pt;
-    color: #9a3412;
+    color: var(--tpl-accent, #9a3412);
   }
   .edu-item .info {
     font-size: 9pt;
@@ -189,7 +189,7 @@
   .proj-item .proj-name {
     font-weight: 700;
     font-size: 10pt;
-    color: #9a3412;
+    color: var(--tpl-accent, #9a3412);
   }
   .proj-item .proj-desc {
     font-size: 9pt;
@@ -198,7 +198,7 @@
   }
   .proj-item .proj-tech {
     font-size: 8.5pt;
-    color: #ea580c;
+    color: var(--tpl-primary, #ea580c);
   }
 
   @media print {

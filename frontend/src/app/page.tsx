@@ -23,6 +23,7 @@ import { useApiData } from '@/lib/useApi'
 import { formatDate } from '@/lib/utils'
 import AppLayout from '@/components/AppLayout'
 import { TEMPLATE_OPTIONS, DEFAULT_TEMPLATE } from '@/lib/templates'
+import { TemplateRegistry } from '@/lib/template-registry'
 import TemplateSelector from '@/components/TemplateSelector'
 import ResumePreview from '@/components/optimize/ResumePreview'
 import MatchGauge, { levelMeta } from '@/components/optimize/MatchGauge'
@@ -97,6 +98,11 @@ export default function Home() {
   const [exporting, setExporting] = useState(false)
   const [selectedTemplate, setSelectedTemplate] = useState(DEFAULT_TEMPLATE)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
+  /** 模板库「使用此模板」跳入：/?template=<id> 预选模板（非法值忽略，用默认） */
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get('template')
+    if (t && TemplateRegistry.get(t)) setSelectedTemplate(t)
+  }, [])
   const [result, setResult] = useState<OptimizeResult | null>(null)
   /** 前后对比弹窗：只在优化彻底完成后打开 */
   const [diffModalOpen, setDiffModalOpen] = useState(false)

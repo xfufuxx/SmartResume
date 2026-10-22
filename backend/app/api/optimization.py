@@ -21,7 +21,8 @@ from app.models.optimized_resume import OptimizedResume
 from app.schemas.optimization import (
     OptimizeRequest, OptimizeResponse, MatchAnalysis, DiffResponse,
     SatisfactionFeedbackRequest, QuickOptimizeRequest, RenderRequest, RenderTextRequest,
-    UpdateContentRequest, SaveLayoutRequest, ExportLayoutRequest,
+    UpdateContentRequest, SaveLayoutRequest, ExportLayoutRequest, TemplateUpdateRequest,
+    ThemeUpdateRequest,
     ChangeReviewResponse, ChangeApplyRequest,
 )
 from app.services.agent_optimizer import analyze_match, optimize_resume, generate_changes_description
@@ -29,7 +30,8 @@ from app.services.change_review import apply_decisions, compute_changes
 from app.services.optimized_record_cleanup import detach_optimized_record_refs
 from app.services.task_recovery import OPTIMIZE_STALE_SECONDS, is_stale
 from app.services.storage import storage
-from app.services.pdf_styler import _generate_styled_or_fallback
+from app.services.pdf_styler import _generate_styled_or_fallback, STRATEGY_TEMPLATES
+from app.services.template_meta import TEMPLATE_META, is_registered, resolve_template_id
 
 import redis.asyncio as aioredis
 
@@ -47,6 +49,8 @@ def _to_response(r: OptimizedResume) -> OptimizeResponse:
         id=r.id, resume_id=r.resume_id, job_image_id=r.job_image_id,
         optimized_json=r.optimized_json, original_json=r.original_json,
         layout_json=r.layout_json,
+        template=r.template,
+        theme_config=r.theme_config,
         changes_description=r.changes_description, custom_instructions=r.custom_instructions,
         pdf_url=r.pdf_url, match_score=r.match_score,
         job_title=r.job_title, company=r.company, category=r.category,
@@ -93,8 +97,19 @@ async def optimize(
     )
     changes = await generate_changes_description(resume.parsed_json, optimized)
 
-    # ── 生成 PDF（版式保留优先，回退模板） ──
-    pdf_bytes = await _generate_styled_or_fallback(resume, optimized, job.parsed_job_json, body.custom_instructions)
+    # 用户显式选定模板时传入（含 jinja2/html/latex/preserve 方案名）；
+    # 未选则保持 None —— 让 _generate_styled_or_fallback 走「版式保留优先」自动链
+    template_choice = (body.template or "").strip()
+    template = (
+        resolve_template_id(template_choice, extra_allowed=STRATEGY_TEMPLATES)
+        if template_choice
+        else None
+    )
+
+    # ── 生成 PDF（显式模板优先；未选则版式保留优先，逐层回退） ──
+    pdf_bytes = await _generate_styled_or_fallback(
+        resume, optimized, job.parsed_job_json, body.custom_instructions, template
+    )
     pdf_key = f"optimized/{user.id}/{uuid.uuid4()}.pdf"
     pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
 
@@ -105,6 +120,7 @@ async def optimize(
         changes_description=changes, custom_instructions=body.custom_instructions,
         job_title=job_title or None, company=company or None, category=category,
         thumbnail_url=job.image_url, status="completed",
+        template=template,
     )
     db.add(opt_record)
     await db.flush()
@@ -449,10 +465,9 @@ async def submit_satisfaction(
 
 # ── 在线编辑 + 重新导出 PDF ──
 
-_ALLOWED_TEMPLATES = {
-    "professional", "simple", "modern", "compact", "elegant", "dark", "fresh", "classic",
-    "ocean", "sunset", "violet", "academic",
-}
+# 允许落库/导出的模板集合：单一事实源为 template_meta.TEMPLATE_META
+# （旧的硬编码清单极易与前端 registry 漂移，已改为派生）
+_ALLOWED_TEMPLATES = set(TEMPLATE_META.keys())
 
 # ── 可视化排版编辑器：预览字体（与 PDF 同一份 Noto Sans SC，保证 1:1） ──
 
@@ -519,39 +534,181 @@ async def update_optimized_content(
     return _to_response(record)
 
 
-@router.post("/{opt_id}/reexport")
-async def reexport_pdf(
+async def _render_record_pdf(record: OptimizedResume, user_id: str, template: str) -> str:
+    """按指定模板把记录内容渲染成 PDF 并上传，返回新的 pdf_url（不写库）。
+
+    主题与模板一样来自记录本身（theme_config），调用方无需显式传递——
+    「导出不猜测」原则：PDF 只反映记录里持久化的选择。
+    """
+    from app.services.pdf_generator import generate_pdf
+
+    pdf_bytes = await generate_pdf(
+        record.optimized_json, f"{template}.html", theme_config=record.theme_config
+    )
+    pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
+    return await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
+
+
+async def _get_owned_record(db: AsyncSession, opt_id: str, user: User) -> OptimizedResume:
+    """取当前用户的优化记录；不存在则 404。"""
+    record = (
+        await db.execute(
+            select(OptimizedResume).where(OptimizedResume.id == opt_id, OptimizedResume.user_id == user.id)
+        )
+    ).scalar_one_or_none()
+    if not record:
+        raise HTTPException(status_code=404, detail="优化记录不存在")
+    return record
+
+
+@router.put("/{opt_id}/template", response_model=OptimizeResponse)
+async def update_template(
     opt_id: str,
-    template: str = Query("professional", description="模板: professional/simple/modern/compact/elegant/dark/fresh/classic/ocean/sunset/violet/academic"),
+    body: TemplateUpdateRequest,
+    reexport: bool = Query(False, description="true = 切换后立即按新模板重新生成 PDF"),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
-    """按当前 optimized_json 重新生成 PDF（编辑内容后同步导出版式文件）。"""
-    result = await db.execute(
-        select(OptimizedResume).where(OptimizedResume.id == opt_id, OptimizedResume.user_id == user.id)
-    )
-    record = result.scalar_one_or_none()
-    if not record:
-        raise HTTPException(status_code=404, detail="优化记录不存在")
+    """切换记录使用的模板（模板 ID 落库，成为预览/导出的唯一事实来源）。
+
+    - 非法模板 ID → 400（显式失败，绝不静默换成别的模板）
+    - reexport=true → 同时重新生成 PDF，避免「记录已切换、文件还是旧模板」
+    """
+    record = await _get_owned_record(db, opt_id, user)
+
+    key = body.template.strip().removesuffix(".html")
+    if not is_registered(key):
+        raise HTTPException(
+            status_code=400,
+            detail=f"未注册的模板 ID: {body.template}（可通过 GET /api/templates 查询可用模板）",
+        )
+
+    old_url = record.pdf_url
+    record.template = key
+
+    if reexport:
+        if not record.optimized_json:
+            raise HTTPException(status_code=400, detail="该记录没有可导出的内容")
+        try:
+            new_url = await _render_record_pdf(record, user.id, key)
+        except Exception as e:
+            logger.error(f"[切换模板] PDF 生成失败 opt={opt_id} template={key}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"PDF 生成失败: {type(e).__name__}: {str(e)[:200]}")
+        record.pdf_url = new_url
+
+    await db.commit()
+    await db.refresh(record)
+
+    if reexport and old_url and old_url != record.pdf_url:
+        try:
+            await storage.delete(old_url)
+        except Exception:
+            pass  # 旧文件清理失败不影响主流程
+
+    return _to_response(record)
+
+
+@router.put("/{opt_id}/theme", response_model=OptimizeResponse)
+async def update_theme(
+    opt_id: str,
+    body: ThemeUpdateRequest,
+    reexport: bool = Query(False, description="true = 保存后立即按新主题重新生成 PDF"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """更新记录的主题定制（与模板默认合并，预览/导出/PDF 元数据消费同一套值）。
+
+    - 字段校验（hex / 白名单 / 范围）不通过 → 400，消息可直接展示给用户
+    - 只提交想改的字段：未提供的字段保持记录里已保存的值（增量更新，不是整体替换）
+    - reexport=true → 同时重新生成 PDF，PDF 元数据 keywords 追加主题摘要
+    """
+    from app.services.resume_theme import normalize_theme_config
+    from app.services.template_meta import get_template_meta
+
+    record = await _get_owned_record(db, opt_id, user)
+
+    # 增量合并：旧 theme_config ← 本次提交（None 不算提交）
+    merged = dict(record.theme_config or {})
+    merged.update(body.to_config())
+
+    meta = get_template_meta(record.template)
+    try:
+        normalize_theme_config(
+            merged,
+            template_id=meta.id if meta else None,
+            text_defaults=meta.text_defaults if meta else None,
+            page_margin_mm=(meta.layout_features.page_margin_y_mm if meta else None),
+            strict=True,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    old_url = record.pdf_url
+    record.theme_config = merged
+
+    if reexport:
+        if not record.optimized_json:
+            raise HTTPException(status_code=400, detail="该记录没有可导出的内容")
+        key = resolve_template_id(record.template)
+        try:
+            new_url = await _render_record_pdf(record, user.id, key)
+        except Exception as e:
+            logger.error(f"[切换主题] PDF 生成失败 opt={opt_id}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"PDF 生成失败: {type(e).__name__}: {str(e)[:200]}")
+        record.pdf_url = new_url
+
+    await db.commit()
+    await db.refresh(record)
+
+    if reexport and old_url and old_url != record.pdf_url:
+        try:
+            await storage.delete(old_url)
+        except Exception:
+            pass  # 旧文件清理失败不影响主流程
+
+    return _to_response(record)
+
+
+@router.post("/{opt_id}/reexport")
+async def reexport_pdf(
+    opt_id: str,
+    template: str | None = Query(
+        None,
+        description="可选；缺省用记录中已保存的模板（GET /api/templates 可查全部 ID）",
+    ),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """按当前 optimized_json 重新生成 PDF。
+
+    模板解析顺序：显式入参 → 记录持久化的 template → 默认模板。
+    显式传入未注册的 ID 直接 400；记录里的历史脏值 warning 后回退。
+    """
+    record = await _get_owned_record(db, opt_id, user)
     if not record.optimized_json:
         raise HTTPException(status_code=400, detail="该记录没有可导出的内容")
 
-    if template not in _ALLOWED_TEMPLATES:
-        template = "professional"
-
-    from app.services.pdf_generator import generate_pdf
+    if template is not None:
+        key = template.strip().removesuffix(".html")
+        if not is_registered(key):
+            raise HTTPException(
+                status_code=400,
+                detail=f"未注册的模板 ID: {template}（可通过 GET /api/templates 查询可用模板）",
+            )
+    else:
+        # 记录里的值可能来自旧版本/策略名，统一收口（非法值 warning 后回退）
+        key = resolve_template_id(record.template)
 
     try:
-        pdf_bytes = await generate_pdf(record.optimized_json, f"{template}.html")
+        new_url = await _render_record_pdf(record, user.id, key)
     except Exception as e:
-        logger.error(f"[重新导出] PDF 生成失败 opt={opt_id}: {e}", exc_info=True)
-        raise HTTPException(status_code=500, detail=f"PDF 生成失败: {type(e).__name__}")
-
-    pdf_key = f"optimized/{user.id}/{uuid.uuid4()}.pdf"
-    new_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
+        logger.error(f"[重新导出] PDF 生成失败 opt={opt_id} template={key}: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"PDF 生成失败: {type(e).__name__}: {str(e)[:200]}")
 
     old_url = record.pdf_url
     record.pdf_url = new_url
+    # 重新导出即固化模板选择：下次不传参数也能复现同一版式
+    record.template = key
     await db.commit()
 
     if old_url:
@@ -560,7 +717,7 @@ async def reexport_pdf(
         except Exception:
             pass  # 旧文件清理失败不影响主流程
 
-    return {"pdf_url": new_url, "template": template}
+    return {"pdf_url": new_url, "template": key}
 
 
 # ── 可视化排版编辑器：布局存取 + 按布局导出 ──
@@ -916,7 +1073,13 @@ async def _run_optimize_task(
 
         await _update_status_impl(redis, task_key, "processing", "正在生成 PDF...")
 
-        pdf_bytes = await _generate_styled_or_fallback(resume, optimized, job.parsed_job_json, custom_instructions, template)
+        # 用户显式选定模板才传（未选保持 None → 自动链：版式保留优先）
+        resolved_template = (
+            resolve_template_id(template, extra_allowed=STRATEGY_TEMPLATES)
+            if (template or "").strip()
+            else None
+        )
+        pdf_bytes = await _generate_styled_or_fallback(resume, optimized, job.parsed_job_json, custom_instructions, resolved_template)
         pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
         pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
 
@@ -943,6 +1106,7 @@ async def _run_optimize_task(
                 changes_description=changes, custom_instructions=custom_instructions,
                 job_title=job_title or None, company=company or None, category=category,
                 thumbnail_url=job.image_url, status="completed",
+                template=resolved_template,
             )
             db.add(opt_record)
             await db.flush()
@@ -1032,9 +1196,10 @@ async def _run_optimize_task_from_text(
         await _update_status_impl(redis, task_key, "processing", "正在生成修改说明...")
         changes = await generate_changes_description(parsed_resume, optimized)
 
-        # 6. 生成 PDF（使用选定的模板方案）
-        await _update_status_impl(redis, task_key, "processing", f"正在使用 {template or 'professional'} 方案生成 PDF...")
-        pdf_bytes = await _generate_styled_or_fallback(None, optimized, parsed_job, custom_instructions, template)
+        # 6. 生成 PDF（使用选定的模板方案；非法值显式 warning 后回退）
+        resolved_template = resolve_template_id(template, extra_allowed=STRATEGY_TEMPLATES)
+        await _update_status_impl(redis, task_key, "processing", f"正在使用 {resolved_template} 方案生成 PDF...")
+        pdf_bytes = await _generate_styled_or_fallback(None, optimized, parsed_job, custom_instructions, resolved_template)
         pdf_key = f"optimized/{user_id}/{uuid.uuid4()}.pdf"
         pdf_url = await storage.upload_bytes(pdf_bytes, pdf_key, "application/pdf")
 
@@ -1060,6 +1225,7 @@ async def _run_optimize_task_from_text(
                 company=company or None,
                 category=category,
                 status="completed",
+                template=resolved_template,
             )
             db.add(opt_record)
             await db.flush()
@@ -1163,7 +1329,8 @@ async def render_resume(
         "updated_at": datetime.now(TZ_UTC8).isoformat(),
     }))
 
-    template = body.template or "professional"
+    # 直接渲染：只接受风格模板 ID，非法值 warning 后回退默认
+    template = resolve_template_id(body.template)
     _spawn_task(task_id, _run_render_task(task_id, user.id, resume, template))
 
     return {"task_id": task_id, "status": "pending"}
@@ -1195,7 +1362,8 @@ async def render_resume_text(
         "updated_at": datetime.now(TZ_UTC8).isoformat(),
     }))
 
-    template = body.template or "professional"
+    # 直接渲染（文本）：只接受风格模板 ID，非法值 warning 后回退默认
+    template = resolve_template_id(body.template)
     _spawn_task(task_id, _run_render_text_task(task_id, user.id, body.resume_text, template))
 
     return {"task_id": task_id, "status": "pending"}
@@ -1249,6 +1417,7 @@ async def _run_render_task(
                 job_title=name or "简历",
                 category="其他",
                 status="completed",
+                template=template,
             )
             db.add(opt_record)
             await db.flush()
@@ -1323,6 +1492,7 @@ async def _run_render_text_task(
                 job_title=name or "简历",
                 category="其他",
                 status="completed",
+                template=template,
             )
             db.add(opt_record)
             await db.flush()
@@ -1418,20 +1588,50 @@ _MOCK_RESUME_DATA = {
 
 @router.post("/test-template")
 async def test_template(
-    template: str = Query("professional", description="模板名称: professional, simple, modern, compact, elegant, dark, fresh, classic"),
+    template: str = Query("professional", description=f"模板 ID，可选值：{', '.join(sorted(TEMPLATE_META))}"),
     body: dict | None = None,
-    user: User = Depends(get_current_user),  # 防止未登录被刷爆渲染；上线前应改为 admin 鉴权或下线
+    user: User = Depends(get_current_user),
+    redis: aioredis.Redis = Depends(get_redis),
 ):
     """测试模板渲染（跳过 LLM 优化，直接用数据生成 PDF）
 
     用法:
       POST /api/optimize/test-template?template=professional
       POST /api/optimize/test-template?template=modern  （body 可传自定义 resume JSON）
+
+    安全措施（见《项目全面审查与优化建议》问题 13）：
+      - 生产环境直接 404：该端点仅供开发调试，任意登录用户触发全模板 Chromium
+        渲染（每个 1-2s）属于可被滥用烧 CPU 的面；
+      - 用户维度限流 10 次/分钟（Redis 计数，复用投递额度同款模式）。
     """
     from app.services.pdf_generator import generate_pdf
+    from app.config import settings
+
+    if settings.APP_ENV.strip().lower() == "production":
+        raise HTTPException(status_code=404, detail="接口不存在")
+
+    key = template.strip().removesuffix(".html")
+    if not is_registered(key):
+        raise HTTPException(
+            status_code=400,
+            detail=f"未注册的模板 ID: {template}（可通过 GET /api/templates 查询可用模板）",
+        )
+
+    # 用户维度渲染限流：固定窗口 10 次/分钟（自首次请求起 60s，
+    # 不用自然分钟键——连续 12 次调用约 16s，跨分钟边界会放大成 2 分钟窗口）。
+    # 放在模板校验之后：非法模板根本不触发渲染，不应消耗配额。
+    rate_key = f"render_test:count:{user.id}"
+    count = await redis.incr(rate_key)
+    if count == 1:
+        await redis.expire(rate_key, 60)
+    if count > 10:
+        raise HTTPException(
+            status_code=429,
+            detail="模板测试渲染过于频繁（限 10 次/分钟），请稍后再试",
+        )
 
     data = (body or {}).get("resume_data") or _MOCK_RESUME_DATA
-    template_name = f"{template}.html"
+    template_name = f"{key}.html"
 
     try:
         pdf_bytes = await generate_pdf(data, template_name)

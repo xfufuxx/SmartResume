@@ -66,7 +66,9 @@ def main() -> int:
             page.wait_for_timeout(3000)  # 等待 React 水合，避免点击落到原生表单提交
             page.get_by_placeholder("邮箱地址").fill(EMAIL)
             page.get_by_placeholder("密码").fill(PASSWORD)
-            page.get_by_role("button", name=rx("登录")).first.click()
+            # 邮箱表单的提交按钮固定为 type=submit；QQ 登录按钮是 type=button 且排在首位，
+            # 按文案模糊匹配会误点 QQ（跳到 graph.qq.com），故用提交类型精确选择
+            page.locator('button[type="submit"]').last.click()
             # 跳转可能早于监听注册，用轮询避免竞态（勿用 wait_for_url）
             page.wait_for_function("() => location.pathname.includes('/dashboard')", timeout=60000)
             check("登录成功并跳转 /dashboard", True, page.url)

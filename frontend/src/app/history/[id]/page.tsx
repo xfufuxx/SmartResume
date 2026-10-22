@@ -1,13 +1,16 @@
 'use client'
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useCallback, useState } from 'react'
 import {
   Button, Card, Typography, Spin, message, Space,
   Row, Col, Divider, Tag, Progress, Empty,
 } from 'antd'
 import {
   DownloadOutlined, EditOutlined, SaveOutlined, CloseOutlined, FileSyncOutlined, LayoutOutlined,
+  PictureOutlined, BgColorsOutlined,
 } from '@ant-design/icons'
+import { Tooltip } from 'antd'
+import ThemeDrawer from '@/components/ThemeDrawer'
 import { useRouter, useParams } from 'next/navigation'
 import { optimize, toBackendUrl, editor } from '@/lib/api'
 import { getToken } from '@/lib/auth'
@@ -168,6 +171,13 @@ export default function OptimizationDetailPage() {
   const [exporting, setExporting] = useState(false)
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
+  const [themeDrawerOpen, setThemeDrawerOpen] = useState(false)
+
+  /** 重新拉取记录（主题保存/重导出后刷新 pdf_url 与 theme_config） */
+  const reloadDetail = useCallback(() => {
+    if (!token || !id) return
+    optimize.get(id).then((res) => setDetail(res.data)).catch(() => {})
+  }, [token, id])
   // ── 可视化排版编辑器（独立模式，与内容编辑互斥） ──
   const [layoutEditing, setLayoutEditing] = useState(false)
 
@@ -185,6 +195,8 @@ export default function OptimizationDetailPage() {
     setLoading(true)
     optimize.get(id).then((res) => {
       setDetail(res.data)
+      // 模板选择以记录为准（刷新/换设备后仍复现上次的版式）
+      if (res.data?.template) setTemplate(res.data.template)
     }).catch(() => {
       message.error('加载详情失败')
     }).finally(() => setLoading(false))
@@ -239,6 +251,15 @@ export default function OptimizationDetailPage() {
     } finally {
       setSaving(false)
     }
+  }
+
+  /** 切换模板：立即落库（失败不阻断交互，导出时会再次固化） */
+  const handleSelectTemplate = (key: string) => {
+    setTemplate(key)
+    if (!id) return
+    editor.setTemplate(id, key).catch(() => {
+      // 静默失败：导出时仍会带 template 参数并落库
+    })
   }
 
   const handleReexport = async () => {
@@ -326,6 +347,22 @@ export default function OptimizationDetailPage() {
                     >
                       {TEMPLATE_LABELS[template] || '选择模板'}
                     </Button>
+                    <Tooltip title="定制配色/字体/字号/行距/页边距/章节间距，保存即重新导出">
+                      <Button
+                        icon={<BgColorsOutlined />}
+                        onClick={() => setThemeDrawerOpen(true)}
+                      >
+                        主题定制
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="去模板库逛逛全部风格，挑选后一键应用回本记录">
+                      <Button
+                        icon={<PictureOutlined />}
+                        onClick={() => router.push(`/templates?record=${id}`)}
+                      >
+                        更多模板
+                      </Button>
+                    </Tooltip>
                     <Button
                       icon={<FileSyncOutlined />}
                       loading={exporting}
@@ -338,6 +375,16 @@ export default function OptimizationDetailPage() {
                   <Space wrap>
                     <Button icon={<EditOutlined />} onClick={startEdit}>编辑内容</Button>
                     <Button icon={<LayoutOutlined />} onClick={startLayoutEdit}>可视化排版</Button>
+                    <Tooltip title="去模板库逛逛全部风格，挑选后一键应用回本记录">
+                      <Button icon={<PictureOutlined />} onClick={() => router.push(`/templates?record=${id}`)}>
+                        更多模板
+                      </Button>
+                    </Tooltip>
+                    <Tooltip title="定制配色/字体/字号/行距/页边距/章节间距，保存即重新导出">
+                      <Button icon={<BgColorsOutlined />} onClick={() => setThemeDrawerOpen(true)}>
+                        主题定制
+                      </Button>
+                    </Tooltip>
                   </Space>
                 ) : null}
               </div>
@@ -461,9 +508,19 @@ export default function OptimizationDetailPage() {
         open={showTemplateModal}
         onClose={() => setShowTemplateModal(false)}
         selected={template}
-        onSelect={setTemplate}
+        onSelect={handleSelectTemplate}
         options={TEMPLATE_OPTIONS}
       />
+      {id && (
+        <ThemeDrawer
+          open={themeDrawerOpen}
+          onClose={() => setThemeDrawerOpen(false)}
+          recordId={id}
+          templateId={template}
+          initial={detail?.theme_config ?? null}
+          onSaved={reloadDetail}
+        />
+      )}
     </AppLayout>
   )
 }

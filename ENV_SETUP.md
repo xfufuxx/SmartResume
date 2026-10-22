@@ -113,6 +113,7 @@ curl -X POST http://127.0.0.1:8000/api/auth/login \
 | **SMTP 授权码** 🔐 | `backend/.env` → `SMTP_PASSWORD` | 可选 | 邮箱验证码/投递用。不填时验证码打印到后端控制台，不影响登录。QQ 邮箱需在「设置 → 账户」开启 POP3/SMTP 后生成**授权码**（不是 QQ 密码）。同时填 `SMTP_USER` / `SMTP_FROM`。 |
 | **IMAP 授权码** 🔐 | `backend/.env` → `IMAP_PASSWORD` | 可选 | 投递回执轮询。留空则 `/email/sync` 返回 `enabled:false`。 |
 | **S3 / OSS 密钥** 🔐 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | 可选 | 本地开发留空即可，文件走本地磁盘 + 签名代理。 |
+| **QQ 互联 APP ID / APP Key** 🔐 | `backend/.env` → `QQ_APP_ID` / `QQ_APP_KEY` | 可选（QQ 登录必需） | 均留空 = 不展示 QQ 登录入口。申请流程见下方「QQ 登录配置指南」。 |
 
 **已自动生成、无需你操作**：`SECRET_KEY`（随机 48 字节）。
 ⚠️ 它用于加密敏感字段，**轮换会导致历史密文无法解密**，请勿随意更改或外泄。
@@ -142,3 +143,42 @@ curl -X POST http://127.0.0.1:8000/api/auth/login \
 3. **WeasyPrint** 在 Windows 需 GTK 系统库，已关闭（`USE_WEASYPRINT=false`），PDF 走 Playwright/Chromium 模板渲染。
 4. **Redis 与后端进程**随启动它们的终端关闭而退出；建议用 `restart_backend.bat` 或独立终端常驻。
 5. `public.sql` 是作者本人的完整库 dump（含真实业务数据），**不要直接导入**；演示数据请用 `演示测试数据.sql`。
+
+---
+
+## 7. QQ 登录（QQ 互联 OAuth2.0）配置指南
+
+登录页第一位是「使用 QQ 一键登录」。appid/appkey **只配在后端**，浏览器不接触；
+未配置时点击会提示「QQ 登录未配置，暂时无法使用」，不影响邮箱登录。
+
+### 7.1 需要你提供的信息（🔐 均由你在 QQ 互联平台获取）
+
+| 项 | 填到哪 | 说明 |
+|---|---|---|
+| **APP ID（appid）** | `backend/.env` → `QQ_APP_ID` | 创建网站应用后获得 |
+| **APP Key（appkey）** | `backend/.env` → `QQ_APP_KEY` | 同上，只显示一次，妥善保存 |
+| **网站回调地址** | QQ 互联后台 + `QQ_REDIRECT_URI` 保持一致 | 本地：`http://localhost:8000/api/auth/qq/callback`；生产：`https://你的域名/api/auth/qq/callback` |
+| **已备案域名** | QQ 互联应用审核用 | 大陆服务器+域名需完成 ICP 备案 |
+
+### 7.2 申请步骤（约 1~3 个工作日）
+
+1. 打开 https://connect.qq.com ，用 QQ 号登录并完成**开发者实名认证**（个人即可）；
+2. 进入「应用管理 → 创建网站应用」，填写应用名称、简介、**网站回调地址**；
+3. 提交审核（需域名已备案；审核期间无法授权，通过后入口自动生效）；
+4. 审核通过后在应用详情页拿到 **APP ID / APP Key**，填入 `backend/.env`；
+5. 重启后端（`.env` 改动必须重启才生效）。
+
+### 7.3 链路与安全设计
+
+- 授权页：`https://graph.qq.com/oauth2.0/authorize`；回调由后端 `/api/auth/qq/callback` 接收；
+- **state 一次性**（Redis 10 分钟 TTL）防 CSRF，重复回调直接拒绝；
+- 首次 QQ 登录自动建号（昵称/头像取自 QQ，邮箱为 `qq_{openid}@qq.invalid` 占位，
+  同一 QQ 再次登录直接进原账号，不会重复注册）；
+- 令牌经 URL **hash 片段**跳回前端，不进服务器日志与 Referer；
+- 注销冻结期内用 QQ 重新登录 = 恢复账号（与邮箱登录一致）。
+
+### 7.4 本地联调提示
+
+QQ 回调地址要求与后台配置**逐字一致**（含协议/域名/端口/路径）。本地开发时：
+把 `QQ_REDIRECT_URI` 和 QQ 后台都填 `http://localhost:8000/api/auth/qq/callback`，
+`FRONTEND_URL` 填 `http://localhost:3000`。

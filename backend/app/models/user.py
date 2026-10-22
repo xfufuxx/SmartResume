@@ -13,6 +13,9 @@ class User(Base):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False, index=True)
     phone: Mapped[str] = mapped_column(String(128), nullable=True, unique=True)
     password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    # QQ 互联 openid：QQ 登录用户的唯一身份标识（同一 QQ 号跨应用不同，同应用内稳定）。
+    # 为空表示未使用 QQ 登录（邮箱注册用户）；唯一索引防同一 QQ 绑定多个账号。
+    qq_openid: Mapped[str] = mapped_column(String(64), nullable=True, unique=True)
     nickname: Mapped[str] = mapped_column(String(64), nullable=True)
     avatar_url: Mapped[str] = mapped_column(String(1024), nullable=True)
     is_verified: Mapped[bool] = mapped_column(Boolean, default=False)

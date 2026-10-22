@@ -20,10 +20,10 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: Georgia, 'Times New Roman', 'Noto Sans SC', 'Microsoft YaHei', serif;
-    font-size: 10pt;
+    font-family: var(--tpl-font, Georgia, 'Times New Roman', 'Noto Sans SC', 'Microsoft YaHei', serif);
+    font-size: var(--tpl-base-size, 10pt);
     color: #1f2937;
-    line-height: 1.65;
+    line-height: var(--tpl-line-height, 1.65);
     width: 210mm;
     background: #fff;
   }
@@ -37,7 +37,7 @@
     font-size: 23pt;
     font-weight: 700;
     letter-spacing: 8px;
-    color: #1e3a5f;
+    color: var(--tpl-primary, #1e3a5f);
     margin-bottom: 6px;
   }
   .header .contact-row {
@@ -52,8 +52,8 @@
   .header .rule-double {
     margin: 12px auto 0;
     width: calc(100% - 0px);
-    border-top: 2.5px solid #1e3a5f;
-    border-bottom: 1px solid #1e3a5f;
+    border-top: 2.5px solid var(--tpl-primary, #1e3a5f);
+    border-bottom: 1px solid var(--tpl-primary, #1e3a5f);
     height: 3px;
   }
 
@@ -63,10 +63,10 @@
 
   .content h3 {
     font-size: 12pt;
-    color: #1e3a5f;
+    color: var(--tpl-primary, #1e3a5f);
     font-weight: 700;
     letter-spacing: 3px;
-    margin-top: 16px;
+    margin-top: var(--tpl-section-gap, 16px);
     margin-bottom: 8px;
     padding-bottom: 2px;
     border-bottom: 1px solid #cbd5e1;
@@ -93,11 +93,11 @@
     float: right;
     font-weight: 400;
     font-size: 9pt;
-    color: #6b7280;
+    color: var(--tpl-accent, #6b7280);
   }
   .exp-sub {
     font-size: 9pt;
-    color: #6b7280;
+    color: var(--tpl-accent, #6b7280);
     font-style: italic;
     margin-bottom: 3px;
   }
@@ -118,7 +118,7 @@
     content: "—";
     position: absolute;
     left: 0;
-    color: #1e3a5f;
+    color: var(--tpl-primary, #1e3a5f);
   }
 
   .edu-item {
@@ -133,11 +133,11 @@
     float: right;
     font-weight: 400;
     font-size: 9pt;
-    color: #6b7280;
+    color: var(--tpl-accent, #6b7280);
   }
   .edu-item .info {
     font-size: 9pt;
-    color: #6b7280;
+    color: var(--tpl-accent, #6b7280);
   }
 
   .skills-line {
@@ -145,7 +145,7 @@
     color: #374151;
     line-height: 1.9;
   }
-  .skills-line .skill-sep { color: #1e3a5f; margin: 0 6px; }
+  .skills-line .skill-sep { color: var(--tpl-primary, #1e3a5f); margin: 0 6px; }
 
   .proj-item {
     margin-bottom: 9px;
@@ -160,7 +160,7 @@
     float: right;
     font-weight: 400;
     font-size: 9pt;
-    color: #6b7280;
+    color: var(--tpl-accent, #6b7280);
   }
   .proj-item .proj-desc {
     font-size: 9pt;
@@ -170,7 +170,7 @@
   }
   .proj-item .proj-tech {
     font-size: 8.5pt;
-    color: #1e3a5f;
+    color: var(--tpl-primary, #1e3a5f);
   }
 
   @media print {

@@ -1,16 +1,18 @@
 'use client'
 
 import React, { useState, useEffect } from 'react'
-import { Card, Form, Input, Button, Typography, Space, message, Checkbox } from 'antd'
+import { Card, Form, Input, Button, Typography, Space, message, Checkbox, Divider } from 'antd'
 import { MailOutlined, LockOutlined, FileTextOutlined } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { auth } from '@/lib/api'
 import { getToken } from '@/lib/auth'
+import QqIcon from '@/components/QqIcon'
 
 export default function LoginPage() {
   const router = useRouter()
   const [loading, setLoading] = useState(false)
+  const [qqLoading, setQqLoading] = useState(false)
 
   useEffect(() => {
     const t = getToken()
@@ -36,6 +38,20 @@ export default function LoginPage() {
       message.error(detail || '邮箱或密码错误')
     } finally {
       setLoading(false)
+    }
+  }
+
+  /** QQ 登录：向后端取授权页 URL 后整体跳转（appid/appkey 只存在于后端） */
+  const handleQqLogin = async () => {
+    setQqLoading(true)
+    try {
+      const res = await auth.qqAuthorize()
+      window.location.href = res.data.authorize_url
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      message.error(detail || 'QQ 登录启动失败，请稍后重试')
+    } finally {
+      setQqLoading(false)
     }
   }
 
@@ -86,6 +102,22 @@ export default function LoginPage() {
             登录智能简历，开启职业新篇章
           </Typography.Text>
         </div>
+
+        {/* QQ 登录（第一位）：appid/appkey 只留在后端，点击直达 QQ 授权页 */}
+        <Button
+          block
+          size="large"
+          className="qq-login-btn"
+          loading={qqLoading}
+          onClick={handleQqLogin}
+          icon={<QqIcon size={20} color="#fff" />}
+        >
+          使用 QQ 一键登录
+        </Button>
+
+        <Divider plain style={{ fontSize: 12, color: 'var(--text-tertiary)', margin: '20px 0 18px' }}>
+          或使用邮箱登录
+        </Divider>
 
         <Form onFinish={handleLogin} size="large" initialValues={{ remember: true }}>
           <Form.Item name="email" rules={[{ required: true, type: 'email', message: '请输入有效的邮箱' }]}>

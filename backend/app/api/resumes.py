@@ -100,10 +100,10 @@ def _scrub_raw(resume: Resume) -> Resume:
       每次读取重签可保证前端预览（新标签页）与下载永远拿到有效链接。
     """
     if resume.raw_text:
-        try:
-            resume.raw_text = decrypt_field(resume.raw_text)
-        except Exception:
-            pass
+        plain = decrypt_field(resume.raw_text)
+        if plain is not None:
+            resume.raw_text = plain
+        # 解密失败（损坏/密钥不匹配）：保留原值，由上层决定是否展示
     if resume.original_file_url:
         resume.original_file_url = resign_file_url(resume.original_file_url) or resume.original_file_url
     return resume

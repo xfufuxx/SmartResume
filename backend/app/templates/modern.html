@@ -20,16 +20,16 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
-    font-size: 10.5pt;
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10.5pt);
     color: #333;
-    line-height: 1.6;
+    line-height: var(--tpl-line-height, 1.6);
     width: 210mm;
   }
 
   /* ── 顶部横幅 ── */
   .banner {
-    background: linear-gradient(135deg, #1a5276 0%, #2c6fbb 40%, #3498db 100%);
+    background: linear-gradient(135deg, #1a5276 0%, var(--tpl-primary, #2c6fbb) 40%, var(--tpl-accent, #3498db) 100%);
     color: #fff;
     padding: 28px 36px 22px;
     text-align: center;
@@ -75,7 +75,7 @@
     font-size: 12pt;
     font-weight: 700;
     color: #1a5276;
-    border-bottom: 2px solid #2c6fbb;
+    border-bottom: 2px solid var(--tpl-primary, #2c6fbb);
     padding-bottom: 4px;
     margin-bottom: 10px;
     margin-top: 16px;
@@ -90,7 +90,7 @@
   }
   .sidebar .skill-tag {
     display: inline-block;
-    background: #2c6fbb;
+    background: var(--tpl-primary, #2c6fbb);
     color: #fff;
     padding: 3px 10px;
     border-radius: 12px;
@@ -110,10 +110,10 @@
     font-size: 13pt;
     font-weight: 700;
     color: #1a5276;
-    border-bottom: 2px solid #2c6fbb;
+    border-bottom: 2px solid var(--tpl-primary, #2c6fbb);
     padding-bottom: 3px;
     margin-bottom: 10px;
-    margin-top: 18px;
+    margin-top: var(--tpl-section-gap, 18px);
     letter-spacing: 1px;
   }
   .content h2:first-child { margin-top: 0; }
@@ -158,7 +158,7 @@
     content: "▸";
     position: absolute;
     left: 0;
-    color: #2c6fbb;
+    color: var(--tpl-primary, #2c6fbb);
     font-size: 8pt;
     top: 2px;
   }
@@ -193,7 +193,7 @@
   }
   .proj-item .proj-tech {
     font-size: 9pt;
-    color: #2c6fbb;
+    color: var(--tpl-primary, #2c6fbb);
   }
 
   @media print {

@@ -24,6 +24,25 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("applications", "apply_url", "VARCHAR(500)"),
     # 可视化排版编辑器：布局文档（内容/排版正交，互不改写）
     ("optimized_resumes", "layout_json", "JSONB"),
+    # QQ 登录：users.qq_openid（QQ 互联 openid，唯一）
+    ("users", "qq_openid", "VARCHAR(64)"),
+    # 模板体系：用户选定的模板 ID（预览/导出/文档属性的唯一事实来源）
+    ("optimized_resumes", "template", "VARCHAR(50)"),
+    # 主题定制：用户对模板的主题覆盖（NULL=模板默认，与 template 正交）
+    ("optimized_resumes", "theme_config", "JSONB"),
+]
+
+# 存量数据回填（幂等：只补 NULL 行，不覆盖用户已选值）
+BACKFILLS: list[tuple[str, str]] = [
+    (
+        "optimized_resumes 模板回填",
+        "UPDATE optimized_resumes SET template = 'professional' WHERE template IS NULL",
+    ),
+]
+
+# (索引名, 建索引 DDL) —— ADD COLUMN 不会带唯一约束，这里补唯一索引
+INDEXES: list[tuple[str, str]] = [
+    ("uq_users_qq_openid", "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_qq_openid ON users (qq_openid)"),
 ]
 
 
@@ -36,4 +55,17 @@ async def run_lightweight_migrations(engine: AsyncEngine) -> None:
                 await conn.execute(stmt)
             except Exception as e:  # noqa: BLE001 —— 单列失败不阻断启动
                 logger.warning("轻量迁移跳过 %s.%s: %s", table, column, e)
-    logger.info("轻量迁移检查完成（applications 邮件直投列 + optimized_resumes 布局列）")
+        for index_name, ddl in INDEXES:
+            try:
+                await conn.execute(text(ddl))
+            except Exception as e:  # noqa: BLE001 —— 索引失败（如历史脏数据重复）不阻断启动
+                logger.warning("轻量迁移跳过索引 %s: %s", index_name, e)
+        # 列补齐后再回填存量数据（必须在 ADD COLUMN 之后执行）
+        for name, ddl in BACKFILLS:
+            try:
+                await conn.execute(text(ddl))
+            except Exception as e:  # noqa: BLE001 —— 回填失败不阻断启动
+                logger.warning("轻量迁移跳过回填 %s: %s", name, e)
+    logger.info(
+        "轻量迁移检查完成（applications 邮件直递列 + optimized_resumes 布局/模板列 + users QQ 登录列）"
+    )

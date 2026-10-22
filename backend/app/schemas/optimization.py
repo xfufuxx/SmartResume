@@ -45,6 +45,10 @@ class OptimizeResponse(BaseModel):
     original_json: Optional[dict] = None
     optimized_json: Optional[dict] = None
     layout_json: Optional[dict] = None
+    # 用户选定的模板 ID（预览/重新导出/PDF 文档属性的唯一事实来源）
+    template: Optional[str] = None
+    # 用户主题定制（部分字段；NULL/空 = 用模板默认主题，见 app/services/resume_theme.py）
+    theme_config: Optional[dict] = None
     changes_description: Optional[str] = None
     custom_instructions: Optional[str] = None
     pdf_url: Optional[str] = None
@@ -76,6 +80,33 @@ class UpdateContentRequest(BaseModel):
 class SaveLayoutRequest(BaseModel):
     """可视化排版：保存布局文档（前端保证结构合法，后端只做最基础的形状校验）。"""
     layout: dict
+
+
+class TemplateUpdateRequest(BaseModel):
+    """切换记录使用的模板（模板 ID 落库，成为预览/导出的唯一事实来源）。"""
+    template: str
+
+
+class ThemeUpdateRequest(BaseModel):
+    """更新记录的主题定制（部分字段即可；与模板默认合并，见 resume_theme.normalize_theme_config）。
+
+    字段范围：
+    - primary / accent：#RRGGBB
+    - fontFamily：白名单字体（Noto Sans SC / Microsoft YaHei / PingFang SC / SimSun /
+      SimHei / Source Han Serif SC / Alibaba PuHuiTi）
+    - baseFontSizePt：8-16；lineHeight：1.1-2.0；marginMm：0-30；sectionGapMm：0-20
+    """
+    primary: Optional[str] = None
+    accent: Optional[str] = None
+    fontFamily: Optional[str] = None
+    baseFontSizePt: Optional[float] = None
+    lineHeight: Optional[float] = None
+    marginMm: Optional[float] = None
+    sectionGapMm: Optional[float] = None
+
+    def to_config(self) -> dict:
+        """只取显式提供的字段（None 不算提供——否则会把用户没改的项覆盖成空）。"""
+        return self.model_dump(exclude_none=True)
 
 
 class ExportLayoutRequest(BaseModel):

@@ -422,6 +422,10 @@ export interface OptimizeResult {
   optimized_json?: ResumeParseResult
   /** 可视化排版编辑器保存的布局文档（LayoutDocument）；null = 未排版过 */
   layout_json?: Record<string, unknown> | null
+  /** 用户选定的模板 ID（预览/导出/文档属性的唯一事实来源） */
+  template?: string | null
+  /** 用户主题定制（部分字段；null = 模板默认主题） */
+  theme_config?: Record<string, unknown> | null
   changes_description?: string
   custom_instructions?: string
   pdf_url?: string

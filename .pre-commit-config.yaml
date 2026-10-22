@@ -1,0 +1,16 @@
+# pre-commit 框架配置（可选）
+#
+# 已内置的轻量方案（推荐，零依赖）：
+#   git config core.hooksPath .githooks
+#
+# 若团队统一用 pre-commit 框架，执行 `pip install pre-commit && pre-commit install` 即可，
+# 下面是等价的 local hook 定义。
+repos:
+  - repo: local
+    hooks:
+      - id: template-sync
+        name: 模板体系一致性（四集合 + 版式特征 + 打印基座）
+        entry: backend/.venv/Scripts/python.exe scripts/check_template_sync.py -q
+        language: system
+        pass_filenames: false
+        files: ^(frontend/src/lib/template-registry\.tsx|backend/app/(services/(template_meta|print_css|pdf_generator|pdf_styler)\.py|templates/.*\.html|api/(optimization|templates)\.py)|scripts/check_template_sync\.py)$

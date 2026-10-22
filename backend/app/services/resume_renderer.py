@@ -9,8 +9,12 @@ import io
 import os
 import base64
 import logging
+from typing import TYPE_CHECKING
 from dataclasses import dataclass
 from PIL import Image
+
+if TYPE_CHECKING:
+    from app.services.pdf_metadata import PdfMetadata
 
 logger = logging.getLogger(__name__)
 
@@ -587,7 +591,7 @@ def _parse_exp_header(text: str) -> dict:
     return {"date": "", "company": text, "role": "", "details": []}
 
 
-def html_to_pdf(html: str, base_url: str | None = None) -> bytes:
+def html_to_pdf(html: str, base_url: str | None = None, metadata: "PdfMetadata | None" = None) -> bytes:
     """
     使用 Playwright (Chromium) 将 HTML 转换为 PDF。
 
@@ -600,6 +604,8 @@ def html_to_pdf(html: str, base_url: str | None = None) -> bytes:
     Args:
         html: 完整的 HTML 字符串
         base_url: 用于解析相对路径（如 @font-face 中的 url()）的基础 URL
+        metadata: PDF 文档属性（模板名/ID/版本/生成时间），page.pdf() 后用
+            PyMuPDF 后处理注入；None = 不注入
 
     Returns:
         PDF 字节流
@@ -641,6 +647,8 @@ def html_to_pdf(html: str, base_url: str | None = None) -> bytes:
                     print_background=True,
                     margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
                 )
+                if metadata is not None:
+                    pdf = _apply_metadata(pdf, metadata)
                 return pdf
             finally:
                 browser.close()
@@ -651,7 +659,17 @@ def html_to_pdf(html: str, base_url: str | None = None) -> bytes:
             pass
 
 
-async def html_to_pdf_async(html: str, base_url: str | None = None) -> bytes:
+def _apply_metadata(pdf: bytes, metadata: "PdfMetadata") -> bytes:
+    """PDF 文档属性注入（PyMuPDF 后处理；失败时原样返回，不影响主流程）。"""
+    from app.services.pdf_metadata import inject_pdf_metadata
+    return inject_pdf_metadata(pdf, metadata)
+
+
+async def html_to_pdf_async(
+    html: str,
+    base_url: str | None = None,
+    metadata: "PdfMetadata | None" = None,
+) -> bytes:
     """
     使用 Playwright (Chromium) 异步 API 将 HTML 转换为 PDF。
 
@@ -665,6 +683,8 @@ async def html_to_pdf_async(html: str, base_url: str | None = None) -> bytes:
     Args:
         html: 完整的 HTML 字符串
         base_url: 用于解析相对路径（如 @font-face 中的 url()）的基础 URL
+        metadata: PDF 文档属性（模板名/ID/版本/生成时间），page.pdf() 后用
+            PyMuPDF 后处理注入；None = 不注入
 
     Returns:
         PDF 字节流
@@ -692,6 +712,27 @@ async def html_to_pdf_async(html: str, base_url: str | None = None) -> bytes:
         file_url = f"file:///{temp_path.replace(chr(92), '/')}"
         logger.info(f"[html_to_pdf_async] 加载临时文件: {file_url}")
 
+        async def _render(page) -> bytes:
+            await page.goto(file_url, wait_until="networkidle")
+            out = await page.pdf(
+                format="A4",
+                print_background=True,
+                margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
+            )
+            if metadata is not None:
+                out = _apply_metadata(out, metadata)
+            return out
+
+        # 优先走常驻 browser（省掉每次 0.6-1.5s 的 launch 开销）；
+        # 仅「池不可用」回退一次性启动，渲染本身的异常照常上抛。
+        from app.services.browser_pool import BrowserPoolUnavailable, browser_page
+
+        try:
+            async with browser_page() as page:
+                return await _render(page)
+        except BrowserPoolUnavailable as e:
+            logger.warning(f"[html_to_pdf_async] 常驻池不可用（{e}），回退一次性启动")
+
         async with async_playwright() as p:
             browser = await p.chromium.launch(
                 headless=True,
@@ -699,13 +740,7 @@ async def html_to_pdf_async(html: str, base_url: str | None = None) -> bytes:
             )
             try:
                 page = await browser.new_page()
-                await page.goto(file_url, wait_until="networkidle")
-                pdf = await page.pdf(
-                    format="A4",
-                    print_background=True,
-                    margin={"top": "0", "bottom": "0", "left": "0", "right": "0"},
-                )
-                return pdf
+                return await _render(page)
             finally:
                 await browser.close()
     finally:

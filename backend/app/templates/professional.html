@@ -16,11 +16,11 @@
     font-style: normal;
   }
   @page { margin: 1.5cm; size: A4; }
-  body { font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif; font-size: 11pt; color: #333; line-height: 1.6; }
+  body { font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif); font-size: var(--tpl-base-size, 11pt); color: #333; line-height: var(--tpl-line-height, 1.6); }
   h1 { font-size: 20pt; margin-bottom: 4px; color: #1a1a1a; }
   .contact { font-size: 10pt; color: #666; margin-bottom: 12px; }
   .contact span { margin-right: 12px; }
-  h2 { font-size: 14pt; border-bottom: 2px solid #2c6fbb; padding-bottom: 3px; color: #2c6fbb; margin-top: 16px; }
+  h2 { font-size: 14pt; border-bottom: 2px solid var(--tpl-primary, #2c6fbb); padding-bottom: 3px; color: var(--tpl-primary, #2c6fbb); margin-top: var(--tpl-section-gap, 16px); }
   .summary { margin: 8px 0; font-size: 10.5pt; }
   .exp-item { margin: 10px 0; }
   .exp-header { font-weight: bold; font-size: 11pt; }

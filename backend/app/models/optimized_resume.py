@@ -26,6 +26,14 @@ class OptimizedResume(Base):
     category: Mapped[str] = mapped_column(String(50), nullable=True)
     thumbnail_url: Mapped[str] = mapped_column(String(1024), nullable=True)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
+    # 用户选定的模板 ID（= templates/{id}.html 的 key）。
+    # 预览 / 重新导出 / PDF 文档属性的唯一事实来源，绝不靠调用方每次猜测。
+    template: Mapped[str | None] = mapped_column(
+        String(50), nullable=True, comment="选定的模板 ID（如 professional / jade-classic）"
+    )
+    theme_config: Mapped[dict | None] = mapped_column(
+        JSONB, nullable=True, comment="用户主题定制（primary/accent/fontFamily/baseFontSizePt/lineHeight/marginMm/sectionGapMm 的部分字段；NULL=模板默认）"
+    )
     satisfaction_score: Mapped[int] = mapped_column(Integer, nullable=True)
     feedback_text: Mapped[str] = mapped_column(Text, nullable=True)
     parent_record_id: Mapped[str] = mapped_column(String(36), ForeignKey("optimized_resumes.id"), nullable=True)

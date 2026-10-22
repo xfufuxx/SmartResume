@@ -7,13 +7,14 @@ from collections import Counter
 
 from app.models.resume import Resume
 from app.services.pdf_generator import generate_pdf
+from app.services.template_meta import TEMPLATE_META
 
 logger = logging.getLogger(__name__)
 
 # 4 种 PDF 策略模板
 STRATEGY_TEMPLATES = {"jinja2", "html", "latex", "preserve"}
-# Jinja2 风格模板（映射到 templates/ 目录下的 .html 文件）
-JINJA2_STYLE_TEMPLATES = {"professional", "simple", "modern", "compact", "elegant", "dark", "fresh", "classic", "ocean", "sunset", "violet", "academic"}
+# Jinja2 风格模板（= templates/ 目录下的 .html 文件；单一事实源为 template_meta.TEMPLATE_META）
+JINJA2_STYLE_TEMPLATES = frozenset(TEMPLATE_META.keys())
 # 所有可用的模板选项
 ALL_TEMPLATES = STRATEGY_TEMPLATES | JINJA2_STYLE_TEMPLATES
 
@@ -37,6 +38,10 @@ async def _generate_styled_or_fallback(
 
     如果指定了 template 参数，跳过自动回退链，直接使用指定方案。
     """
+    # 非法模板方案：显式告警（不阻断，但绝不静默）
+    if template and template not in ALL_TEMPLATES:
+        logger.warning(f"[PDF生成] 未注册的模板方案 {template!r}，按自动策略处理")
+
     # 用户指定了模板方案 → 直接使用
     if template and resume is not None:
         if template in JINJA2_STYLE_TEMPLATES:
@@ -73,7 +78,7 @@ async def _generate_styled_or_fallback(
     if resume is None:
         # 纯文本来源（一键优化），根据 template 选择模板
         if template and template not in JINJA2_STYLE_TEMPLATES and template not in ("jinja2",):
-            logger.info(f"[PDF生成] 纯文本来源不支持 '{template}' 方案，回退到专业分栏模板")
+            logger.warning(f"[PDF生成] 纯文本来源不支持 '{template}' 方案，回退到默认模板")
         template_name = (template if template in JINJA2_STYLE_TEMPLATES else "professional") + ".html"
         logger.info("[PDF生成] 无原始简历文件，使用模板渲染")
         fallback_bytes = await generate_pdf(optimized, template_name)

@@ -20,10 +20,10 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
-    font-size: 10pt;
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10pt);
     color: #e0e0e0;
-    line-height: 1.6;
+    line-height: var(--tpl-line-height, 1.6);
     width: 210mm;
     background: #0d1117;
   }
@@ -31,14 +31,14 @@
   /* ── 顶部霓虹标题 ── */
   .header {
     background: linear-gradient(135deg, #0d1117 0%, #161b22 50%, #0d1117 100%);
-    border-bottom: 2px solid #00d4ff;
+    border-bottom: 2px solid var(--tpl-primary, #00d4ff);
     padding: 24px 32px 18px;
     text-align: center;
   }
   .header .name {
     font-size: 24pt;
     font-weight: 700;
-    color: #00d4ff;
+    color: var(--tpl-primary, #00d4ff);
     letter-spacing: 8px;
     text-shadow: 0 0 20px rgba(0,212,255,0.3);
     margin-bottom: 6px;
@@ -61,12 +61,12 @@
 
   /* ── 章节 ── */
   .section {
-    margin-bottom: 14px;
+    margin-bottom: var(--tpl-section-gap, 14px);
   }
   .section-title {
     font-size: 12pt;
     font-weight: 700;
-    color: #00d4ff;
+    color: var(--tpl-primary, #00d4ff);
     letter-spacing: 2px;
     border-bottom: 1px solid #30363d;
     padding-bottom: 3px;
@@ -90,13 +90,13 @@
   .skill-chip {
     background: #161b22;
     border: 1px solid #30363d;
-    color: #00d4ff;
+    color: var(--tpl-primary, #00d4ff);
     padding: 4px 12px;
     font-size: 9pt;
     letter-spacing: 0.5px;
   }
   .skill-chip.alt {
-    border-color: #00d4ff44;
+    border-color: var(--tpl-primary, #00d4ff)44;
     color: #58a6ff;
   }
 
@@ -146,7 +146,7 @@
     content: "›";
     position: absolute;
     left: 0;
-    color: #00d4ff;
+    color: var(--tpl-primary, #00d4ff);
     font-weight: bold;
     font-size: 11pt;
   }
@@ -172,7 +172,7 @@
     margin-bottom: 8px;
     padding: 10px 12px;
     background: #161b22;
-    border-left: 3px solid #00d4ff;
+    border-left: 3px solid var(--tpl-primary, #00d4ff);
     border-radius: 0 4px 4px 0;
   }
   .proj-item .proj-name {
@@ -187,7 +187,7 @@
   }
   .proj-item .proj-tech {
     font-size: 8.5pt;
-    color: #00d4ff;
+    color: var(--tpl-primary, #00d4ff);
   }
 
   @media print {

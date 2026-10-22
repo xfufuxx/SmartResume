@@ -20,10 +20,10 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
-    font-size: 10pt;
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10pt);
     color: #3a3a3a;
-    line-height: 1.7;
+    line-height: var(--tpl-line-height, 1.7);
     width: 210mm;
     display: flex;
   }
@@ -43,9 +43,9 @@
     font-size: 22pt;
     font-weight: 300;
     letter-spacing: 6px;
-    color: #c9a962;
+    color: var(--tpl-primary, #c9a962);
     text-align: center;
-    border-bottom: 2px solid #c9a962;
+    border-bottom: 2px solid var(--tpl-primary, #c9a962);
     padding-bottom: 10px;
     margin-bottom: 4px;
   }
@@ -60,7 +60,7 @@
   .sidebar h3 {
     font-size: 11pt;
     font-weight: 400;
-    color: #c9a962;
+    color: var(--tpl-primary, #c9a962);
     letter-spacing: 3px;
     text-transform: uppercase;
     border-bottom: 1px solid #444;
@@ -77,7 +77,7 @@
   .sidebar .skill-tag {
     display: inline-block;
     border: 1px solid #555;
-    color: #c9a962;
+    color: var(--tpl-primary, #c9a962);
     padding: 2px 8px;
     margin: 2px 4px 2px 0;
     font-size: 8.5pt;
@@ -95,11 +95,11 @@
   .content h3 {
     font-size: 13pt;
     font-weight: 400;
-    color: #c9a962;
+    color: var(--tpl-primary, #c9a962);
     letter-spacing: 3px;
     border-bottom: 1px solid #ddd;
     padding-bottom: 4px;
-    margin-bottom: 8px;
+    margin-bottom: var(--tpl-section-gap, 8px);
   }
 
   .summary-text {
@@ -121,7 +121,7 @@
     top: 4px;
     width: 6px;
     height: 6px;
-    background: #c9a962;
+    background: var(--tpl-primary, #c9a962);
     border-radius: 50%;
   }
   .exp-item:last-child { margin-bottom: 0; }
@@ -163,7 +163,7 @@
     content: "·";
     position: absolute;
     left: 0;
-    color: #c9a962;
+    color: var(--tpl-primary, #c9a962);
     font-weight: bold;
   }
 
@@ -198,7 +198,7 @@
   }
   .proj-item .proj-tech {
     font-size: 8.5pt;
-    color: #c9a962;
+    color: var(--tpl-primary, #c9a962);
     letter-spacing: 0.5px;
   }
 

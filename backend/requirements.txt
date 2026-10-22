@@ -7,6 +7,8 @@ pydantic[email]>=2.0.0
 pydantic-settings>=2.0.0
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+# QQ 登录（OAuth2.0 服务端换 token / 取 openid / 取用户信息）
+httpx>=0.27.0
 # 约束 bcrypt<5：passlib 1.7.4 与 bcrypt>=5 不兼容（后者对 >72 字节密码抛 ValueError），
 # 会导致注册/登录全部失效。
 bcrypt>=4.0.1,<5.0.0

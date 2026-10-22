@@ -738,6 +738,26 @@ body {
   padding: 0 24px !important;
 }
 
+/* ── QQ 登录按钮（品牌蓝）──
+   注意：上面的 .ant-btn-default / .ant-btn / .ant-btn-lg 规则都带了 !important，
+   内联 style 压不住它们，必须用「更高特异性 + !important」的类规则覆盖。 */
+.qq-login-btn.ant-btn,
+.qq-login-btn.ant-btn:hover,
+.qq-login-btn.ant-btn:focus {
+  background: #12B7F5 !important;
+  border-color: #12B7F5 !important;
+  color: #fff !important;
+  font-weight: 600 !important;
+  font-size: 16px !important;
+  height: 46px !important;
+  box-shadow: 0 4px 14px rgba(18, 183, 245, 0.35) !important;
+}
+
+.qq-login-btn.ant-btn:hover {
+  background: #0fa8e0 !important;
+  border-color: #0fa8e0 !important;
+}
+
 /* ── Input ── */
 .ant-input,
 .ant-input-affix-wrapper,

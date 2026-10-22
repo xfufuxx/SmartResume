@@ -20,17 +20,17 @@
   * { margin: 0; padding: 0; box-sizing: border-box; }
 
   body {
-    font-family: 'Noto Sans SC', 'Microsoft YaHei', sans-serif;
-    font-size: 10pt;
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10pt);
     color: #3a5a40;
-    line-height: 1.6;
+    line-height: var(--tpl-line-height, 1.6);
     width: 210mm;
     background: #fafcf8;
   }
 
   /* ── 顶部自然绿 ── */
   .header {
-    background: linear-gradient(135deg, #2d6a4f 0%, #40916c 50%, #52b788 100%);
+    background: linear-gradient(135deg, var(--tpl-primary, #2d6a4f) 0%, #40916c 50%, var(--tpl-accent, #52b788) 100%);
     color: #fff;
     padding: 26px 32px 20px;
     text-align: center;
@@ -78,10 +78,10 @@
   }
   .sidebar h3 {
     font-size: 11pt;
-    color: #2d6a4f;
+    color: var(--tpl-primary, #2d6a4f);
     font-weight: 700;
     letter-spacing: 1px;
-    border-bottom: 2px solid #52b788;
+    border-bottom: 2px solid var(--tpl-accent, #52b788);
     padding-bottom: 3px;
     margin-bottom: 8px;
     margin-top: 12px;
@@ -96,12 +96,12 @@
   .sidebar .skill-leaf {
     display: inline-block;
     background: #d8f3dc;
-    color: #2d6a4f;
+    color: var(--tpl-primary, #2d6a4f);
     padding: 3px 10px;
     border-radius: 4px;
     margin: 2px 4px 2px 0;
     font-size: 9pt;
-    border-left: 3px solid #52b788;
+    border-left: 3px solid var(--tpl-accent, #52b788);
   }
 
   .content {
@@ -109,13 +109,13 @@
   }
   .content h3 {
     font-size: 13pt;
-    color: #2d6a4f;
+    color: var(--tpl-primary, #2d6a4f);
     font-weight: 700;
     letter-spacing: 1px;
-    border-bottom: 2px solid #52b788;
+    border-bottom: 2px solid var(--tpl-accent, #52b788);
     padding-bottom: 3px;
     margin-bottom: 10px;
-    margin-top: 16px;
+    margin-top: var(--tpl-section-gap, 16px);
   }
   .content h3:first-child { margin-top: 0; }
 
@@ -138,7 +138,7 @@
   .exp-header {
     font-weight: 700;
     font-size: 10.5pt;
-    color: #2d6a4f;
+    color: var(--tpl-primary, #2d6a4f);
     margin-bottom: 2px;
   }
   .exp-sub {
@@ -172,7 +172,7 @@
   .edu-item .school {
     font-weight: 700;
     font-size: 10pt;
-    color: #2d6a4f;
+    color: var(--tpl-primary, #2d6a4f);
   }
   .edu-item .info {
     font-size: 9pt;
@@ -184,12 +184,12 @@
     padding: 10px 14px;
     background: #f0f7f4;
     border-radius: 6px;
-    border-left: 3px solid #52b788;
+    border-left: 3px solid var(--tpl-accent, #52b788);
   }
   .proj-item .proj-name {
     font-weight: 700;
     font-size: 10pt;
-    color: #2d6a4f;
+    color: var(--tpl-primary, #2d6a4f);
   }
   .proj-item .proj-desc {
     font-size: 9pt;
@@ -198,7 +198,7 @@
   }
   .proj-item .proj-tech {
     font-size: 8.5pt;
-    color: #52b788;
+    color: var(--tpl-accent, #52b788);
   }
 
   @media print {
