@@ -1,0 +1,247 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+{# 文档属性（WeasyPrint 读取；Playwright 路径由 pdf_metadata 后处理覆盖） #}
+<title>{{ resume.personal_info.name or '姓名' }}的简历</title>
+<meta name="author" content="智能简历">
+<meta name="description" content="渐变现代版简历">
+<meta name="keywords" content="简历,resume">
+<meta name="template-id" content="jade-gradient">
+<meta name="template-version" content="1.0.0">
+<style>
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+  }
+  {# @page / print-color-adjust / 条目级分页保护由 print_css 基座按 layout_features 注入，此处不写 #}
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10pt);
+    color: var(--tpl-text, #2e2a3a);
+    line-height: var(--tpl-line-height, 1.7);
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff;
+  }
+
+  /* ── 全幅渐变头部（顶到纸边，紫→粉）── */
+  .header {
+    background: linear-gradient(135deg, var(--tpl-primary, #7c3aed) 0%, var(--tpl-accent, #db2777) 100%);
+    padding: 20mm 18mm 14mm;
+    color: #ffffff;
+    -webkit-box-decoration-break: clone;
+    box-decoration-break: clone;
+  }
+  .header .name {
+    font-size: 26pt;
+    font-weight: 700;
+    letter-spacing: 2px;
+    margin-bottom: 6px;
+    color: #ffffff;
+  }
+  .header .headline {
+    display: inline-block;
+    font-size: 9.5pt;
+    background: rgba(255, 255, 255, 0.18);
+    border: 1px solid rgba(255, 255, 255, 0.35);
+    border-radius: 12px;
+    padding: 2px 12px;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+  .header .contact {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 18px;
+    font-size: 8.5pt;
+    color: rgba(255, 255, 255, 0.92);
+  }
+
+  /* 全幅头部模板 @page 边距为 0，主体内边距由 .content 自己给 */
+  .content { padding: 14mm 18mm 16mm; }
+
+  /* ── 分节：主色标题 + 渐变短线 ── */
+  .section { margin-bottom: var(--tpl-section-gap, 14px); }
+  .section-title {
+    font-size: 10pt;
+    font-weight: 700;
+    letter-spacing: 1px;
+    color: var(--tpl-primary, #7c3aed);
+    padding-bottom: 4px;
+    margin-bottom: 9px;
+    position: relative;
+  }
+  .section-title::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    bottom: 0;
+    width: 42px;
+    height: 2px;
+    background: linear-gradient(90deg, var(--tpl-primary, #7c3aed), var(--tpl-accent, #db2777));
+  }
+
+  .summary-text {
+    font-size: 9.5pt;
+    color: #4a4458;
+    line-height: 1.8;
+  }
+
+  .exp-item { margin-bottom: 12px; }
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 3px;
+  }
+  .exp-header .title {
+    font-weight: 700;
+    font-size: 10pt;
+    color: #241f30;
+  }
+  .exp-header .company { font-weight: 400; color: var(--tpl-accent, #db2777); font-size: 9pt; }
+  .exp-header .date {
+    font-size: 8.5pt;
+    color: #8b8397;
+    white-space: nowrap;
+  }
+  .exp-points { list-style: none; margin-top: 3px; }
+  .exp-points li {
+    font-size: 9pt;
+    color: #4a4458;
+    line-height: 1.75;
+    padding-left: 14px;
+    position: relative;
+    margin-bottom: 2px;
+  }
+  .exp-points li::before {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 6px;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--tpl-primary, #7c3aed), var(--tpl-accent, #db2777));
+  }
+
+  .proj-item { margin-bottom: 12px; }
+  .proj-tech {
+    font-size: 8.5pt;
+    color: #8b8397;
+    margin-top: 3px;
+  }
+
+  /* ── 技能：渐变胶囊 ── */
+  .skills-list { display: flex; flex-wrap: wrap; gap: 6px 8px; }
+  .skills-list span {
+    font-size: 8.5pt;
+    color: #ffffff;
+    background: linear-gradient(135deg, var(--tpl-primary, #7c3aed), var(--tpl-accent, #db2777));
+    padding: 3px 12px;
+    border-radius: 13px;
+    letter-spacing: 0.3px;
+  }
+
+  .edu-item { margin-bottom: 8px; }
+  .edu-detail { font-size: 9pt; color: #8b8397; }
+</style>
+</head>
+<body>
+  <div class="header">
+    <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
+    {% if resume.personal_info.title %}<div class="headline">{{ resume.personal_info.title }}</div>{% endif %}
+    <div class="contact">
+      {% if resume.personal_info.email %}<span>{{ resume.personal_info.email }}</span>{% endif %}
+      {% if resume.personal_info.phone %}<span>{{ resume.personal_info.phone }}</span>{% endif %}
+      {% if resume.personal_info.address %}<span>{{ resume.personal_info.address }}</span>{% endif %}
+    </div>
+  </div>
+
+  <div class="content">
+    {% if resume.summary %}
+    <div class="section">
+      <div class="section-title">个人概述</div>
+      <div class="summary-text">{{ resume.summary }}</div>
+    </div>
+    {% endif %}
+
+    {% if resume.experience %}
+    <div class="section">
+      <div class="section-title">工作经历</div>
+      {% for exp in resume.experience %}
+      <div class="exp-item">
+        <div class="exp-header">
+          <span class="title">{{ exp.title }}{% if exp.company %}<span class="company"> · {{ exp.company }}</span>{% endif %}</span>
+          <span class="date">{% if exp.start %}{{ exp.start }}{% endif %}{% if exp.start and exp.end %} – {% endif %}{% if exp.end %}{{ exp.end }}{% endif %}</span>
+        </div>
+        {% if exp.points %}
+        <ul class="exp-points">
+          {% for point in exp.points %}<li>{{ point }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if resume.projects %}
+    <div class="section">
+      <div class="section-title">项目经历</div>
+      {% for proj in resume.projects %}
+      <div class="proj-item">
+        <div class="exp-header">
+          <span class="title">{{ proj.name }}{% if proj.role %}<span class="company"> · {{ proj.role }}</span>{% endif %}</span>
+          <span class="date">{% if proj.start %}{{ proj.start }}{% endif %}{% if proj.start and proj.end %} – {% endif %}{% if proj.end %}{{ proj.end }}{% endif %}</span>
+        </div>
+        {% if proj.points %}
+        <ul class="exp-points">
+          {% for point in proj.points %}<li>{{ point }}</li>{% endfor %}
+        </ul>
+        {% endif %}
+        {% if proj.description %}<div class="summary-text">{{ proj.description }}</div>{% endif %}
+        {% if proj.tech %}<div class="proj-tech">技术栈：{{ proj.tech | join(' · ') }}</div>{% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+
+    {% if resume.skills %}
+    <div class="section">
+      <div class="section-title">专业技能</div>
+      <div class="skills-list">
+        {% for skill in resume.skills %}<span>{{ skill }}</span>{% endfor %}
+      </div>
+    </div>
+    {% endif %}
+
+    {% if resume.education %}
+    <div class="section">
+      <div class="section-title">教育背景</div>
+      {% for edu in resume.education %}
+      <div class="edu-item">
+        <div class="exp-header">
+          <span class="title">{{ edu.school }}</span>
+          <span class="date">{% if edu.start %}{{ edu.start }}{% endif %}{% if edu.start and edu.end %} – {% endif %}{% if edu.end %}{{ edu.end }}{% endif %}</span>
+        </div>
+        <div class="edu-detail">{{ edu.degree }}{% if edu.major %} · {{ edu.major }}{% endif %}</div>
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  </div>
+</body>
+</html>
