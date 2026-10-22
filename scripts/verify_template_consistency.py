@@ -1,7 +1,7 @@
-"""模板一致性 E2E：优化页与优化详情页共用同一模板清单（42 套），选择器形态一致。
+"""模板一致性 E2E：优化页与优化详情页共用同一模板清单（56 套），选择器形态一致。
 
 覆盖：
-1. 优化页「/」模板选择器：42 张卡片、名称正确、选中后面包屑按钮同步
+1. 优化页「/」模板选择器：56 张卡片、名称正确、选中后面包屑按钮同步
 2. 优化详情页「/history/{id}」编辑态：模板按钮 + 卡片选择器（与优化页一致）
 3. 详情页选择新模板（海洋之蓝）后重新导出 PDF：后端 200 且为合法 PDF
 4. 新模板（学术严谨）后端渲染：PDF 文字含项目要点
@@ -41,6 +41,12 @@ EXPECTED = [
     "渐变现代版", "磁贴格纹版", "质感卡片版", "代码终端版", "块状网格版",
     # ── jadeAI 迁移（批次 D：创意/艺术 5 套）──
     "杂志排版版", "艺术创想版", "复古雅致版", "霓虹暗夜版", "水彩晕染版",
+    # ── jadeAI 迁移（批次 E：风格/文化 5 套）──
+    "瑞士网格版", "和风简约版", "包豪斯几何版", "黑金奢华版", "玫瑰柔粉版",
+    # ── jadeAI 迁移（批次 F：专业领域 5 套）──
+    "建筑蓝图版", "法律正式版", "教师亲和版", "科研论文版", "工程师规格版",
+    # ── jadeAI 迁移（批次 G：版式变体 4 套）──
+    "卡片网格版", "交错流版", "缎带装饰版", "马赛克拼块版",
 ]
 
 # 模板 ID → 展示名（详情页按钮显示「记录里保存的模板」，不再是硬编码默认值）
@@ -118,12 +124,12 @@ with sync_playwright() as p:
 
     modal_cards = page.locator(".ant-modal-body .ant-card")
     n = modal_cards.count()
-    check("优化页-卡片数量=42", n == 42, f"got {n}")
+    check("优化页-卡片数量=56", n == 56, f"got {n}")
     labels = [re.sub(r"\s+", "", modal_cards.nth(i).inner_text()) for i in range(n)]
     # labels 已去掉全部空白，EXPECTED 侧必须同样归一化，否则含空格的名称
     # （如「ATS 友好纯文本版」）永远匹配不上
     missing = [e for e in EXPECTED if not any(re.sub(r"\s+", "", e) in l for l in labels)]
-    check("优化页-42 模板名称齐全", not missing, f"missing={missing}")
+    check("优化页-56 模板名称齐全", not missing, f"missing={missing}")
     jade_cards = [l for l in labels if "jadeAI" in l or "高保真" in l]
     check("优化页-jadeAI 迁移模板带高保真标记", len(jade_cards) >= 2, f"got {jade_cards}")
     check("优化页-默认模板带使用中高亮", "当前使用中" in labels[0], labels[0])
@@ -136,10 +142,10 @@ with sync_playwright() as p:
     page.locator(".ant-segmented-item", has_text="列表").first.click()
     page.wait_for_timeout(400)
     list_cards = page.locator(".ant-modal-body .ant-card")
-    check("UI-列表视图仍为 42 张", list_cards.count() == 42, f"got {list_cards.count()}")
+    check("UI-列表视图仍为 56 张", list_cards.count() == 56, f"got {list_cards.count()}")
     page.locator(".ant-segmented-item", has_text="网格").first.click()
     page.wait_for_timeout(400)
-    check("UI-切回网格视图", modal_cards.count() == 42)
+    check("UI-切回网格视图", modal_cards.count() == 56)
 
     # 分类过滤：商务通用 = professional + ocean + elegant + jade-classic
     #           + jade-modern/professional/executive/timeline/sidebar/elegant/startup = 11
@@ -147,12 +153,12 @@ with sync_playwright() as p:
     page.locator(".ant-tabs-tab", has_text="商务通用").first.click()
     page.wait_for_timeout(400)
     biz = modal_cards.count()
-    check("UI-分类过滤(商务通用)=14", biz == 14, f"got {biz}")
+    check("UI-分类过滤(商务通用)=16", biz == 16, f"got {biz}")
     biz_labels = [re.sub(r"\s+", "", modal_cards.nth(i).inner_text()) for i in range(biz)]
     check("UI-分类过滤含 jade 经典单栏", any("经典单栏专业版" in l for l in biz_labels), str(biz_labels))
     page.locator(".ant-tabs-tab", has_text="全部").first.click()
     page.wait_for_timeout(400)
-    check("UI-切回全部恢复 42", modal_cards.count() == 42)
+    check("UI-切回全部恢复 56", modal_cards.count() == 56)
 
     # 标签过滤：双栏 = professional + violet + elegant + jade-twocol + jade-sidebar + jade-developer = 6
     page.locator(".ant-tag-checkable", has_text="#双栏").first.click()
@@ -172,7 +178,7 @@ with sync_playwright() as p:
     check("UI-搜索无结果显示空态", modal_cards.count() == 0 and page.locator(".ant-empty").count() > 0)
     page.fill('input[placeholder*="搜索模板"]', "")
     page.wait_for_timeout(400)
-    check("UI-清空搜索恢复 42", modal_cards.count() == 42)
+    check("UI-清空搜索恢复 56", modal_cards.count() == 56)
 
     # 预览弹窗（眼睛图标，不触发选中）
     page.locator('.ant-modal-body .anticon-eye[title="预览"]').first.click()
@@ -246,10 +252,10 @@ with sync_playwright() as p:
     page.wait_for_timeout(500)
     d_cards = page.locator(".ant-modal-body .ant-card")
     dn = d_cards.count()
-    check("详情页-卡片数量=42", dn == 42, f"got {dn}")
+    check("详情页-卡片数量=56", dn == 56, f"got {dn}")
     d_labels = [re.sub(r"\s+", "", d_cards.nth(i).inner_text()) for i in range(dn)]
     d_missing = [e for e in EXPECTED if not any(re.sub(r"\s+", "", e) in l for l in d_labels)]
-    check("详情页-42 模板名称齐全", not d_missing, f"missing={d_missing}")
+    check("详情页-56 模板名称齐全", not d_missing, f"missing={d_missing}")
     # 「当前使用中」徽标随两页各自选中项变化，比较顺序前先剔除徽标文本
     norm = lambda xs: [x.replace("当前使用中", "") for x in xs]
     check("两处选择器顺序完全一致", norm(labels) == norm(d_labels))
@@ -338,8 +344,19 @@ with sync_playwright() as p:
             ("jade-magazine", "UQJMAG"), ("jade-artistic", "UQJART"),
             ("jade-retro", "UQJRET"), ("jade-neon", "UQJNEO"),
             ("jade-watercolor", "UQJWAT"),
+            # ── 批次 E：风格/文化 5 套 ──
+            ("jade-swiss", "UQJSWI"), ("jade-japanese", "UQJJPN"),
+            ("jade-berlin", "UQJBER"), ("jade-luxe", "UQJLUX"),
+            ("jade-rose", "UQJROS"),
+            # ── 批次 F：专业领域 5 套 ──
+            ("jade-architect", "UQJARC"), ("jade-legal", "UQJLEG"),
+            ("jade-teacher", "UQJTEA"), ("jade-scientist", "UQJSCI"),
+            ("jade-engineer", "UQJENG"),
+            # ── 批次 G：版式变体 4 套 ──
+            ("jade-card", "UQJCRD"), ("jade-zigzag", "UQJZZ"),
+            ("jade-ribbon", "UQJRIB"), ("jade-mosaic", "UQJMOS"),
         ):
-            # test-template 限 10 次/分钟：30 套必然跨多次限流窗口。
+            # test-template 限 10 次/分钟：44 套必然跨多次限流窗口。
             # 命中 429 必须等满一个窗口再重试——否则拿到的是 84 字节 JSON，
             # 传给 PyMuPDF 会抛 FileDataError（曾误判成模板渲染失败）。
             # retry=1 避免 api() 内部再 sleep 8 白等。

@@ -35,6 +35,12 @@ EXPECTED = [
     "渐变现代版", "磁贴格纹版", "质感卡片版", "代码终端版", "块状网格版",
     # ── jadeAI 迁移（批次 D：创意/艺术 5 套）──
     "杂志排版版", "艺术创想版", "复古雅致版", "霓虹暗夜版", "水彩晕染版",
+    # ── jadeAI 迁移（批次 E：风格/文化 5 套）──
+    "瑞士网格版", "和风简约版", "包豪斯几何版", "黑金奢华版", "玫瑰柔粉版",
+    # ── jadeAI 迁移（批次 F：专业领域 5 套）──
+    "建筑蓝图版", "法律正式版", "教师亲和版", "科研论文版", "工程师规格版",
+    # ── jadeAI 迁移（批次 G：版式变体 4 套）──
+    "卡片网格版", "交错流版", "缎带装饰版", "马赛克拼块版",
 ]
 
 passed, failed = 0, 0
@@ -131,7 +137,7 @@ def main() -> int:
         page.wait_for_timeout(600)
         labels_jade = gallery_cards(page)
         # 搜索命中模板 id：批次 A 15 套 + 批次 B 5 套 + 批次 C 5 套 = 25 套 jade-* 模板
-        check("搜索 jade → 30 张卡（jadeAI 批次 A+B+C+D）", len(labels_jade) == 30, f"got {len(labels_jade)}")
+        check("搜索 jade → 44 张卡（jadeAI 批次 A–G 全量）", len(labels_jade) == 44, f"got {len(labels_jade)}")
         page.fill('input[placeholder="搜索模板 / 行业 / 标签"]', "")
         page.wait_for_timeout(500)
 

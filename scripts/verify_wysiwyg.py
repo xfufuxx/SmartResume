@@ -48,6 +48,7 @@ CASES = [
     ("jade-medical", 20.0),
     ("jade-finance", 20.0),
     ("jade-neon", 24.0),      # 全幅深色：页边距 0，内边距由 .content 自给
+    ("jade-luxe", 27.0),      # 全幅非深色：黑金页眉，主体走 .content padding
     ("classic", None),
 ]
 
