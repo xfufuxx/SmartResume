@@ -27,36 +27,50 @@ interface TemplateGridCardProps {
 export function TemplateGridCard({
   option, meta, selected, isDark, onSelect, onPreview,
 }: TemplateGridCardProps) {
+  // 标题行与状态标签分行：标签若与标题同处一行，会挤占标题的横向空间，
+  // 而中文 min-content 仅 1 个字，标题会被 flex 收缩成竖排（实测 4 字标题被压成 13px 宽）。
   const footer = (
-    <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-      <span style={{
-        width: 28, height: 28, borderRadius: 7,
-        background: selected ? option.preview.primary : isDark ? '#3A3A3C' : '#E5E7EB',
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-        transition: 'background 0.3s, color 0.3s',
-        flexShrink: 0,
-      }}>
-        {React.cloneElement(option.icon as React.ReactElement, {
-          style: { color: selected ? '#fff' : isDark ? '#AEAEB2' : '#6B7280', fontSize: 14 }
-        })}
-      </span>
-      <Typography.Text strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{option.label}</Typography.Text>
-      {selected && (
-        <Tag color="blue" style={{
-          marginLeft: 'auto', fontSize: 10,
-          borderRadius: 6, padding: '1px 8px',
-          border: 'none',
-          background: `${option.preview.primary}15`,
-          color: option.preview.primary,
+    <div style={{ marginTop: 8 }}>
+      {/* ── 标题行：图标 + 标题（nowrap + ellipsis，保证任何宽度下都是横向单行） ── */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        <span style={{
+          width: 28, height: 28, borderRadius: 7,
+          background: selected ? option.preview.primary : isDark ? '#3A3A3C' : '#E5E7EB',
+          display: 'flex', alignItems: 'center', justifyContent: 'center',
+          transition: 'background 0.3s, color 0.3s',
+          flexShrink: 0,
         }}>
-          <CheckCircleFilled style={{ marginRight: 4 }} />
-          当前使用中
-        </Tag>
-      )}
-      {meta?.renderMode === 'react' && !selected && (
-        <Tooltip title="支持高保真组件预览">
-          <Tag style={{ marginLeft: selected ? 0 : 'auto', fontSize: 10, borderRadius: 6 }}>高保真</Tag>
-        </Tooltip>
+          {React.cloneElement(option.icon as React.ReactElement, {
+            style: { color: selected ? '#fff' : isDark ? '#AEAEB2' : '#6B7280', fontSize: 14 }
+          })}
+        </span>
+        <Typography.Text strong style={{
+          fontSize: 13, color: 'var(--text-primary)',
+          flex: 1, minWidth: 0,
+          whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+        }}>{option.label}</Typography.Text>
+      </div>
+
+      {/* ── 状态行：当前使用中 / 高保真（独立一行，不与标题争宽度） ── */}
+      {(selected || meta?.renderMode === 'react') && (
+        <div style={{ marginTop: 6 }}>
+          {selected ? (
+            <Tag color="blue" style={{
+              margin: 0, fontSize: 10,
+              borderRadius: 6, padding: '1px 8px',
+              border: 'none',
+              background: `${option.preview.primary}15`,
+              color: option.preview.primary,
+            }}>
+              <CheckCircleFilled style={{ marginRight: 4 }} />
+              当前使用中
+            </Tag>
+          ) : (
+            <Tooltip title="支持高保真组件预览">
+              <Tag style={{ margin: 0, fontSize: 10, borderRadius: 6 }}>高保真</Tag>
+            </Tooltip>
+          )}
+        </div>
       )}
     </div>
   )
@@ -76,6 +90,7 @@ export function TemplateGridCard({
       <Card
         hoverable
         size="small"
+        className="tpl-grid-card"
         style={cardStyleFor(option, selected, isDark)}
         styles={{ body: { padding: 10 } }}
         onClick={onSelect}

@@ -39,7 +39,6 @@ export default function TemplateSelector({
   const isDark = theme === 'dark'
   const [view, setView] = useState<ViewMode>('grid')
   const [category, setCategory] = useState<TemplateCategory | 'all'>('all')
-  const [tag, setTag] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [previewKey, setPreviewKey] = useState<string | null>(null)
   /** 「使用此模板」时：预览弹窗先关，动画结束后再关主弹窗（避免同时关闭动画互撞） */
@@ -51,23 +50,16 @@ export default function TemplateSelector({
     return options.filter((opt) => {
       const meta = TemplateRegistry.get(opt.key)
       if (category !== 'all' && meta?.category !== category) return false
-      if (tag && !(meta?.tags || []).includes(tag)) return false
       if (q) {
         const hay = [
           opt.key, opt.label, opt.preview.desc,
-          meta?.author || '', ...(meta?.industries || []), ...(meta?.tags || []),
+          meta?.author || '', ...(meta?.industries || []),
         ].join(' ').toLowerCase()
         if (!hay.includes(q)) return false
       }
       return true
     })
-  }, [options, category, tag, query])
-
-  const tags = useMemo(() => {
-    const set = new Set<string>()
-    options.forEach((o) => TemplateRegistry.get(o.key)?.tags.forEach((t) => set.add(t)))
-    return Array.from(set).sort()
-  }, [options])
+  }, [options, category, query])
 
   // 预览弹窗：可见性由 previewKey 经 open 驱动；组件常驻不随 previewKey 卸载，
   // 否则 antd Modal 在 open=true 时被直接 unmount 会跳过关闭动画、残留可见 portal DOM。
@@ -95,12 +87,9 @@ export default function TemplateSelector({
         onViewChange={setView}
         category={category}
         onCategoryChange={setCategory}
-        tag={tag}
-        onTagChange={setTag}
         query={query}
         onQueryChange={setQuery}
         options={options}
-        tags={tags}
       />
 
       <Typography.Paragraph style={{ marginBottom: 16, color: 'var(--text-secondary)', fontSize: 13 }}>

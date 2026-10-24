@@ -88,11 +88,11 @@ export function TemplatePreviewModal({
   return (
     <Modal
       title={
-        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-          {meta?.icon || option.icon}
-          <span>{option.label} · 预览</span>
-          {isReactMode && <Tag color="green">高保真</Tag>}
-          {!isReactMode && <Tag>示意图</Tag>}
+        <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+          <span style={{ display: 'inline-flex', flexShrink: 0 }}>{meta?.icon || option.icon}</span>
+          <span style={{ whiteSpace: 'nowrap' }}>{option.label} · 预览</span>
+          {isReactMode && <Tag color="green" style={{ margin: 0, flexShrink: 0 }}>高保真</Tag>}
+          {!isReactMode && <Tag style={{ margin: 0, flexShrink: 0 }}>示意图</Tag>}
         </span>
       }
       open={open}

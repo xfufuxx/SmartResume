@@ -41,8 +41,12 @@ export function TemplateListRow({
             <MiniPreview preview={option.preview} />
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-              <Typography.Text strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{option.label}</Typography.Text>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <Typography.Text strong style={{
+              fontSize: 13, color: 'var(--text-primary)',
+              flex: 1, minWidth: 0,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{option.label}</Typography.Text>
               {meta && <Tag style={{ fontSize: 10, borderRadius: 6 }}>{CATEGORY_LABELS[meta.category]}</Tag>}
               {selected && (
                 <Tag color="blue" style={{ fontSize: 10, borderRadius: 6 }}>

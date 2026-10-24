@@ -636,6 +636,7 @@ export default function Home() {
             <div className="opt-runbar">
               <Button
                 size="large"
+                style={{ whiteSpace: 'nowrap' }}
                 icon={TEMPLATE_OPTIONS.find((o) => o.key === selectedTemplate)?.icon || <FileTextOutlined />}
                 onClick={() => setShowTemplateModal(true)}
               >

@@ -682,6 +682,13 @@ body {
   padding: 20px !important;
 }
 
+/* 模板网格卡：上方全局规则把 body padding 顶到 20px，模板卡信息密度高、
+   标题会被挤压换行（中文可逐字断行，极端时收缩成竖排）。
+   此处用更高特异度收回 padding，保证标题有足横向空间单行展示。 */
+.tpl-grid-card .ant-card-body {
+  padding: 10px !important;
+}
+
 .ant-card-actions {
   border-top: 1px solid var(--border-light) !important;
   background: var(--gray-50) !important;
