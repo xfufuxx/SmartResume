@@ -287,9 +287,6 @@ def render_template_html(
     from app.services.resume_theme import normalize_theme_config
     from app.services.template_meta import get_template_meta
 
-    template = env.get_template(template_name)
-    html = template.render(resume=resume_json)
-
     meta = get_template_meta(template_name)
     features = meta.layout_features if meta else None
 
@@ -314,6 +311,13 @@ def render_template_html(
                 page_margin_y_mm=theme.marginMm,
                 page_margin_x_mm=theme.marginMm,
             )
+
+    # avatar_style 进渲染上下文：模板头部的职业照宏（_avatar.html）按它决定
+    # 圆形 / 一寸照形状。简历数据本身不含该字段（它在 theme_config 列上），
+    # 与主题变量同一来源，保证预览与导出形状一致。
+    template = env.get_template(template_name)
+    html = template.render(resume=resume_json, avatar_style=theme.avatarStyle)
+
     html = inject_print_css(html, features, theme=theme.css_variables())
 
     if meta and '<meta name="template-id"' not in html:

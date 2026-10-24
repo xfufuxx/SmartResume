@@ -22,6 +22,8 @@
   body {
     font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
     font-size: var(--tpl-base-size, 10.5pt);
+    background: #fff;
+    width: 210mm;
     color: #333;
     line-height: var(--tpl-line-height, 1.6);
     width: 210mm;
@@ -202,8 +204,10 @@
 </style>
 </head>
 <body>
+  {% from '_avatar.html' import avatar %}
   <!-- 顶部横幅 -->
   <div class="banner">
+    {{ avatar(resume, placement="flow", avatar_style=avatar_style) }}
     <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
     {% if resume.personal_info.title or resume.summary %}
     <div class="title">{{ resume.personal_info.title or resume.summary[:60] or '' }}</div>

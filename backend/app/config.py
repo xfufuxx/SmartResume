@@ -83,6 +83,12 @@ class Settings(BaseSettings):
     DELIVERY_DAILY_LIMIT: int = 20         # 每用户每日真实投递上限（反骚扰/反滥用）
     DELIVERY_FROM_NAME: str = "智能简历求职助手"  # 邮件里的发件人显示名
 
+    # ── AI 职业照（图像编辑模型，参考 JadeAI linkedin-photo）─────────────
+    # Key 由用户前端提供（localStorage），随请求上传、服务端不落库；
+    # 这里只配默认模型与每用户每日生成上限（Redis 自然日分桶，防刷）。
+    AI_PHOTO_MODEL: str = "gemini-3.1-flash-image-preview"  # Nano Banana 图像编辑
+    AI_PHOTO_DAILY_LIMIT: int = 20         # 每用户每日生成上限
+
     # ── QQ 登录（QQ 互联 OAuth2.0，网站应用）────────────────────────────
     # 申请入口：https://connect.qq.com  → 创建「网站应用」→ 审核通过后拿到
     # APP ID / APP Key，并把「网站回调地址」填成 QQ_REDIRECT_URI。

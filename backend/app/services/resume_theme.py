@@ -28,6 +28,8 @@ baseFontSizePt              8-16pt    正文字号
 lineHeight                  1.1-2.0   正文行距
 marginMm                    0-30mm    页边距（0 时视为全幅，配合 full_bleed）
 sectionGapMm                0-20mm    章节间距（章节标题上方）
+avatarStyle                 circle/    职业照形状（circle=圆形头像；
+                             oneInch   oneInch=一寸证件照 5:7 竖版，默认）
 ===========================  ========  ==========================================
 
 未提供字段一律回退到模板默认值（``TEMPLATE_META.theme``）或 ``DEFAULT_THEME``；
@@ -67,6 +69,9 @@ FONT_WHITELIST: tuple[str, ...] = (
     "Alibaba PuHuiTi",
 )
 
+#: 职业照形状白名单（oneInch=一寸证件照 5:7 竖版；circle=圆形头像）
+AVATAR_STYLES: tuple[str, ...] = ("circle", "oneInch")
+
 #: 数值字段的 (字段, 最小值, 最大值, 默认值)（pt / 倍数 / mm 均为 float）
 _NUMERIC_FIELDS: tuple[tuple[str, float, float, float], ...] = (
     ("baseFontSizePt", 8.0, 16.0, 10.5),
@@ -87,6 +92,8 @@ class ResumeTheme:
     lineHeight: float = 1.6
     marginMm: float = 15.0
     sectionGapMm: float = 6.0
+    #: 职业照形状（模板渲染宏 _avatar.html 消费；简历无照片时该值不产生任何输出）
+    avatarStyle: str = "oneInch"
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -100,6 +107,7 @@ class ResumeTheme:
             "base-size": f"{_num(self.baseFontSizePt)}pt",
             "line-height": _num(self.lineHeight),
             "section-gap": f"{_num(self.sectionGapMm)}mm",
+            "avatar-style": self.avatarStyle,
         }
 
     def summary(self) -> str:
@@ -108,7 +116,8 @@ class ResumeTheme:
             f"theme-primary={self.primary}, theme-accent={self.accent}, "
             f"theme-font={self.fontFamily}, theme-base-size={_num(self.baseFontSizePt)}pt, "
             f"theme-line-height={_num(self.lineHeight)}, theme-margin={_num(self.marginMm)}mm, "
-            f"theme-section-gap={_num(self.sectionGapMm)}mm"
+            f"theme-section-gap={_num(self.sectionGapMm)}mm, "
+            f"theme-avatar-style={self.avatarStyle}"
         )
 
 
@@ -179,6 +188,7 @@ def normalize_theme_config(
         "lineHeight": DEFAULT_THEME.lineHeight,
         "marginMm": DEFAULT_THEME.marginMm,
         "sectionGapMm": DEFAULT_THEME.sectionGapMm,
+        "avatarStyle": DEFAULT_THEME.avatarStyle,
     }
     # 模板默认覆盖全局默认：颜色取 meta.theme，文本取 text_defaults，边距取 layout_features
     for key in ("primary", "accent"):
@@ -223,6 +233,16 @@ def normalize_theme_config(
                     if strict:
                         raise ValueError(msg)
                     logger.warning("[主题配置] %s，回退默认字体", msg)
+                    continue
+                base[key] = str(value)
+                continue
+
+            if key == "avatarStyle":
+                if value not in AVATAR_STYLES:
+                    msg = f"avatarStyle 必须是 {list(AVATAR_STYLES)} 之一（收到 {value!r}）"
+                    if strict:
+                        raise ValueError(msg)
+                    logger.warning("[主题配置] %s，回退一寸照", msg)
                     continue
                 base[key] = str(value)
                 continue

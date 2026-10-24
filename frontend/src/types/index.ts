@@ -318,7 +318,15 @@ export interface QuotaPackageItem {
 }
 
 export interface ResumeParseResult {
-  personal_info: { name?: string; email?: string; phone?: string }
+  /** personal_info.avatar = 职业照（dataURL/URL）；address 等字段按模板可选消费 */
+  personal_info: {
+    name?: string
+    email?: string
+    phone?: string
+    address?: string
+    title?: string
+    avatar?: string
+  }
   summary?: string
   experience: Array<{
     company: string

@@ -10,7 +10,8 @@
  *   便于版本迁移与「重置默认布局」；
  * - 空数据不生成对应块；完全没有数据时返回空 blocks 文档（上层给提示）；
  * - contentRef.payload 冻结对应数据子结构，预览/导出都以快照为准；
- * - personal_info 暂无头像字段，默认不生成 avatar block（类型已在 types.ts 预留）。
+ * - personal_info.avatar 有值时生成右上角头像块（30×42mm 一寸照比例，freedom=free
+ *   可任意拖拽/缩放；source=personal_info.avatar，行内改 URL 经 rebuildContent 回写）。
  *
  * 两阶段：先按内容估算高度收集全部 Draft（位置未定），再流式分页。
  * 分页规则：
@@ -67,6 +68,9 @@ const SKILL_GROUP_HEIGHT_MM = 12;
 /** item 类的最小高度：保证空条目也有可点击/可拖拽的区域 */
 const ITEM_MIN_HEIGHT_MM = 16;
 const EDUCATION_HEIGHT_MM = 12;
+/** 职业照块默认尺寸：30×42mm（5:7 一寸照比例），固定页面右上角 */
+const AVATAR_WIDTH_MM = 30;
+const AVATAR_HEIGHT_MM = 42;
 
 /** 分页收集阶段的中间产物：高度已定，位置留给第二阶段流式排布 */
 interface Draft {
@@ -78,6 +82,10 @@ interface Draft {
   overrides?: Partial<Pick<Block, 'freedom' | 'sizePolicy' | 'style'>>;
   /** keep-with-next：与后一个块不可分页分离（栏目标题 vs 首条内容） */
   keepNext?: boolean;
+  /** 自定义宽度（mm）：有职业照时头部区收窄为左栏，避免与右上角头像矩形重叠 */
+  w?: number;
+  /** 固定坐标块（职业照）：不参与垂直流，直接落在指定位置 */
+  fixed?: { x: number; y: number; w: number; h: number };
 }
 
 /**
@@ -129,8 +137,9 @@ export function buildLayout(
     payload: unknown,
     overrides?: Partial<Pick<Block, 'freedom' | 'sizePolicy' | 'style'>>,
     keepNext = false,
+    wOverride?: number,
   ): void => {
-    drafts.push({ id, type, h: roundMm(h), source, payload, overrides, keepNext });
+    drafts.push({ id, type, h: roundMm(h), source, payload, overrides, keepNext, w: wOverride });
   };
 
   const hasText = (v: unknown): boolean => typeof v === 'string' && v.trim().length > 0;
@@ -151,24 +160,37 @@ export function buildLayout(
   const education = Array.isArray(data.education) ? data.education : [];
   const skills = Array.isArray(data.skills) ? data.skills : [];
   const projects = Array.isArray(data.projects) ? data.projects : [];
+  const avatarUrl = typeof personal?.avatar === 'string' ? personal.avatar.trim() : '';
+
+  // 有职业照时：头像占右上角 30×42mm，头部区（姓名/联系方式）收窄为左栏
+  // （146mm），分隔线起的内容流下探到头像底部+gap——矩形零重叠，
+  // validateLayout 不报重叠警告，默认布局依旧「开箱干净」。
+  const avatarX = roundMm(canvas.width - margin - AVATAR_WIDTH_MM);
+  const headW = avatarUrl ? roundMm(avatarX - margin - gap) : w;
 
   // 头部：姓名 → 联系方式 → 分隔线
   if (personal && hasText(personal.name)) {
     push(
       'blk_header',
       'header',
-      autoHeight('header', w, personal, HEADER_HEIGHT_MM, 0, 'personal_info.name'),
+      autoHeight('header', headW, personal, HEADER_HEIGHT_MM, 0, 'personal_info.name'),
       'personal_info.name',
       personal,
+      undefined,
+      false,
+      headW,
     );
   }
   if (personal && (hasText(personal.email) || hasText(personal.phone))) {
     push(
       'blk_contact',
       'contact',
-      autoHeight('contact', w, personal, CONTACT_HEIGHT_MM, 0, 'personal_info'),
+      autoHeight('contact', headW, personal, CONTACT_HEIGHT_MM, 0, 'personal_info'),
       'personal_info',
       personal,
+      undefined,
+      false,
+      headW,
     );
   }
   if (drafts.length > 0) {
@@ -272,14 +294,51 @@ export function buildLayout(
     });
   }
 
+  // 职业照：固定页面右上角（不参与垂直流；无照片不生成，版式与无头像时一致）。
+  // 放在 drafts 末尾 = blocks 数组末尾 = z 序最上，压住可能很长的联系方式行。
+  if (avatarUrl) {
+    drafts.push({
+      id: 'blk_avatar',
+      type: 'avatar',
+      h: AVATAR_HEIGHT_MM,
+      source: 'personal_info.avatar',
+      payload: { url: avatarUrl },
+      fixed: { x: avatarX, y: margin, w: AVATAR_WIDTH_MM, h: AVATAR_HEIGHT_MM },
+    });
+  }
+
   // ── 阶段二：流式分页 ──
   const safeBottom = roundMm(canvas.height - margin);
   const blocks: Block[] = [];
   let page = 0;
+  // 固定块（职业照）把垂直流的下探线压到其底部+gap：头部区（姓名/联系方式）
+  // 收窄成左栏与头像并行，其余通栏块必须整块让位，否则矩形重叠会进 validate 警告。
+  const flowFloor = drafts.reduce(
+    (floor, d) => (d.fixed ? Math.max(floor, roundMm(d.fixed.y + d.fixed.h + gap)) : floor),
+    margin,
+  );
   let y = margin;
 
   for (let i = 0; i < drafts.length; i++) {
     const d = drafts[i];
+    const defaults = defaultsForTypeClone(d.type);
+    const bw = d.w ?? w;
+    // 固定坐标块（职业照）：不占垂直流，直接落在指定位置（默认第 0 页右上角）
+    if (d.fixed) {
+      blocks.push({
+        id: d.id,
+        type: d.type,
+        page: 0,
+        rect: { x: d.fixed.x, y: d.fixed.y, w: d.fixed.w, h: d.fixed.h },
+        freedom: d.overrides?.freedom ?? defaults.freedom,
+        sizePolicy: d.overrides?.sizePolicy ?? defaults.sizePolicy,
+        contentRef: { source: d.source, payload: d.payload },
+        ...(d.overrides?.style ? { style: d.overrides.style } : {}),
+      });
+      continue;
+    }
+    // 窄栏块（头部区）与头像并行；通栏块下探到头像底部之下
+    if (d.w === undefined && y < flowFloor) y = flowFloor;
     // keep-with-next：与后一个块合计放不下且本页已有内容 → 一起翻页
     const followH = d.keepNext ? drafts[i + 1]?.h ?? 0 : 0;
     const need = followH > 0 ? roundMm(d.h + gap + followH) : d.h;
@@ -288,12 +347,11 @@ export function buildLayout(
       page += 1;
       y = margin;
     }
-    const defaults = defaultsForTypeClone(d.type);
     blocks.push({
       id: d.id,
       type: d.type,
       page,
-      rect: { x, y: roundMm(y), w, h: d.h },
+      rect: { x, y: roundMm(y), w: bw, h: d.h },
       freedom: d.overrides?.freedom ?? defaults.freedom,
       sizePolicy: d.overrides?.sizePolicy ?? defaults.sizePolicy,
       contentRef: { source: d.source, payload: d.payload },

@@ -140,6 +140,65 @@ describe('buildLayout: 空数据与缺节', () => {
   });
 });
 
+describe('buildLayout: 职业照块', () => {
+  const AVATAR = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==';
+
+  it('personal_info.avatar 有值 → 末尾生成 blk_avatar（z 序最上）', () => {
+    const d = buildLayout({ ...FULL, personal_info: { ...FULL.personal_info!, avatar: AVATAR } });
+    const list = ids(d);
+    assert.equal(list[list.length - 1], 'blk_avatar');
+  });
+
+  it('无 avatar → 不生成头像块（版式与历史一致）', () => {
+    const d = buildLayout(FULL);
+    assert.equal(d.blocks.some((b) => b.type === 'avatar'), false);
+  });
+
+  it('头像块固定右上角：30×42mm（5:7 一寸照比例）', () => {
+    const d = buildLayout({ ...FULL, personal_info: { ...FULL.personal_info!, avatar: AVATAR } });
+    const av = d.blocks.find((b) => b.type === 'avatar')!;
+    assert.deepEqual(
+      { x: av.rect.x, y: av.rect.y, w: av.rect.w, h: av.rect.h },
+      { x: 210 - 15 - 30, y: 15, w: 30, h: 42 },
+    );
+  });
+
+  it('头部区收窄为左栏（146mm）与头像并行，通栏内容下探到头像底部之下', () => {
+    const d = buildLayout({ ...FULL, personal_info: { ...FULL.personal_info!, avatar: AVATAR } });
+    const byId = new Map(d.blocks.map((b) => [b.id, b]));
+    const header = byId.get('blk_header')!;
+    const contact = byId.get('blk_contact')!;
+    const divider = byId.get('blk_divider')!;
+    const av = byId.get('blk_avatar')!;
+    // 头部/联系方式窄栏：右缘不越过头像左缘（165 - 4 间隙）
+    assert.equal(header.rect.x + header.rect.w, 161);
+    assert.equal(contact.rect.x + contact.rect.w, 161);
+    // 通栏块（分隔线起）必须整块位于头像底部+gap 之下，矩形零重叠
+    assert.ok(divider.rect.y >= av.rect.y + av.rect.h + 4 - 0.01, `divider y=${divider.rect.y}`);
+    assert.equal(divider.rect.w, 180);
+  });
+
+  it('头像块 payload 为 { url }，source=personal_info.avatar，freedom=free', () => {
+    const d = buildLayout({ ...FULL, personal_info: { ...FULL.personal_info!, avatar: AVATAR } });
+    const av = d.blocks.find((b) => b.type === 'avatar')!;
+    assert.deepEqual(av.contentRef.payload, { url: AVATAR });
+    assert.equal(av.contentRef.source, 'personal_info.avatar');
+    assert.equal(av.freedom, 'free');
+  });
+
+  it('只有头像（无姓名）→ 单块，无 divider', () => {
+    const d = buildLayout({ personal_info: { avatar: AVATAR } });
+    assert.deepEqual(ids(d), ['blk_avatar']);
+  });
+
+  it('带头像的默认布局同样开箱干净（validateLayout 无修正无警告）', () => {
+    const d = buildLayout({ ...FULL, personal_info: { ...FULL.personal_info!, avatar: AVATAR } });
+    const result = validateLayout(d);
+    assert.equal(result.autoFixedCount, 0);
+    assert.equal(result.issues.length, 0);
+  });
+});
+
 describe('buildLayout: 幂等与 id 稳定性', () => {
   it('同数据两次生成结构一致（忽略 updatedAt）', () => {
     const a = buildLayout(FULL);

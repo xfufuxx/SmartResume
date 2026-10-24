@@ -182,8 +182,10 @@
 </style>
 </head>
 <body>
+  {% from '_avatar.html' import avatar %}
   <div class="main">
     <div class="sidebar">
+      {{ avatar(resume, placement="flow", avatar_style=avatar_style) }}
       <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
       <div class="role-line">
         {% if resume.personal_info.email %}<div>{{ resume.personal_info.email }}</div>{% endif %}

@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+
+<title>陈思远的简历</title>
+<meta name="author" content="智能简历">
+<meta name="description" content="经典单栏专业版简历">
+<meta name="keywords" content="简历,resume">
+<meta name="template-id" content="jade-classic">
+<meta name="template-version" content="1.0.0">
+<style>
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Regular.ttf') format('truetype');
+    font-weight: 400;
+    font-style: normal;
+  }
+  @font-face {
+    font-family: 'Noto Sans SC';
+    src: url('../fonts/NotoSansSC-Bold.ttf') format('truetype');
+    font-weight: 700;
+    font-style: normal;
+  }
+  @page { margin: 1.5cm 1.6cm; size: A4; }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif);
+    font-size: var(--tpl-base-size, 10pt);
+    color: var(--tpl-primary, #1f2937);
+    line-height: var(--tpl-line-height, 1.6);
+    width: 210mm;
+    min-height: 297mm;
+    background: #fff;
+  }
+
+  /* ── 页眉：姓名 + 联系方式（居中粗线） ── */
+  .header {
+    text-align: center;
+    padding-bottom: 10px;
+    border-bottom: 3px solid var(--tpl-primary, #1f2937);
+    margin-bottom: 14px;
+  }
+  .header .name {
+    font-size: 24pt;
+    font-weight: 700;
+    letter-spacing: 6px;
+    color: #111827;
+    margin-bottom: 4px;
+  }
+  .header .contact {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 0 18px;
+    font-size: 9pt;
+    color: var(--tpl-accent, #6b7280);
+  }
+  .header .contact span { white-space: nowrap; }
+
+  /* ── 分节 ── */
+  .section { margin-bottom: var(--tpl-section-gap, 12px); }
+  .section-title {
+    font-size: 12pt;
+    font-weight: 700;
+    letter-spacing: 2px;
+    color: #111827;
+    border-bottom: 2px solid var(--tpl-primary, #1f2937);
+    padding-bottom: 2px;
+    margin-bottom: 6px;
+  }
+
+  .summary-text {
+    font-size: 9.5pt;
+    color: #374151;
+    line-height: 1.7;
+    text-align: justify;
+  }
+
+  /* ── 经历条目（打印分页不断裂） ── */
+  .exp-item {
+    margin-bottom: 8px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .exp-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    gap: 12px;
+    margin-bottom: 2px;
+  }
+  .exp-header .title {
+    font-weight: 700;
+    font-size: 10.5pt;
+    color: #111827;
+  }
+  .exp-header .date {
+    font-size: 9pt;
+    color: var(--tpl-accent, #6b7280);
+    white-space: nowrap;
+  }
+  .exp-points { list-style: none; margin-top: 2px; }
+  .exp-points li {
+    font-size: 9.5pt;
+    color: #374151;
+    line-height: 1.6;
+    padding-left: 12px;
+    position: relative;
+  }
+  .exp-points li::before {
+    content: "•";
+    position: absolute;
+    left: 0;
+    color: var(--tpl-primary, #1f2937);
+  }
+
+  .proj-item {
+    margin-bottom: 8px;
+    padding-left: 10px;
+    border-left: 2px solid #d1d5db;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .proj-tech {
+    font-size: 9pt;
+    color: var(--tpl-accent, #6b7280);
+    font-style: italic;
+    margin-top: 2px;
+  }
+
+  /* ── 技能 ── */
+  .skills-list {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px 14px;
+  }
+  .skills-list span {
+    font-size: 9.5pt;
+    color: #374151;
+    white-space: nowrap;
+  }
+  .skills-list span::before {
+    content: "▪ ";
+    font-size: 8pt;
+  }
+
+  /* ── 教育 ── */
+  .edu-item {
+    margin-bottom: 4px;
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  .edu-detail { font-size: 9pt; color: var(--tpl-accent, #6b7280); }
+
+  /* ── 打印 ── */
+  @media print {
+    body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+<style>
+/* ══ 打印基座（print_css.build_print_css 自动生成，勿手改）══
+   本段位于模板私有样式之后：同名规则以本段为准。
+   分页策略由 template_meta.layout_features 驱动。 */
+  @page {
+    size: A4;
+    margin: 15mm 16mm;
+  }
+  /* 纸张盒模型：打印态填满内容区 / 屏幕态用 padding 还原同款页边距。
+     目的：预览与导出的内容区宽度、字号、换行位置完全一致（所见即所得）。
+     模板 body 若有自定义 padding 会被本段归零——页边距一律以 A4 页边距规则为准。
+     position:relative 给职业照槽位（.tpl-avatar-slot）提供包含块：
+     屏幕态 body 即 210mm 纸面、打印态即内容区，两者都与各自 Media 下的
+     槽位偏移规则配套；对既有绝对定位元素是等效 no-op（它们的祖先本就 relative）。 */
+  @media print {
+    body {
+      box-sizing: border-box;
+      width: auto;
+      position: relative;
+      min-height: calc(297mm - 30mm);
+      padding: 0;
+      margin: 0;
+    }
+  }
+  @media screen {
+    html { background: #eceef1; }
+    body {
+      box-sizing: border-box;
+      position: relative;
+      min-height: calc(297mm - 30mm);
+      padding: 15mm 16mm;
+      margin: 0 auto;
+    }
+  }
+  /* 职业照槽位偏移：屏幕态避开模拟页边距 / 打印态贴内容区（预览=导出） */
+  @media screen {
+    .tpl-avatar-slot { top: 15mm; right: 16mm; }
+  }
+  @media print {
+    .tpl-avatar-slot { top: 0; right: 0; }
+  }
+  /* 背景色必须打印（否则渐变/色块在 PDF 里凭空消失） */
+  html, body {
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+  /* 标题不落在页尾（孤立标题） */
+  h1, h2, h3, h4 {
+    break-after: avoid;
+    page-break-after: avoid;
+  }
+  /* 段落孤行/寡行控制 */
+  p, li {
+    orphans: 3;
+    widows: 3;
+  }
+  /* 条目级分页保护（勿加到 section 容器：会把整节推下一页留大白） */
+  .exp-item,
+.proj-item,
+.edu-item,
+.timeline-item,
+.side-block,
+.entry,
+.job-item,
+.project-item,
+.education-item,
+.experience-item {
+    break-inside: avoid;
+    page-break-inside: avoid;
+  }
+  /* 主题变量（导出与预览共用同一套） */
+  :root {
+    --tpl-accent: #6b7280;
+    --tpl-avatar-style: oneInch;
+    --tpl-base-size: 10pt;
+    --tpl-font: Noto Sans SC;
+    --tpl-line-height: 1.6;
+    --tpl-primary: #1f2937;
+    --tpl-section-gap: 3.2mm;
+  }
+</style>
+</head>
+<body>
+  
+  <div class="header">
+      
+    <div class="name">陈思远</div>
+    <div class="contact">
+      
+      
+      
+    </div>
+  </div>
+
+  
+  <div class="section">
+    <div class="section-title">个人概述</div>
+    <div class="summary-text">x</div>
+  </div>
+  
+
+  
+
+  
+
+  
+
+  
+</body>
+</html>

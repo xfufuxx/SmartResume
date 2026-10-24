@@ -156,11 +156,15 @@ def build_print_css(features: LayoutFeatures | None = None, *, theme: Mapping[st
     body_box_rule = (
         "  /* 纸张盒模型：打印态填满内容区 / 屏幕态用 padding 还原同款页边距。\n"
         "     目的：预览与导出的内容区宽度、字号、换行位置完全一致（所见即所得）。\n"
-        "     模板 body 若有自定义 padding 会被本段归零——页边距一律以 A4 页边距规则为准。 */\n"
+        "     模板 body 若有自定义 padding 会被本段归零——页边距一律以 A4 页边距规则为准。\n"
+        "     position:relative 给职业照槽位（.tpl-avatar-slot）提供包含块：\n"
+        "     屏幕态 body 即 210mm 纸面、打印态即内容区，两者都与各自 Media 下的\n"
+        "     槽位偏移规则配套；对既有绝对定位元素是等效 no-op（它们的祖先本就 relative）。 */\n"
         "  @media print {\n"
         "    body {\n"
         "      box-sizing: border-box;\n"
         "      width: auto;\n"
+        "      position: relative;\n"
         f"      min-height: calc(297mm - {_mm(2 * page_margin_y)}mm);\n"
         "      padding: 0;\n"
         "      margin: 0;\n"
@@ -170,10 +174,24 @@ def build_print_css(features: LayoutFeatures | None = None, *, theme: Mapping[st
         "    html { background: #eceef1; }\n"
         "    body {\n"
         "      box-sizing: border-box;\n"
+        "      position: relative;\n"
         f"      min-height: calc(297mm - {_mm(2 * page_margin_y)}mm);\n"
         f"      padding: {_mm(page_margin_y)}mm {_mm(page_margin_x)}mm;\n"
         "      margin: 0 auto;\n"
         "    }\n"
+        "  }"
+    )
+
+    # 职业照槽位（.tpl-avatar-slot，placement=corner）的媒体感知偏移：
+    # 屏幕态避开 body 的模拟页边距（与内容区对齐），打印态贴内容区（@page 已给边距）。
+    # 全幅模板边距为 0，两态一致（且全幅模板本身用 flow 摆放，走不到这条规则）。
+    avatar_slot_rule = (
+        "  /* 职业照槽位偏移：屏幕态避开模拟页边距 / 打印态贴内容区（预览=导出） */\n"
+        "  @media screen {\n"
+        f"    .tpl-avatar-slot {{ top: {_mm(page_margin_y)}mm; right: {_mm(page_margin_x)}mm; }}\n"
+        "  }\n"
+        "  @media print {\n"
+        "    .tpl-avatar-slot { top: 0; right: 0; }\n"
         "  }"
     )
 
@@ -183,6 +201,7 @@ def build_print_css(features: LayoutFeatures | None = None, *, theme: Mapping[st
         "   分页策略由 template_meta.layout_features 驱动。 */",
         page_rule,
         body_box_rule,
+        avatar_slot_rule,
         "  /* 背景色必须打印（否则渐变/色块在 PDF 里凭空消失） */\n"
         "  html, body {\n"
         "    -webkit-print-color-adjust: exact;\n"

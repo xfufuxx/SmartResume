@@ -153,7 +153,9 @@
 </style>
 </head>
 <body>
+  {% from '_avatar.html' import avatar %}
   <div class="header">
+      {{ avatar(resume, placement="corner", avatar_style=avatar_style) }}
     <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
     <div class="contact">
       {% if resume.personal_info.email %}<span>{{ resume.personal_info.email }}</span>{% endif %}

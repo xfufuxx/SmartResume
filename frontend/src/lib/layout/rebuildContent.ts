@@ -22,6 +22,11 @@ function isPlainObject(v: unknown): v is Json {
   return v !== null && typeof v === 'object' && !Array.isArray(v);
 }
 
+/** 宽松取字符串：非字符串/空串一律返回 ''（头像 URL 提取用） */
+function str(v: unknown): string {
+  return typeof v === 'string' ? v : '';
+}
+
 function deepClone<T>(v: T): T {
   return JSON.parse(JSON.stringify(v)) as T;
 }
@@ -88,8 +93,12 @@ function contentTargetOf(block: Block): { path: string[]; value: unknown; merge?
       return { path, value: typeof text === 'string' ? text : '' };
     }
     case 'avatar': {
+      // payload 是 { url } 形状（行内编辑器改 url 字段），但数据路径
+      // personal_info.avatar 存的是 URL 字符串本身——必须提取，不能整个对象写回
       const path = parsePath(block.contentRef.source);
-      return path.length ? { path, value: p } : null;
+      if (!path.length) return null;
+      const url = isPlainObject(p) ? (str(p.url) || str(p.avatar_url) || str(p.avatar)) : str(p);
+      return { path, value: url };
     }
     default:
       return null;

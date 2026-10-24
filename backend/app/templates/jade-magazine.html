@@ -180,7 +180,9 @@
 </style>
 </head>
 <body>
+  {% from '_avatar.html' import avatar %}
   <div class="masthead">
+      {{ avatar(resume, placement="flow", avatar_style=avatar_style) }}
     <div class="mast-kicker">CURRICULUM VITAE</div>
     <div class="mast-name">{{ resume.personal_info.name or '姓名' }}</div>
     <div class="mast-meta">

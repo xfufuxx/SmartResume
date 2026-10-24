@@ -646,6 +646,21 @@ export const analysis = {
     api.post('/api/analysis/resume', { resume_json: resumeJson, job_json: jobJson || null }),
 }
 
+/** AI 职业照：上传自拍 → 生成职业照（Key 由用户自带，服务端不落库） */
+export const aiPhoto = {
+  /**
+   * 生成职业照。注意：后端错误走 HTTP 200 + body.error（quota_exceeded /
+   * invalid_key / safety_filtered / generate_failed），前端需按 error 字段分支提示。
+   */
+  generate: (payload: {
+    image: string
+    prompt: string
+    requirements?: string
+    aspectRatio?: string
+    apiKey: string
+  }) => api.post('/api/ai-photo/generate', payload),
+}
+
 /** 优化结果在线编辑 + 重新导出 PDF */
 export const editor = {
   updateContent: (optId: string, optimizedJson: Record<string, unknown>) =>

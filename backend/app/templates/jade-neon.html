@@ -168,8 +168,10 @@
 </style>
 </head>
 <body>
+  {% from '_avatar.html' import avatar %}
   <div class="content">
     <div class="header">
+      {{ avatar(resume, placement="flow", avatar_style=avatar_style) }}
       <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
       {% if resume.personal_info.title %}<div class="headline">{{ resume.personal_info.title }}</div>{% endif %}
       <div class="contact">

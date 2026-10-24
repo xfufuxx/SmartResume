@@ -165,7 +165,11 @@ function GalleryInner() {
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
-                  <Typography.Text strong style={{ fontSize: 14, color: 'var(--text-primary)' }}>{opt.label}</Typography.Text>
+                  <Typography.Text strong style={{
+                    fontSize: 14, color: 'var(--text-primary)',
+                    flex: 1, minWidth: 0,
+                    whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                  }}>{opt.label}</Typography.Text>
                   {meta && <Tag style={{ fontSize: 10, borderRadius: 6 }}>{CATEGORY_LABELS[meta.category]}</Tag>}
                   {meta?.renderMode === 'react' && (
                     <Tooltip title="支持高保真组件预览">
@@ -207,16 +211,21 @@ function GalleryInner() {
         <Card
           hoverable
           size="small"
+          className="tpl-grid-card"
           style={cardStyle}
           styles={{ body: { padding: 12 } }}
           onClick={openPreview}
         >
           <MiniPreview preview={opt.preview} />
           <div style={{ marginTop: 8, display: 'flex', alignItems: 'center', gap: 6 }}>
-            <Typography.Text strong style={{ fontSize: 13, color: 'var(--text-primary)' }}>{opt.label}</Typography.Text>
+            <Typography.Text strong style={{
+              fontSize: 13, color: 'var(--text-primary)',
+              flex: 1, minWidth: 0,
+              whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+            }}>{opt.label}</Typography.Text>
             {meta?.renderMode === 'react' && (
               <Tooltip title="支持高保真组件预览">
-                <Tag color="green" style={{ fontSize: 10, borderRadius: 6, marginLeft: 'auto' }}>高保真</Tag>
+                <Tag color="green" style={{ fontSize: 10, borderRadius: 6, marginLeft: 'auto', flexShrink: 0 }}>高保真</Tag>
               </Tooltip>
             )}
           </div>

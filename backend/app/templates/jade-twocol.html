@@ -178,10 +178,16 @@
 </style>
 </head>
 <body>
+  {% from '_avatar.html' import avatar %}
   <div class="page">
     <!-- ── 左栏：联系方式 / 技能 / 教育 ── -->
     <aside class="sidebar">
-      <div class="side-avatar">{{ (resume.personal_info.name or '简')[:1] }}</div>
+      {# 侧栏头像：形状跟随主题 avatarStyle（circle=64×64 圆；oneInch=64px 宽 5:7 一寸照）。
+         注意此处是模板级行内代码（非宏内），可直接读渲染上下文 avatar_style。 #}
+      {% set _as = avatar_style if avatar_style else 'oneInch' %}
+      {% set _ar = '1 / 1' if _as == 'circle' else '5 / 7' %}
+      {% set _br = '9999px' if _as == 'circle' else '4px' %}
+      <div class="side-avatar" style="width:64px;{% if _as == 'circle' %}height:64px;{% else %}height:auto;aspect-ratio:5 / 7;{% endif %}border-radius:{{ _br }};">{% if resume.personal_info.avatar %}<img class="tpl-avatar" src="{{ resume.personal_info.avatar }}" alt="职业照" style="width:100%;aspect-ratio:{{ _ar }};border-radius:{{ _br }};object-fit:cover;display:block;" />{% else %}{{ (resume.personal_info.name or '简')[:1] }}{% endif %}</div>
 
       {% set contacts = [] %}
       {% if resume.personal_info.email %}{% set _ = contacts.append(resume.personal_info.email) %}{% endif %}

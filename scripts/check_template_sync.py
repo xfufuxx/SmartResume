@@ -50,7 +50,9 @@ DEMO_FILE = FRONTEND / "src" / "lib" / "template-demo-data.ts"
 TEMPLATE_DIR = BACKEND / "app" / "templates"
 
 #: 非「风格模板」的渲染壳（布局导出用），不参与模板集合比对
-NON_STYLE_TEMPLATES = {"layout_export"}
+#: 非样式模板（不参与「四集合一致性」比对）：layout_export 是布局编辑器的
+#: 导出壳；_avatar 是职业照渲染宏（被各模板 {% from %} 导入，不是独立模板）。
+NON_STYLE_TEMPLATES = {"layout_export", "_avatar"}
 
 CATEGORIES = {"business", "creative", "tech", "academic", "simple"}
 SEMVER = re.compile(r"^\d+\.\d+\.\d+$")

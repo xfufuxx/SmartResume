@@ -169,6 +169,7 @@
 </style>
 </head>
 <body>
+  {% from '_avatar.html' import avatar %}
   <div class="mosaic">
     <div class="col c1"><i class="m1"></i><i class="m2"></i></div>
     <div class="col c2"><i class="m3"></i><i class="m4"></i><i class="m5"></i></div>
@@ -176,6 +177,7 @@
   </div>
 
   <div class="header">
+      {{ avatar(resume, placement="corner", avatar_style=avatar_style) }}
     <div>
       <div class="name">{{ resume.personal_info.name or '姓名' }}</div>
       {% if resume.personal_info.title %}<div class="headline">{{ resume.personal_info.title }}</div>{% endif %}

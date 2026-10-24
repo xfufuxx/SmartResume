@@ -518,6 +518,7 @@ export default function OptimizationDetailPage() {
           recordId={id}
           templateId={template}
           initial={detail?.theme_config ?? null}
+          contentJson={(detail?.optimized_json as Record<string, unknown> | undefined) ?? null}
           onSaved={reloadDetail}
         />
       )}

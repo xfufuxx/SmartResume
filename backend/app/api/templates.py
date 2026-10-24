@@ -37,6 +37,8 @@ _DEMO_RESUME = {
         "name": "陈思远",
         "email": "chensiyuan@example.com",
         "phone": "138-0000-0000",
+        # 演示用职业照占位图（人物剪影，非真实人像）：让画廊/主题预览展示照片槽位
+        "avatar": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAMgAAAEYCAIAAACWcy5SAAAEy0lEQVR42u3d2U4TURzA4WPTtwBBE0XigtuFLAWXG8HlaV0QTYwxIAgxGre4QFzAW1+hXlTKEtRSZuqcc74vXBqFmV/P+TOdjofef/8ZoGj1ZrPpKFC4mkOAsBAW2c9YDgJWLGJZsUKwZGHFIpoZyzGglK1QWdgKERZmLHC5AcM7ZiwwY2HFQlhQ6PBuM8SKheEdKxYIC1feMWOBN6ExY2HGAjMWtkKEBcLCg9ewYoGwEBbCAk/0w5vQ2ApBWHgTGrfNgK0QYZHJjGUvxIqF4R0rFriOhRULMxa4uwEzFmYsEBaGd6xY4E1orFhkeB2LvY2e7Ovkjy29/+FYGd7/WtKpvoP3t/ROZy6QhhBCGOuqp3/WuZh3YXU9lf3351lYXVK9+edyyyuvN6HHTvX/35oX3214KEhSxk/3V6fsZ283bIWSKutbSjuvmqp8b8JK7cwl3Faa17Em4jlhrbYWktsWE7zyPnGmP8ZXwsKbDZcbqlzV4XhfDwtv1s1YqvL95xFWGmclmbYSuUDaGDmc0itk/vW6FUtVfqIUw0qvqjR+Lp+ErrKIT02tGUK8X42RgYSzaowMxHtqavFmNZl0VS2TIwORnp1YZ6zJs+lXFfVP6uNfmLE2v/JZrtqLVoQzFpRzd0Nkv9NOnRvM8DxNnR14+uqbGQszVlQ7d57LVXupNmPhaTPxuJzxchXdEfBQkOD9Q8M7nuhXtCvnjzhbIYTL5wefvPxqxcLwDkWGFcNVEfvg7qmg8qfME/38amgrxD3vZL5mWbHI9QOr1y4edZ52uXrh6OMXX6xYuI4FwsKMRdG/FjZdbiC/Kw62QoSFpyaT+aV3tyYry1aIN6HxWyFk+UnoRytrztMuj1bWKn7WDO+2QVshLpDiAil2wlJWrAg+//VweVVMbQ+XV6t/ygzv1iszFq5jFf4199xuGEIIc89XPdEPlxsgt9tmro8ec562jsal30djbmnVg9f2bXr0uIY6f709WPpcwdtm9BS99nGrTmF1PSkstRlrekxP5Re2+DmjFUtSPT7Uvc+rp29Cz+jpf28Os70qrEf3vM+MDTm7VdB6bc8ufop+K5RUJfMaKjuvsob3mXE9xZFXCGH22acIZqwbkoqusPGhEML9QvOqS4rtp6+ovOqSooy86pKijLxqzQNQVfJ5dd1GlyvWzYkTjnsOWif63sLH0rdCScmr4LAkJa/O8+r0wxSqop1XMQ8FudWQFDuTmDgRQrg7/7H7D1Ooiu7a+OPdDbcaw44dnbR1d/5DpzOWqthPXsN7zVg73ZYU+9fK5s62pWvHfzauKg6a12ZLW8P77UlVceC2NiuqS4oy2jrU9P/KETwUBGEhLBAWwkJYICyEhbBAWAgLYYGwEBbCAmEhLIQFwkJYCAuEhbAQFggLYSEsEBbCQlggLISFsEBYCAthgbAQFsICYSEshAXCQlgIC4SFsBAWCAthISwQFsJCWCAshIWwQFgIC2GBsBAWwgJhISyEBcJCWAgLhIWwEBYIC2EhLBAWwkJYICyEhbBAWAgLYSEsEBbCQlggLISFsEBYCAthgbAQFsICYSEshAXCQlgIC4SFsBAWCAthISwQFsJCWCAshIWwQFgIC2GBsBAWwgJhISyEBcJCWKTpF38MOUCOzvxvAAAAAElFTkSuQmCC",
     },
     "summary": (
         "5 年互联网产品设计经验，主导过日活百万级 C 端产品的完整设计周期。"
@@ -196,6 +198,7 @@ async def preview_template(
     base_font_size: float | None = Query(None, description="正文字号 pt（可选）"),
     line_height: float | None = Query(None, description="行距（可选）"),
     section_gap: float | None = Query(None, description="章节间距 mm（可选）"),
+    avatar_style: str | None = Query(None, description="职业照形状 circle/oneInch（可选）"),
 ):
     """用演示数据渲染指定模板，返回完整 HTML（iframe src 直接引用）。
 
@@ -221,6 +224,8 @@ async def preview_template(
         theme_config["lineHeight"] = line_height
     if section_gap is not None:
         theme_config["sectionGapMm"] = section_gap
+    if avatar_style:
+        theme_config["avatarStyle"] = avatar_style
 
     # 主题参数 strict 校验先于缓存校验：非法值明确 400，不会被 304 吞掉
     # （合法参数的 URL 与 ETag 一一对应，客户端只可能对自己拿到过 200 的 URL 发 304）

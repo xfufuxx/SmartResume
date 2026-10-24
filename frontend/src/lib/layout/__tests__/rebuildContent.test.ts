@@ -26,7 +26,7 @@ function doc(...blocks: Block[]): LayoutDocument {
 }
 
 const BASE = {
-  personal_info: { name: '张三', email: 'a@b.c', phone: '138' },
+  personal_info: { name: '张三', email: 'a@b.c', phone: '138', avatar: 'data:image/png;base64,OLD' },
   summary: '旧总结',
   experience: [
     { title: '工程师', company: '甲公司', start: '2020', end: '2023', points: ['旧要点'] },
@@ -92,6 +92,16 @@ describe('rebuildContent: 回写规则', () => {
     );
     const out = rebuildContent(d, BASE) as typeof BASE;
     assert.equal(out.experience[0].title, '工程师'); // 原样保留
+  });
+
+  it('avatar 块：payload 的 url 提取为字符串回写 personal_info.avatar', () => {
+    const d = doc(
+      block('blk_avatar', 'avatar', 'personal_info.avatar', { url: 'data:image/png;base64,NEW' }),
+    );
+    const out = rebuildContent(d, BASE) as typeof BASE;
+    assert.equal(out.personal_info.avatar, 'data:image/png;base64,NEW');
+    // 其余 personal_info 字段不动
+    assert.equal(out.personal_info.name, '张三');
   });
 
   it('未触碰的字段原样保留；隐藏块的内容也保留', () => {

@@ -1,0 +1,52 @@
+{# ───────────────────────────────────────────────────────────────────
+   职业照渲染宏（预览 / PDF 导出共用；参考 JadeAI AvatarImage + 导出 CSS）
+
+   用法（模板头部，姓名元素之前加一行）：
+     {% from '_avatar.html' import avatar %}
+     {{ avatar(resume, placement="corner", avatar_style=avatar_style) }}
+
+    参数：
+     resume     简历 JSON（resume.personal_info.avatar = 照片 dataURL/URL）
+     size       照片宽度（一寸照高度按 5:7 自动推导；圆形为正方形）
+     placement  corner = 绝对定位到内容区右上角（常规模板；
+                       top/right 偏移由打印基座按媒体状态注入：
+                       屏幕态避开模拟页边距、打印态贴内容区——
+                       与 body 盒模型同思路，保证预览=导出）
+                flow   = 文档流内右浮动（全幅头部模板用：避开顶部色带，
+                       照片落在头部内容区右上）
+                inline = 行内块（侧栏头像等窄容器）
+     extra_style 追加内联样式（如侧栏场景加 margin）
+
+   形状由渲染上下文 avatar_style 决定（theme_config.avatarStyle，
+   经 resume_theme.normalize_theme_config 归一化后由 render_template_html
+   传入模板渲染上下文）。**注意 Jinja 宏内访问不到渲染上下文变量**，
+   因此 avatar_style 必须经调用点显式透传（宏参数默认 oneInch）：
+     oneInch  一寸证件照（5:7 竖版、小圆角——中文简历惯例，默认）
+     circle   圆形头像
+
+   无照片时宏零输出（不改变任何既有版式）。
+   ─────────────────────────────────────────────────────────────────── #}
+{%- macro avatar(resume, size='60px', placement='corner', extra_style='', avatar_style='oneInch') -%}
+  {%- set pi = (resume.personal_info if resume and resume.personal_info else None) -%}
+  {%- if pi and pi.avatar -%}
+    {%- set st = avatar_style if avatar_style else 'oneInch' -%}
+    {%- if st == 'circle' -%}
+      {%- set ratio = '1 / 1' -%}
+      {%- set radius = '9999px' -%}
+    {%- else -%}
+      {%- set ratio = '5 / 7' -%}
+      {%- set radius = '4px' -%}
+    {%- endif -%}
+    {%- if placement == 'corner' -%}
+      {%- set slot = 'position:absolute;z-index:20;' -%}
+    {%- elif placement == 'flow' -%}
+      {%- set slot = 'float:right;margin:0 0 6px 14px;' -%}
+    {%- else -%}
+      {%- set slot = '' -%}
+    {%- endif -%}
+<div class="tpl-avatar-slot" style="{{ slot }}{{ extra_style }}">
+  <img class="tpl-avatar" src="{{ pi.avatar }}" alt="职业照" loading="eager"
+       style="width:{{ size }};aspect-ratio:{{ ratio }};border-radius:{{ radius }};object-fit:cover;display:block;flex-shrink:0;border:1.5px solid rgba(255,255,255,0.9);" />
+</div>
+  {%- endif -%}
+{%- endmacro -%}

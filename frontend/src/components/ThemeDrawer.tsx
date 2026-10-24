@@ -9,11 +9,11 @@
  * 导出所得」。保存即 PUT /api/optimize/{id}/theme（落库），可选立即重导出。
  */
 
-import React, { useEffect, useMemo, useState } from 'react'
+import React, { useEffect, useMemo, useRef, useState } from 'react'
 import {
-  Drawer, ColorPicker, Select, Slider, Button, Space, Typography, Tag, message, Tooltip,
+  Drawer, ColorPicker, Select, Slider, Segmented, Button, Space, Typography, Tag, message, Tooltip,
 } from 'antd'
-import { ReloadOutlined, SaveOutlined } from '@ant-design/icons'
+import { PictureOutlined, ReloadOutlined, SaveOutlined, UserOutlined } from '@ant-design/icons'
 import { TemplateRegistry } from '@/lib/templates-register'
 import { editor } from '@/lib/api'
 
@@ -36,6 +36,8 @@ export interface ThemeForm {
   lineHeight: number
   marginMm: number
   sectionGapMm: number
+  /** 职业照形状（theme_config.avatarStyle，后端白名单校验） */
+  avatarStyle: string
 }
 
 interface ThemeDrawerProps {
@@ -46,8 +48,42 @@ interface ThemeDrawerProps {
   templateId: string
   /** 记录已保存的主题定制（部分字段或 null） */
   initial: Record<string, unknown> | null
+  /** 当前简历内容（职业照上传/移除要基于它改 personal_info.avatar） */
+  contentJson?: Record<string, unknown> | null
   /** 保存成功（已落库）后回调，用于刷新详情 */
   onSaved: () => void
+}
+
+/** 职业照上传压缩：长边 ≤200px、JPEG 0.85（与 JadeAI 头像上传同参数） */
+async function resizeAvatar(file: File): Promise<string> {
+  const dataUrl = await new Promise<string>((resolve, reject) => {
+    const reader = new FileReader()
+    reader.onload = () => resolve(reader.result as string)
+    reader.onerror = () => reject(new Error('图片读取失败'))
+    reader.readAsDataURL(file)
+  })
+  const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+    const image = new Image()
+    image.onload = () => resolve(image)
+    image.onerror = () => reject(new Error('图片解析失败，请换一张试试'))
+    image.src = dataUrl
+  })
+  const MAX = 200
+  let { width, height } = img
+  if (width > height && width > MAX) {
+    height = Math.round((height * MAX) / width)
+    width = MAX
+  } else if (height >= width && height > MAX) {
+    width = Math.round((width * MAX) / height)
+    height = MAX
+  }
+  const canvas = document.createElement('canvas')
+  canvas.width = width
+  canvas.height = height
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('浏览器不支持 canvas')
+  ctx.drawImage(img, 0, 0, width, height)
+  return canvas.toDataURL('image/jpeg', 0.85)
 }
 
 /** 模板默认 ← 记录定制，合并出抽屉初始值 */
@@ -62,6 +98,7 @@ function buildInitialForm(templateId: string, initial: Record<string, unknown> |
     lineHeight: td?.lineHeight ?? 1.6,
     marginMm: meta?.layoutFeatures.pageMarginYMm ?? 15,
     sectionGapMm: td?.sectionGapMm ?? 6,
+    avatarStyle: 'oneInch',
   }
   if (initial) {
     const target = form as unknown as Record<string, string | number>
@@ -76,11 +113,19 @@ function buildInitialForm(templateId: string, initial: Record<string, unknown> |
 }
 
 export default function ThemeDrawer({
-  open, onClose, recordId, templateId, initial, onSaved,
+  open, onClose, recordId, templateId, initial, contentJson, onSaved,
 }: ThemeDrawerProps) {
   const meta = TemplateRegistry.get(templateId)
   const [form, setForm] = useState<ThemeForm>(() => buildInitialForm(templateId, initial))
   const [saving, setSaving] = useState(false)
+  const [avatarUploading, setAvatarUploading] = useState(false)
+  const avatarInputRef = useRef<HTMLInputElement | null>(null)
+
+  const currentAvatar = useMemo(() => {
+    const pi = contentJson?.personal_info as Record<string, unknown> | undefined
+    const url = pi?.avatar
+    return typeof url === 'string' && url ? url : ''
+  }, [contentJson])
 
   // 抽屉重新打开 / 记录切换时重置表单
   useEffect(() => {
@@ -100,11 +145,56 @@ export default function ThemeDrawer({
       base_font_size: String(form.baseFontSizePt),
       line_height: String(form.lineHeight),
       section_gap: String(form.sectionGapMm),
+      avatar_style: form.avatarStyle,
     })
     return `/api/templates/${templateId}/preview?${params.toString()}`
   }, [templateId, form])
 
   const fullBleed = !!meta?.layoutFeatures.fullBleedHeader
+
+  /** 职业照上传：压缩到 200px → 写 personal_info.avatar → 重导出（内容变更不走主题链） */
+  const handleUploadAvatar = async (file: File | undefined) => {
+    if (!file) return
+    if (!file.type.startsWith('image/')) {
+      message.error('请选择图片文件（JPG / PNG / WebP）')
+      return
+    }
+    setAvatarUploading(true)
+    try {
+      const avatar = await resizeAvatar(file)
+      const json = { ...(contentJson || {}) }
+      const pi = { ...((json.personal_info as Record<string, unknown>) || {}) }
+      pi.avatar = avatar
+      json.personal_info = pi
+      await editor.updateContent(recordId, json)
+      await editor.reexport(recordId)
+      message.success('职业照已更新，预览与 PDF 同步生效')
+      onSaved()
+    } catch (e) {
+      message.error(`上传失败：${(e as Error)?.message || '请稍后重试'}`)
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
+
+  /** 移除职业照：删 personal_info.avatar → 重导出（无照片时模板宏零输出，版式回退） */
+  const handleRemoveAvatar = async () => {
+    setAvatarUploading(true)
+    try {
+      const json = { ...(contentJson || {}) }
+      const pi = { ...((json.personal_info as Record<string, unknown>) || {}) }
+      delete pi.avatar
+      json.personal_info = pi
+      await editor.updateContent(recordId, json)
+      await editor.reexport(recordId)
+      message.success('职业照已移除')
+      onSaved()
+    } catch (e) {
+      message.error(`移除失败：${(e as Error)?.message || '请稍后重试'}`)
+    } finally {
+      setAvatarUploading(false)
+    }
+  }
 
   const handleSave = async () => {
     setSaving(true)
@@ -162,6 +252,76 @@ export default function ThemeDrawer({
           borderRadius: 8,
           margin: '8px 0 16px',
           background: '#fff',
+        }}
+      />
+
+      {/* ── 职业照 ── */}
+      <Typography.Text strong>职业照</Typography.Text>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16, margin: '8px 0 16px' }}>
+        <div
+          style={{
+            width: 64,
+            height: 80,
+            borderRadius: form.avatarStyle === 'circle' ? '50%' : 4,
+            overflow: 'hidden',
+            border: '1px solid rgba(0,0,0,0.12)',
+            background: '#f5f5f5',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            flexShrink: 0,
+          }}
+        >
+          {currentAvatar ? (
+            <img
+              src={currentAvatar}
+              alt="当前职业照"
+              style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+            />
+          ) : (
+            <UserOutlined style={{ fontSize: 28, color: '#bbb' }} />
+          )}
+        </div>
+        <Space direction="vertical" size={8}>
+          <Space>
+            <Button
+              icon={<PictureOutlined />}
+              loading={avatarUploading}
+              onClick={() => avatarInputRef.current?.click()}
+            >
+              上传照片
+            </Button>
+            {currentAvatar && (
+              <Button type="text" danger loading={avatarUploading} onClick={() => void handleRemoveAvatar()}>
+                移除
+              </Button>
+            )}
+          </Space>
+          <div>
+            <Segmented
+              size="small"
+              value={form.avatarStyle}
+              onChange={(v) => set('avatarStyle', v as string)}
+              options={[
+                { label: '一寸照', value: 'oneInch' },
+                { label: '圆形', value: 'circle' },
+              ]}
+            />
+          </div>
+          <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+            照片压缩到 200px 存入简历；一寸照为 5:7，圆形为 1:1。
+            想要 AI 生成职业照，可去「AI 职业照」页制作后一键设为头像。
+          </Typography.Text>
+        </Space>
+      </div>
+      <input
+        ref={avatarInputRef}
+        type="file"
+        accept="image/png,image/jpeg,image/webp"
+        style={{ display: 'none' }}
+        onChange={(e) => {
+          void handleUploadAvatar(e.target.files?.[0])
+          e.target.value = ''
         }}
       />
 

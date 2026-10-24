@@ -186,7 +186,9 @@
 </style>
 </head>
 <body>
+  {% from '_avatar.html' import avatar %}
   <div class="header">
+      {{ avatar(resume, placement="corner", avatar_style=avatar_style) }}
     {% set _nm = resume.personal_info.name or '姓名' %}
     <div class="avatar">{{ _nm[0] }}</div>
     <div class="info">

@@ -16,7 +16,7 @@
     font-style: normal;
   }
   @page { margin: 1.5cm; size: A4; }
-  body { font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif); font-size: var(--tpl-base-size, 11pt); color: #333; line-height: var(--tpl-line-height, 1.6); }
+  body { font-family: var(--tpl-font, 'Noto Sans SC', 'Microsoft YaHei', sans-serif); font-size: var(--tpl-base-size, 11pt); color: #333; line-height: var(--tpl-line-height, 1.6); background: #fff; width: 210mm; }
   h1 { font-size: 20pt; margin-bottom: 4px; color: #1a1a1a; }
   .contact { font-size: 10pt; color: #666; margin-bottom: 12px; }
   .contact span { margin-right: 12px; }
@@ -31,6 +31,8 @@
 </style>
 </head>
 <body>
+  {% from '_avatar.html' import avatar %}
+  {{ avatar(resume, placement="corner", avatar_style=avatar_style) }}
   <h1>{{ resume.personal_info.name or '姓名' }}</h1>
   <div class="contact">
     <span>{{ resume.personal_info.email or '' }}</span>
