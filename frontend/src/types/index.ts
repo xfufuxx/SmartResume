@@ -360,7 +360,8 @@ export interface ResumeRecord {
   id: string
   user_id: string
   title?: string
-  original_file_url: string
+  /** 原件 URL；解析导入的简历无原件，为 null */
+  original_file_url: string | null
   file_type: string
   parsed_json: ResumeParseResult | null
   raw_text: string | null

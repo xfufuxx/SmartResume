@@ -16,7 +16,8 @@ class ResumeResponse(BaseModel):
     id: str
     user_id: str
     title: Optional[str] = None
-    original_file_url: str
+    # 解析导入的简历无原件 URL（NULL）；上传存档链路必有值
+    original_file_url: Optional[str] = None
     file_type: str
     parsed_json: Optional[dict] = None
     raw_text: Optional[str] = None

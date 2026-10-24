@@ -19,7 +19,8 @@ class TestAuthTokens:
 
     def test_create_access_token_has_correct_type(self):
         token = create_access_token('user-123')
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=['HS256'])
+        # 密钥三拆分后 SECRET_KEY 已改名 JWT_SECRET（见 app/config.py 注释）
+        payload = jwt.decode(token, settings.JWT_SECRET, algorithms=['HS256'])
         assert payload['sub'] == 'user-123'
         assert payload['type'] == 'access'
         assert 'exp' in payload

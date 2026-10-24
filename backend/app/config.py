@@ -88,6 +88,7 @@ class Settings(BaseSettings):
     # 这里只配默认模型与每用户每日生成上限（Redis 自然日分桶，防刷）。
     AI_PHOTO_MODEL: str = "gemini-3.1-flash-image-preview"  # Nano Banana 图像编辑
     AI_PHOTO_DAILY_LIMIT: int = 20         # 每用户每日生成上限
+    POLISH_DAILY_LIMIT: int = 30           # 每用户每日 AI 对话润色次数上限
 
     # ── QQ 登录（QQ 互联 OAuth2.0，网站应用）────────────────────────────
     # 申请入口：https://connect.qq.com  → 创建「网站应用」→ 审核通过后拿到

@@ -1,6 +1,7 @@
 import axios from 'axios'
 
 import type { InterviewTrackPayload, ApplicationPayload, CommunicationPayload, AssessmentSubmit } from '@/types'
+import { getToken } from '@/lib/auth'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -361,6 +362,21 @@ export const resumes = {
   batchRestore: (ids: string[]) => api.post('/api/resumes/batch-restore', { ids }),
 }
 
+/** 简历解析导入：parse 只解析不落库（预览），apply 确认后落库并可用于一键优化 */
+export const resumeImport = {
+  parse: (file: File) => {
+    const form = new FormData()
+    form.append('file', file)
+    return api.post('/api/resume-import/parse', form)
+  },
+  apply: (body: {
+    parsed_json: Record<string, unknown>
+    raw_text?: string
+    file_type?: string
+    title?: string
+  }) => api.post('/api/resume-import/apply', body),
+}
+
 export const jobs = {
   upload: (file: File, useOcr = false) => {
     const form = new FormData()
@@ -685,4 +701,81 @@ export const editor = {
    */
   exportLayout: (optId: string, html: string, css: string, layout?: Record<string, unknown> | null) =>
     api.post(`/api/optimize/${optId}/export-layout`, { html, css, layout: layout ?? null }),
+}
+
+/** AI 对话润色：多轮会话 + SSE 流式 + 结构化建议（suggestion） */
+export const polish = {
+  createSession: (body: {
+    target_type: 'optimized' | 'text'
+    target_id?: string
+    text?: string
+    title?: string
+  }) => api.post('/api/polish/sessions', body),
+  listSessions: () => api.get('/api/polish/sessions'),
+  getSession: (id: string) => api.get(`/api/polish/sessions/${id}`),
+  deleteSession: (id: string) => api.delete(`/api/polish/sessions/${id}`),
+  /**
+   * 发送消息并消费 SSE 流（axios 不便于流式读取，这里用原生 fetch）。
+   * 事件协议见后端 app/api/polish.py：delta / suggestions / done / error。
+   */
+  chat: (
+    sessionId: string,
+    message: string,
+    handlers: {
+      onDelta?: (text: string) => void
+      onSuggestions?: (items: PolishSuggestion[]) => void
+      onDone?: (info: { quota_used?: number }) => void
+      onError?: (message: string) => void
+    },
+    signal?: AbortSignal,
+  ) => {
+    const token = getToken()
+    return fetch(`${API_BASE_URL}/api/polish/chat`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+      body: JSON.stringify({ session_id: sessionId, message }),
+      signal,
+    }).then(async (res) => {
+      if (!res.ok || !res.body) {
+        const text = await res.text().catch(() => '')
+        throw new Error(`对话请求失败（${res.status}）${text.slice(0, 120)}`)
+      }
+      const reader = res.body.getReader()
+      const decoder = new TextDecoder()
+      let buffer = ''
+      for (;;) {
+        const { done, value } = await reader.read()
+        if (done) break
+        buffer += decoder.decode(value, { stream: true })
+        // SSE 以空行分帧
+        let sep: number
+        while ((sep = buffer.indexOf('\n\n')) !== -1) {
+          const frame = buffer.slice(0, sep)
+          buffer = buffer.slice(sep + 2)
+          const line = frame.split('\n').find((l) => l.startsWith('data:'))
+          if (!line) continue
+          try {
+            const payload = JSON.parse(line.slice(5).trim())
+            if (payload.type === 'delta') handlers.onDelta?.(payload.text || '')
+            else if (payload.type === 'suggestions') handlers.onSuggestions?.(payload.items || [])
+            else if (payload.type === 'done') handlers.onDone?.(payload)
+            else if (payload.type === 'error') handlers.onError?.(payload.message || '对话失败')
+          } catch {
+            /* 单帧损坏不阻断流 */
+          }
+        }
+      }
+    })
+  },
+}
+
+export interface PolishSuggestion {
+  id: string
+  target: string
+  original: string
+  improved: string
+  reason: string
 }

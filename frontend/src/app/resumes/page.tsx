@@ -11,7 +11,7 @@ import {
   EyeOutlined, StarOutlined, StarFilled, MoreOutlined, AppstoreOutlined,
   BarsOutlined, ThunderboltOutlined, TrophyOutlined, FireOutlined,
   FileTextOutlined, BulbOutlined, ClockCircleOutlined, DownloadOutlined, RollbackOutlined,
-  ApartmentOutlined,
+  ApartmentOutlined, ImportOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { resumes, toBackendUrl } from '@/lib/api'
@@ -739,6 +739,11 @@ export default function ResumeLibrary() {
             <Button type="primary" icon={<PlusOutlined />} onClick={() => document.getElementById('upload-resume')?.click()}>
               创建简历
             </Button>
+            <Tooltip title="上传旧简历 → 解析预览 → 导入优化流程">
+              <Button icon={<ImportOutlined />} onClick={() => router.push('/import')}>
+                解析导入
+              </Button>
+            </Tooltip>
           </Space>
         </div>
 

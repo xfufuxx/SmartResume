@@ -27,6 +27,9 @@ import {
   ExperimentOutlined,
   PictureOutlined,
   CameraOutlined,
+  QrcodeOutlined,
+  ImportOutlined,
+  EditOutlined,
 } from '@ant-design/icons'
 import { useRouter, usePathname } from 'next/navigation'
 import { clearAuth } from '@/lib/auth'
@@ -79,6 +82,9 @@ const NAV_GROUPS: { label: string; items: NavItem[] }[] = [
     items: [
       { key: 'templates', label: '模板库', icon: <PictureOutlined />, path: '/templates' },
       { key: 'photo', label: 'AI 职业照', icon: <CameraOutlined />, path: '/photo' },
+      { key: 'qrcode', label: '二维码工具', icon: <QrcodeOutlined />, path: '/qrcode' },
+      { key: 'import', label: '简历导入', icon: <ImportOutlined />, path: '/import' },
+      { key: 'polish', label: 'AI 对话润色', icon: <EditOutlined />, path: '/polish' },
       { key: 'interview', label: 'AI 面试押题', icon: <TeamOutlined />, path: '/interview' },
       { key: 'match', label: '岗位匹配罗盘', icon: <AimOutlined />, path: '/match' },
       { key: 'ats', label: 'ATS 体检', icon: <SafetyCertificateOutlined />, path: '/ats' },

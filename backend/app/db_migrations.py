@@ -45,6 +45,14 @@ INDEXES: list[tuple[str, str]] = [
     ("uq_users_qq_openid", "CREATE UNIQUE INDEX IF NOT EXISTS uq_users_qq_openid ON users (qq_openid)"),
 ]
 
+# 约束松绑（幂等 DDL，可重复执行）—— 简历解析导入不存原件，original_file_url 需可空
+RELAXATIONS: list[tuple[str, str]] = [
+    (
+        "resumes.original_file_url 允许 NULL（简历解析导入无原件）",
+        "ALTER TABLE resumes ALTER COLUMN original_file_url DROP NOT NULL",
+    ),
+]
+
 
 async def run_lightweight_migrations(engine: AsyncEngine) -> None:
     """启动时幂等执行：给老表补列，已存在则跳过。"""
@@ -66,6 +74,12 @@ async def run_lightweight_migrations(engine: AsyncEngine) -> None:
                 await conn.execute(text(ddl))
             except Exception as e:  # noqa: BLE001 —— 回填失败不阻断启动
                 logger.warning("轻量迁移跳过回填 %s: %s", name, e)
+        # 约束松绑（幂等，重复执行无副作用）
+        for name, ddl in RELAXATIONS:
+            try:
+                await conn.execute(text(ddl))
+            except Exception as e:  # noqa: BLE001 —— 松绑失败不阻断启动
+                logger.warning("轻量迁移跳过约束松绑 %s: %s", name, e)
     logger.info(
-        "轻量迁移检查完成（applications 邮件直递列 + optimized_resumes 布局/模板列 + users QQ 登录列）"
+        "轻量迁移检查完成（applications 邮件直递列 + optimized_resumes 布局/模板列 + users QQ 登录列 + resumes 原件列松绑）"
     )

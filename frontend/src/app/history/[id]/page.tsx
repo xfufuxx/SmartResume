@@ -3,14 +3,15 @@
 import React, { useEffect, useMemo, useCallback, useState } from 'react'
 import {
   Button, Card, Typography, Spin, message, Space,
-  Row, Col, Divider, Tag, Progress, Empty,
+  Row, Col, Divider, Tag, Progress, Empty, Modal,
 } from 'antd'
 import {
   DownloadOutlined, EditOutlined, SaveOutlined, CloseOutlined, FileSyncOutlined, LayoutOutlined,
-  PictureOutlined, BgColorsOutlined,
+  PictureOutlined, BgColorsOutlined, QrcodeOutlined,
 } from '@ant-design/icons'
 import { Tooltip } from 'antd'
 import ThemeDrawer from '@/components/ThemeDrawer'
+import QrCodeCard from '@/components/QrCodeCard'
 import { useRouter, useParams } from 'next/navigation'
 import { optimize, toBackendUrl, editor } from '@/lib/api'
 import { getToken } from '@/lib/auth'
@@ -24,6 +25,7 @@ import { LayoutEditor } from '@/components/layout-editor'
 import { buildLayout, type ResumeLike } from '@/lib/layout/buildLayout'
 import { parseLayout } from '@/lib/layout/serialize'
 import { TEMPLATE_OPTIONS, TEMPLATE_LABELS, DEFAULT_TEMPLATE } from '@/lib/templates'
+import { collectResumeLinks } from '@/lib/qrcode'
 
 function ExperienceDiff({ original, optimized }: { original: ResumeParseResult; optimized: ResumeParseResult }) {
   const origExps = original.experience || []
@@ -172,6 +174,12 @@ export default function OptimizationDetailPage() {
   const [template, setTemplate] = useState(DEFAULT_TEMPLATE)
   const [showTemplateModal, setShowTemplateModal] = useState(false)
   const [themeDrawerOpen, setThemeDrawerOpen] = useState(false)
+  /** 二维码弹窗：从简历正文自动提取候选链接 */
+  const [qrOpen, setQrOpen] = useState(false)
+  const qrSuggestions = useMemo(
+    () => collectResumeLinks((detail?.optimized_json || null) as Record<string, unknown> | null),
+    [detail],
+  )
 
   /** 重新拉取记录（主题保存/重导出后刷新 pdf_url 与 theme_config） */
   const reloadDetail = useCallback(() => {
@@ -363,6 +371,11 @@ export default function OptimizationDetailPage() {
                         更多模板
                       </Button>
                     </Tooltip>
+                    <Tooltip title="把简历里的链接生成二维码，下载 PNG/SVG">
+                      <Button icon={<QrcodeOutlined />} onClick={() => setQrOpen(true)}>
+                        二维码
+                      </Button>
+                    </Tooltip>
                     <Button
                       icon={<FileSyncOutlined />}
                       loading={exporting}
@@ -375,6 +388,11 @@ export default function OptimizationDetailPage() {
                   <Space wrap>
                     <Button icon={<EditOutlined />} onClick={startEdit}>编辑内容</Button>
                     <Button icon={<LayoutOutlined />} onClick={startLayoutEdit}>可视化排版</Button>
+                    <Tooltip title="把简历里的链接生成二维码，下载 PNG/SVG">
+                      <Button icon={<QrcodeOutlined />} onClick={() => setQrOpen(true)}>
+                        二维码
+                      </Button>
+                    </Tooltip>
                     <Tooltip title="去模板库逛逛全部风格，挑选后一键应用回本记录">
                       <Button icon={<PictureOutlined />} onClick={() => router.push(`/templates?record=${id}`)}>
                         更多模板
@@ -522,6 +540,21 @@ export default function OptimizationDetailPage() {
           onSaved={reloadDetail}
         />
       )}
+
+      <Modal
+        title="简历二维码"
+        open={qrOpen}
+        onCancel={() => setQrOpen(false)}
+        footer={null}
+        width={520}
+        destroyOnHidden
+      >
+        <QrCodeCard
+          suggestions={qrSuggestions}
+          initialLabel={detail?.job_title || ''}
+          compact
+        />
+      </Modal>
     </AppLayout>
   )
 }

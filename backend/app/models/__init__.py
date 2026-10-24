@@ -19,6 +19,7 @@ from app.models.delivery_event import DeliveryEvent
 from app.models.email_suppression import EmailSuppression
 from app.models.email_template import EmailTemplate
 from app.models.capability_assessment import JobProfile, CapabilityAssessment
+from app.models.polish import PolishSession, PolishMessage
 
 __all__ = [
     "User", "UserDevice", "Message", "AuditLog", "ResumeTemplate", "UserQuota",
@@ -30,4 +31,5 @@ __all__ = [
     "Application", "Communication", "DeliveryEvent",
     "EmailSuppression", "EmailTemplate",
     "JobProfile", "CapabilityAssessment",
+    "PolishSession", "PolishMessage",
 ]
