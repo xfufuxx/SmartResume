@@ -29,25 +29,74 @@ from datetime import date
 
 logger = logging.getLogger(__name__)
 
-# 模型 → 免费额度到期日（None 表示无免费额度 / 非文本模型）
-# 数据来源：百炼控制台「模型用量 - 免费额度」列表 + 官方价格文档。
+# 模型 → 免费额度到期日（None 表示永不过期 / 非文本模型）
+# 数据来源：百炼控制台「模型用量 - 免费额度」列表，2026-10-25 按用户截图逐行核对。
 # 口径：到期日 = 模型发布日 + 90 天（取「开通百炼/模型发布/申请通过」较晚者）。
+# ⚠️ 控制台只列「仍在有效期」的额度：qwen3.7-flash（10-23 到期）已下架，条目保留
+#    仅供 billing_info 识别历史配置；qwen3.7-max 两页截图均未出现（可能已用完或在
+#    其他分页），2026-10-25 实测仍可调用，到期日暂按 11-01 保留待观察。
 FREE_QUOTA_MODELS: dict[str, date | None] = {
-    "qwen3.8-max": date(2026, 11, 1),
-    "qwen3.8-max-0902": date(2026, 11, 1),
-    "qwen3.7-max": date(2026, 11, 1),
+    # ── 文本对话模型（优化/匹配链路可降级候选） ──
+    "deepseek-v4.1-flash": date(2026, 12, 13),  # console：100% 剩余；⚠️ 思考模型（见 REASONING_MODELS）
+    "qwen3.8-flash": date(2026, 11, 25),        # console：100% 剩余，剩 31 天
+    "glm-5.3": date(2026, 11, 23),              # console：100% 剩余，剩 29 天
+    "deepseek-v4-pro-0813": date(2026, 11, 13),  # console：100% 剩余，剩 19 天
+    "qwen3.8-max": date(2026, 11, 1),           # console：已消耗 93.82%，剩 7 天
+    "qwen3.8-max-0902": date(2026, 12, 1),      # console 到期 12-01：max 档里 runway 最长、余量 100%
+    "qwen3.7-max": date(2026, 11, 1),           # 截图未出现；10-25 实测可用
     "qwen3.7-max-2026-06-08": date(2026, 11, 1),
-    "deepseek-v4-pro-0813": date(2026, 11, 13),
-    "qwen3.7-flash": date(2026, 10, 23),
+    "qwen3.7-flash": date(2026, 10, 23),        # 已到期（console 已下架），仅备案
     "qwen3.7-flash-2026-07-15": date(2026, 10, 23),
-    # 以下是非文本模型（按 chars / seconds 计量），文本链路用不上，仅备案：
+    # ── 非文本模型（按 chars/seconds/images 计量，见 NON_TEXT_MODELS，仅备案） ──
+    "qwen-mt-uni": date(2026, 12, 15),          # 机器翻译
+    "qwen3.7-text-rerank": date(2026, 11, 30),  # 文本重排
+    "qwen-mt-image-2.0": date(2026, 11, 27),    # 图片翻译（100 张/期，非通用视觉）
+    "wan3.0-video-prime": date(2026, 11, 21),   # 视频生成（30 秒/期）
+    "qwen3-asr-flash": date(2026, 11, 19),      # 语音识别（36K 秒/期）
     "cosyvoice-v1": date(2026, 12, 31),
     "cosyvoice-clone-v1": date(2026, 12, 31),
-    "qwen3-asr-flash": date(2026, 11, 19),
-    "sambart-zhyuan-v1": None,
+    "sambart-zhyuan-v1": None,                  # console：永不过期
     "sambart-zhinan-v1": None,
     "sambart-zhigui-v1": None,
+    "sambart-zhichu-v1": None,
+    "sambart-hanna-v1": None,
+    "sambart-clara-v1": None,
+    "sambart-eva-v1": None,
 }
+
+# 非文本模型：语音合成/识别、机器翻译、向量、重排、视频、图片翻译。
+# 按 chars/seconds/images 计量，**文本与视觉对话链路均不可用**——自动降级若挑中
+# 它们会直接坏菜（max 档 11-01 到期后，旧实现按字母序会降级到 cosyvoice）。
+# 两条被控制台截断的全名待用户确认（均是非对话模型，不影响文本链路）：
+#   qwen3.8-livetranslate-flas…（到期 2026-12-16，实时翻译）
+#   qwen3.7-text-embedding-f…（到期 2026-11-30，文本向量）
+NON_TEXT_MODELS: frozenset[str] = frozenset({
+    "cosyvoice-v1", "cosyvoice-clone-v1",
+    "qwen3-asr-flash",
+    "qwen-mt-uni", "qwen-mt-image-2.0",
+    "qwen3.7-text-rerank",
+    "wan3.0-video-prime",
+    "qwen3.8-livetranslate-flash",     # 全名待确认（console 截断显示）
+    "qwen3.7-text-embedding-flash",    # 全名待确认（console 截断显示）
+    "sambart-zhyuan-v1", "sambart-zhinan-v1", "sambart-zhigui-v1",
+    "sambart-zhichu-v1", "sambart-hanna-v1", "sambart-clara-v1", "sambart-eva-v1",
+})
+
+# 视觉对话模型（图文理解）：控制台免费额度清单里**暂无**——qwen-mt-image-2.0 是
+# 图片翻译而非通用视觉模型。因此视觉链路不参与自动降级：额度耗尽时由 llm_errors
+# 转中文提示（充值/换 Key），而不是把图片请求降级到文本模型。
+VISION_MODELS: frozenset[str] = frozenset()
+
+# 思考（reasoning）模型：先产出 reasoning_content 再产出 content，小 max_tokens 下
+# content 直接为空（实测 deepseek-v4.1-flash max_tokens=8 返回空串）。本项目管线是
+# 「JSON 输出 + 有界 max_tokens」，思考模型有静默空返回风险——自动降级时排到最后，
+# 只在没有其它替补时才用（白嫖 runway 能多撑约 12 天）。
+REASONING_MODELS: frozenset[str] = frozenset({"deepseek-v4.1-flash"})
+
+# 文本链路的质量优先档（max 级）：同档内再按剩余免费天数降序挑。
+MAX_TIER_MODELS: frozenset[str] = frozenset({
+    "qwen3.8-max", "qwen3.7-max", "qwen3.8-max-0902",
+})
 
 # 无免费额度、但项目里可能出现的模型（显式登记，避免误判成"免费")
 NO_FREE_QUOTA_MODELS: set[str] = {
@@ -66,6 +115,7 @@ PRICING_CNY_PER_MTOK: dict[str, tuple[float, float]] = {
     "qwen3.7-plus": (2.0, 8.0),
     "qwen-plus": (2.0, 8.0),
     "qwen3.7-flash": (0.2, 0.8),
+    "qwen3.8-flash": (0.2, 0.8),      # 与 3.7-flash 同档（flash 档）
     "qwen-turbo": (0.8, 2.4),
     "qwen3.8-max": (12.0, 36.0),
     "qwen3.7-max": (12.0, 36.0),
@@ -226,27 +276,52 @@ def check_before_call(model: str, task: str, estimated_input_tokens: int = 0,
     return {**info, "estimated_cost_cny": est}
 
 
+def _days_left(model: str) -> int:
+    """距免费额度到期的天数；不在清单/已过期返回 -1，永不过期按 99999 计。"""
+    if model not in FREE_QUOTA_MODELS:
+        return -1
+    expiry = FREE_QUOTA_MODELS[model]
+    if expiry is None:
+        return 99999
+    return (expiry - date.today()).days
+
+
 def pick_free_model(kind: str = "text", expired_only: bool = False) -> str | None:
     """在仍在免费额度有效期内的模型里挑一个作为替补。
 
     kind: "text" 选文本模型；"vision" 选视觉模型。
-    expired_only: 只从「额度已过期的模型」里挑（用于自动降级时的换人名单）。
+    expired_only: 只从「额度已过期的模型」里挑（换人名单诊断用）。
     返回 None 表示没有可用候选。
+
+    两条纪律（2026-10-25 控制台核对后加固）：
+    1. **非文本模型永不入选**（NON_TEXT_MODELS）：语音/翻译/向量/视频模型进了
+       文本链路会直接坏菜——max 档 11-01 到期后，旧实现按字母序会挑中 cosyvoice；
+    2. **同档按剩余天数降序**：活得久的替补先上，避免每 7 天被迫再迁移一次；
+    3. **思考模型排最后**（REASONING_MODELS）：小 max_tokens 下 content 为空，
+       JSON 管线有静默失败风险，只在没有其它替补时启用。
     """
     today = date.today()
     if expired_only:
         pool = [m for m, e in FREE_QUOTA_MODELS.items() if e and e < today]
         pool += sorted(NO_FREE_QUOTA_MODELS)
     else:
-        pool = [m for m, e in FREE_QUOTA_MODELS.items() if e and e >= today]
+        pool = [
+            m for m, e in FREE_QUOTA_MODELS.items()
+            if e and e >= today and m not in NON_TEXT_MODELS
+        ]
 
-    # 视觉能力优先：带 vl / flash / max 视觉标识的排在前面
-    vision_pref = ("vl", "flash", "max")
     if kind == "vision":
-        pool.sort(key=lambda m: (not any(t in m for t in vision_pref), m))
+        # 只认真正的视觉对话模型；清单内暂无（见 VISION_MODELS 注释）
+        pool = [m for m in pool if m in VISION_MODELS]
+        pool.sort(key=lambda m: (-_days_left(m), m))
     else:
-        # 文本优先质量档：max > plus > flash
-        pool.sort(key=lambda m: (m not in ("qwen3.8-max", "qwen3.7-max"), m))
+        # 文本：max 档优先 > 非思考 > 剩余天数降序 > 名字升序
+        pool.sort(key=lambda m: (
+            m not in MAX_TIER_MODELS,
+            m in REASONING_MODELS,
+            -_days_left(m),
+            m,
+        ))
     return pool[0] if pool else None
 
 

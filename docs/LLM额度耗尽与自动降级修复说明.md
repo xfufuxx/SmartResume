@@ -64,20 +64,59 @@
 | 403 重试次数 | 1 次（mock 链路验证：持续 403 也只发 1 次） |
 | 429 重试链路 | 未破坏：429×2 后第 3 次成功返回 |
 
-## 4. 后续时间线（免费额度 90 天机制，一定会到期）
+## 4. 控制台核对与清单同步（2026-10-25）
 
-- **2026-11-01**：`qwen3.7-max` / `qwen3.8-max` 额度到期 → AUTO_FALLBACK 自动改投
-  `deepseek-v4-pro-0813`（11-13 到期）；
-- **2026-11-13 之后**：清单内无可用替补 → 请求被本地拦截（中文提示），需充值 /
+按用户提供的百炼控制台「模型用量 - 免费额度」截图（20 个模型）逐行核对：
+
+| 模型 | 控制台到期日 | 清单动作 |
+|---|---|---|
+| qwen3.8-max | 2026-11-01（已耗 93.82%） | 不变 |
+| qwen3.8-max-0902 | 2026-12-01 | **修正**（原误登记 11-01，与 3.8-max 混淆） |
+| qwen3.8-flash | 2026-11-25 | **新增**；`.env` 文本模型改投此处（真实 Key 实测可用） |
+| deepseek-v4.1-flash | 2026-12-13 | **新增**；实测为**思考模型**（小 max_tokens 下 content 为空），降级排最后 |
+| glm-5.3 | 2026-11-23 | **新增**（实测可用） |
+| deepseek-v4-pro-0813 | 2026-11-13 | 不变 |
+| qwen-mt-uni / qwen3.7-text-rerank / qwen-mt-image-2.0 / wan3.0-video-prime | 12-15 / 11-30 / 11-27 / 11-21 | 新增，登记为非文本模型 |
+| qwen3-asr-flash | 2026-11-19 | 不变 |
+| sambert-zhichu/hanna/clara/eva-v1 | 永不过期 | 新增（None） |
+| qwen3.7-flash | 已下架 | 保留条目仅备案 |
+| qwen3.7-max | 截图未出现 | 暂按 11-01 保留（10-25 实测可用，待确认是否在其它分页） |
+
+**待用户确认的两个截断名**（均是非对话模型，不影响文本链路）：
+`qwen3.8-livetranslate-flas…`（到期 2026-12-16，实时翻译）、
+`qwen3.7-text-embedding-f…`（到期 2026-11-30，文本向量）。
+
+同时加固降级挑选逻辑（三个隐患）：
+1. **非文本模型混入选池**：max 档 11-01 到期后，旧实现按字母序会降级到 cosyvoice（TTS）
+   直接坏菜 → 新增 `NON_TEXT_MODELS`，选池一律排除；
+2. **不看剩余天数**：同档按剩余免费天数降序挑替补，活得久的先上 → max 档首补从
+   「当天就要再迁移的 qwen3.7-max」变成 `qwen3.8-max-0902`（12-01，余量 100%）；
+3. **思考模型风险**：`deepseek-v4.1-flash` 实测 reasoning 先吃 token、小预算下
+   content 为空 → `REASONING_MODELS` 排最后，只在无其它替补时启用；
+   另在 `agent_optimizer` 两个 JSON 解析点加**空内容防护**（`_require_content`），
+   杜绝「模型没返回」被静默兜底成 `{}` 的假成功。
+
+另修复 `check_llm_policy.py --probe` 的坏引用（`app.services.llm_invoke` 不存在，
+探测路径 ImportError）→ 改走 `agent_optimizer._call_with_retry` 策略链，实测可用。
+
+## 5. 后续时间线（免费额度 90 天机制，一定会到期）
+
+- **2026-11-01**：qwen3.7-max / qwen3.8-max 到期 → 自动降级改投 `qwen3.8-max-0902`（12-01）；
+- **2026-11-25**：.env 主模型 qwen3.8-flash 到期 → 主模型也改投 0902；
+- **2026-12-01**：0902 到期 → 最后手段 `deepseek-v4.1-flash`（12-13，思考模型，JSON 管线慎用）；
+- **2026-12-13 之后**：清单内无可用文本替补 → 请求被本地拦截（中文提示），需充值 /
   换 Key / 开 `LLM_ALLOW_PAID`；
-- 更新清单：改 `backend/app/core/llm_policy.py::FREE_QUOTA_MODELS`（以百炼控制台
-  「模型用量 - 免费额度」列表为准，**到期模型余量仍显示 100%，勿被误导**）。
+- 视觉链路（图片简历解析）**无免费替补**（控制台清单内无视觉对话模型），现在就会得到
+  中文提示，需充值或换 Key；
+- 更新清单：改 `backend/app/core/llm_policy.py::FREE_QUOTA_MODELS`（以控制台
+  「模型用量 - 免费额度」为准，**到期模型余量仍显示 100%，勿被误导**）。
 
-## 5. 验证矩阵
+## 6. 验证矩阵
 
 | 验证 | 结果 |
 |---|---|
-| `pytest tests/test_llm_errors.py tests/test_llm_policy.py` | 31/31 |
-| `pytest tests/` 全量 | 148/148 |
-| `scripts/verify_llm_403_policy.py`（链路级：降级/不重试/中文异常/429 重试/批处理上抛） | 10/10 |
-| 真实上游 403 key 链路实测 | 降级后成功 ✅ |
+| `pytest tests/test_llm_errors.py tests/test_llm_policy.py` | 37/37 |
+| `pytest tests/` 全量 | 154/154 |
+| `scripts/verify_llm_403_policy.py`（链路级：降级/不重试/中文异常/429 重试/批处理上抛/配置无关） | 10/10 |
+| `check_llm_policy.py --probe`（CLI 体检+真实探测） | ✅ 返回「正常」 |
+| 真实 Key 实测 | qwen3.8-flash / qwen3.8-max-0902 / glm-5.3 均成功；deepseek-v4.1-flash 成功但为思考模型 |

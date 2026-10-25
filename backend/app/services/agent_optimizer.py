@@ -71,6 +71,21 @@ async def _call_with_retry(client, task: str = "LLM 调用", **kwargs):
             await asyncio.sleep(1 * (attempt + 1))
 
 
+def _require_content(resp, task: str) -> str:
+    """取出模型返回的文本；空内容（思考模型 token 耗尽/异常）直接报错。
+
+    不能容忍 `content or "{}"` 式的静默兜底：那会把「模型没返回」伪装成
+    「返回了空结果」，用户看到假成功。思考模型（如 deepseek-v4.1-flash）
+    在小 max_tokens 下 content 为空串，必须在此显形。
+    """
+    content = (resp.choices[0].message.content or "").strip()
+    if not content:
+        raise ValueError(
+            f"{task}：模型返回了空内容（可能是思考模型 token 耗尽或上游异常），请重试或更换模型。"
+        )
+    return content
+
+
 async def analyze_match(resume_json: dict, job_json: dict) -> dict:
     if not has_valid_api_key():
         ensure_mock_allowed("匹配分析")
@@ -95,7 +110,7 @@ async def analyze_match(resume_json: dict, job_json: dict) -> dict:
         max_tokens=4096,
     )
 
-    return json.loads(resp.choices[0].message.content or "{}")
+    return json.loads(_require_content(resp, "匹配分析"))
 
 
 async def optimize_resume(resume_json: dict, job_json: dict, strategy: dict, custom_instructions: str | None = None) -> dict:
@@ -128,7 +143,7 @@ async def optimize_resume(resume_json: dict, job_json: dict, strategy: dict, cus
         max_tokens=8192,
     )
 
-    return json.loads(resp.choices[0].message.content or "{}")
+    return json.loads(_require_content(resp, "简历优化"))
 
 
 async def generate_changes_description(resume_json: dict, optimized_json: dict) -> str:

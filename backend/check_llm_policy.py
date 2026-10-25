@@ -95,11 +95,22 @@ def main() -> int:
 
     if args.probe:
         _rule("5. 连通性探测（真实发一次请求 + 账号状态判定）")
-        from app.services import get_llm_client, llm_invoke
+        import asyncio
+
+        from app.services.agent_optimizer import _call_with_retry, _get_client
+
+        async def _probe() -> str:
+            # 走 agent_optimizer 的策略链（resolve_model 降级 + 403 不重试 + 中文化）
+            resp = await _call_with_retry(
+                _get_client(), task="计费体检探测",
+                model=settings.LLM_MODEL_TEXT,
+                messages=[{"role": "user", "content": "回复两个字：正常"}],
+                max_tokens=16,
+            )
+            return resp.choices[0].message.content or "（空内容）"
+
         try:
-            client = get_llm_client(settings.LLM_MODEL_TEXT, "计费体检探测")
-            resp = await_client(client, settings.LLM_MODEL_TEXT)
-            print(f"  ✅ 模型可调用，返回：{resp}")
+            print(f"  ✅ 模型可调用，返回：{asyncio.run(_probe())}")
         except Exception as e:  # noqa: BLE001
             msg = str(e)
             code = _error_code(msg)
@@ -147,22 +158,6 @@ def _error_code(msg: str) -> str:
     if "Not Found" in msg or "404" in msg or "does not exist" in msg.lower():
         return "model not found（模型名不存在）"
     return "Unknown"
-
-
-def await_client(client, model: str) -> str:
-    """同步执行（CLI 场景，避免引入额外事件循环样板）。走 llm_invoke 以保持一致记账。"""
-    import asyncio
-
-    from app.services import llm_invoke
-
-    async def _run():
-        r = await llm_invoke(client, model, "计费体检探测",
-                             messages=[
-            {"role": "user", "content": "回复两个字：正常"}
-        ], max_tokens=16)
-        return r.choices[0].message.content
-
-    return asyncio.run(_run())
 
 
 if __name__ == "__main__":
