@@ -10,6 +10,10 @@
    且双 token 已轮换写回（核心：B 让「记住我 7 天」生效）
 4. access 过期 + refresh 无效 → 清场跳 /login，localStorage 被清空
 5. 完全无凭证（连 refresh 也没有）→ 跳 /login
+6. C 方案：localStorage 有票但无 cookie 镜像 → middleware 前置拦截到
+   /login?next=/（业务 HTML 不出厂）
+7. C 方案 next 闭环：深链 /profile 被拦 → 登录后落回 /profile，
+   cookie 票写入，刷新不再被拦
 
 运行：.venv/Scripts/python.exe scripts/verify_auth_gate.py
 """
@@ -21,6 +25,7 @@ import sys
 import time
 import urllib.error
 import urllib.request
+from urllib.parse import parse_qs, urlparse
 
 from playwright.sync_api import sync_playwright
 
@@ -78,16 +83,28 @@ def jwt_exp(token: str) -> int | None:
         return None
 
 
-def set_storage(page, token: str | None, refresh: str | None, user: dict | None) -> None:
-    """add_init_script 在每次导航时注入 localStorage（模拟重启后的本地状态）。
-    注：当前 playwright 版本的 add_init_script 只接受单个 script 参数，
-    arg 需编码进脚本文本（json.dumps 保证字符串转义安全）。"""
+def set_storage(page, token: str | None, refresh: str | None, user: dict | None,
+                cookie: bool = True) -> None:
+    """注入登录态（模拟重启后的本地状态）。
+    - localStorage 走 add_init_script（客户端脚本，导航后、hydration 前写入）；
+    - cookie 走 context.add_cookies **请求前预置**——middleware 是服务端，
+      首趟请求就必须看到票，init script 写的 cookie 对当次请求无效（后置执行）。
+    注：playwright 的 add_init_script 只接受单个 script 参数，数据需
+    json.dumps 编码进脚本文本。"""
     kv = {"token": token, "refreshToken": refresh, "user": json.dumps(user) if user else None}
     page.add_init_script(
         "(() => { const kv = %s; localStorage.clear();"
         " for (const [k, v] of Object.entries(kv)) { if (v != null) localStorage.setItem(k, v); } })()"
         % json.dumps(kv)
     )
+    if cookie:
+        cookies = []
+        if token:
+            cookies.append({"name": "sr-token", "value": token, "url": BASE})
+        if refresh:
+            cookies.append({"name": "sr-refresh", "value": refresh, "url": BASE})
+        if cookies:
+            page.context.add_cookies(cookies)
 
 
 def watch_flash(page, timeout: float = 15.0) -> tuple[bool, str]:
@@ -171,6 +188,8 @@ def main() -> int:
         page.close()
 
         # ── 场景 4：access 过期 + refresh 无效 → 清场跳 /login ──
+        # 注：storage 清空由 auth.test.ts 单测覆盖（init script 会在每次导航时
+        # 重写 localStorage，E2E 层无法观测清除动作），此处只验证跳转结果。
         page = browser.new_page()
         set_storage(page, expired, "invalid-refresh-token", user)
         page.goto(f"{BASE}/", wait_until="commit")
@@ -180,9 +199,6 @@ def main() -> int:
         except Exception:
             landed = False
         check("S4 refresh 无效 → 跳 /login", landed, f"URL={page.url}")
-        left = page.evaluate(
-            "() => ({t: localStorage.getItem('token'), r: localStorage.getItem('refreshToken')})")
-        check("S4 登录态已清空", not left["t"] and not left["r"], f"left={left}")
         page.close()
 
         # ── 场景 5：完全无凭证 ──
@@ -191,6 +207,58 @@ def main() -> int:
         flashed, final_url = watch_flash(page)
         check("S5 空 localStorage → 跳 /login", "/login" in final_url, f"URL={final_url}")
         check("S5 业务页骨架从未闪现", not flashed, f"URL={final_url}")
+        page.close()
+
+        # ── 场景 6（C 方案）：localStorage 有票但 cookie 未镜像 ──
+        # middleware 只认 cookie：应被前置拦截到 /login?next=/profile（业务 HTML
+        # 不出厂）。随后 login 页会 syncAuthCookie 补票并自动弹回 /profile
+        # （存量用户兜底，设计行为）。访问带路径的深链以验证 next 参数。
+        page = browser.new_page()
+        set_storage(page, access, refresh, user, cookie=False)
+        page.goto(f"{BASE}/profile", wait_until="commit")
+        first_login_url = None
+        deadline = time.time() + 15
+        while time.time() < deadline:
+            u = page.url
+            if "/login" in u:
+                first_login_url = u
+                break
+            time.sleep(0.05)
+        check("S6 无 cookie → middleware 前置拦截到 /login", first_login_url is not None,
+              f"URL={page.url}")
+        # next 参数在 URL 中会被编码（next=%2Fprofile），用 parse_qs 解析
+        next_val = ""
+        if first_login_url:
+            parsed = urlparse(first_login_url)
+            next_val = parse_qs(parsed.query).get("next", [""])[0]
+        check("S6 拦截带 next 深链参数", next_val == "/profile",
+              f"首次登录 URL={first_login_url} next={next_val!r}")
+        page.close()
+
+        # ── 场景 7（C 方案 next 闭环）：深链被拦 → 登录后落回原页面 ──
+        page = browser.new_page()
+        page.goto(f"{BASE}/profile", wait_until="commit")
+        try:
+            page.wait_for_url("**/login**", timeout=20000)
+            landed_login = True
+        except Exception:
+            landed_login = False
+        check("S7 深链 /profile 被拦到 /login", landed_login, f"URL={page.url}")
+        page.fill('input[placeholder="邮箱地址"]', EMAIL)
+        page.fill('input[placeholder="密码"]', PASSWORD)
+        page.click('button[type="submit"]')
+        try:
+            page.wait_for_url("**/profile**", timeout=30000)
+            back = True
+        except Exception:
+            back = False
+        check("S7 登录后落回 /profile（next 闭环）", back, f"URL={page.url}")
+        cookie_has_ticket = page.evaluate("document.cookie.includes('sr-token=')")
+        check("S7 登录后 cookie 票已写入", cookie_has_ticket)
+        page.reload()
+        page.wait_for_timeout(3000)
+        check("S7 刷新后仍在 /profile（cookie 生效不被再拦）", "/profile" in page.url,
+              f"URL={page.url}")
         page.close()
 
         browser.close()

@@ -67,12 +67,14 @@ with sync_playwright() as p:
     page = ctx.new_page()
     page.set_default_timeout(30000)
 
-    # 写入登录态
+    # 写入登录态（localStorage + cookie 镜像：middleware 前置鉴权认 cookie）
     page.goto(WEB + "/login", wait_until="domcontentloaded", timeout=180000)
     page.evaluate(
         """([t, r]) => {
             localStorage.setItem('token', t);
             if (r) localStorage.setItem('refreshToken', r);
+            if (t) document.cookie = 'sr-token=' + encodeURIComponent(t) + '; Path=/; Max-Age=604800; SameSite=Lax';
+            if (r) document.cookie = 'sr-refresh=' + encodeURIComponent(r) + '; Path=/; Max-Age=604800; SameSite=Lax';
         }""",
         [TOKEN, REFRESH],
     )
@@ -80,13 +82,22 @@ with sync_playwright() as p:
     # 1. 打开页面（dev 首次编译可能很慢）
     page.goto(WEB + "/interviews", wait_until="domcontentloaded", timeout=180000)
     page.wait_for_timeout(4500)
+    # 面试追踪为三 Tab 结构（投递记录 / 面试进度 / 沟通消息），手动录入相关
+    # 断言与操作都在「面试进度」Tab（InterviewProgressTab），默认 Tab 是投递记录
+    page.locator('.ant-tabs-tab:has-text("面试进度")').first.click()
+    page.wait_for_timeout(1200)
     print("=== 1. 页面加载 ===")
+    # 注意：外层 Tabs 的 items 只配 label 不配 children，pane 是空容器；
+    # 实际内容由 page.tsx 在 Tabs 外按 activeTab 条件渲染——
+    # InterviewProgressTab 的根 div.app-page-enter 是页面第二个 .app-page-enter
+    # （第一个属于 page.tsx 自身，包着 Tabs）。
+    content_text = page.locator(".app-page-enter").nth(1).inner_text()
     check(page.locator("text=面试追踪").count() > 0, "页面标题渲染")
     check(
-        "手动记录每场面试的进展与结果" in page.content(),
-        "副标题已改为「手动记录每场面试的进展与结果」（不再是投递文案）",
+        "手动录入" in content_text,
+        "面试进度 Tab 为手动录入形态（空态引导文案）",
     )
-    check("投递" not in page.inner_text("body"), "页面正文中不再出现「投递」字样")
+    check("投递" not in content_text, "面试进度 Tab 正文中不再出现「投递」字样")
     check(
         left == 0 and page.locator("text=还没有面试记录").count() > 0,
         "空状态引导出现（无模拟数据兜底）",
@@ -98,23 +109,23 @@ with sync_playwright() as p:
     page.locator('button:has-text("添加第一条面试记录"), button:has-text("添加面试")').first.click()
     page.wait_for_timeout(900)
     check(page.locator(".ant-modal-content").count() > 0, "添加弹窗打开")
-    for label in ["公司名称", "应聘职位", "工作地点", "面试时间", "面试轮次", "面试方式",
-                  "当前状态", "面试官 / 联系人", "关联简历", "关联岗位", "面试复盘 / 结果备注"]:
+    for label in ["公司", "应聘职位", "工作地点", "面试时间", "面试轮次", "面试方式",
+                  "进展状态", "面试官 / 联系人", "关联简历", "关联岗位", "面试复盘 / 结果备注"]:
         check(label in page.inner_text(".ant-modal-content"), f"表单含字段「{label}」")
     page.screenshot(path=f"{OUT}_modal.png")
 
     page.fill('input[placeholder="如：字节跳动"]', "深蓝科技")
-    page.fill('input[placeholder="如：前端开发工程师"]', "资深前端工程师")
-    page.fill('input[placeholder="如：上海 / 远程"]', "杭州")
-    select_option(page, "如：一面 / HR 面", "二面")
-    select_option(page, "现场 / 线上 / 电话", "线上")
-    page.fill('input[placeholder="选填"]', "王面试官")
+    page.fill('input[placeholder="如：前端工程师"]', "资深前端工程师")
+    page.fill('input[placeholder="如：北京"]', "杭州")
+    select_option(page, "选择轮次", "二面")
+    select_option(page, "选择方式", "线上")
+    page.fill('input[placeholder="如：李经理"]', "王面试官")
     page.fill(
-        'textarea[placeholder="记录面试问题、自己的表现、下一步准备等"]',
+        'textarea[placeholder="记录面试题目、表现、反馈等"]',
         "考察了 React 并发渲染与性能优化，整体表现不错。",
     )
     # 面试时间（DatePicker 输入 + 回车确认）
-    dp = page.locator('input[placeholder="选择面试日期与时间"]')
+    dp = page.locator('input[placeholder="选择面试时间"]')
     dp.click()
     dp.fill("2026-09-25 10:30")
     page.keyboard.press("Enter")
@@ -135,10 +146,10 @@ with sync_playwright() as p:
 
     # 3. 统计卡片与图表基于真实数据
     print("=== 3. 统计与图表 ===")
-    stat_text = page.locator(".app-stat-grid").first.inner_text()
+    stat_text = page.locator(".jobs-stat-grid").first.inner_text()
     check("全部面试" in stat_text and "待面试" in stat_text, "统计卡片渲染状态维度")
     check(page.locator("canvas").count() >= 2, "漏斗图与结果分布图已渲染", f"canvas={page.locator('canvas').count()}")
-    check("面试日历" in body, "面试日历卡片存在")
+    check("7 天内待面试" in body, "临期提醒卡片存在")
 
     # 4. 编辑
     print("=== 4. 编辑记录 ===")
@@ -147,18 +158,18 @@ with sync_playwright() as p:
     check("编辑面试记录" in page.inner_text(".ant-modal-content"), "编辑弹窗标题正确")
     company_val = page.input_value('input[placeholder="如：字节跳动"]')
     check(company_val == "深蓝科技", "编辑时表单已回填原值", f"company={company_val}")
-    # 状态改为已获 Offer
+    # 状态改为已录用（Modal 内第 3 个 Select = 进展状态）
     page.locator(".ant-modal-content .ant-select").nth(2).click()
     page.wait_for_timeout(400)
-    page.locator('.ant-select-item-option-content:text-is("已获 Offer")').first.click()
+    page.locator('.ant-select-item-option-content:text-is("已录用")').first.click()
     page.wait_for_timeout(250)
     page.locator(".ant-modal-footer .ant-btn-primary").click()
     page.wait_for_timeout(2500)
     body = page.inner_text("body")
-    check("已获 Offer" in body, "编辑后状态更新为「已获 Offer」")
+    check("已录用" in body, "编辑后状态更新为「已录用」")
     check(
-        "已获 Offer" in page.locator(".ant-table-tbody").first.inner_text(),
-        "列表行内状态同步更新为「已获 Offer」",
+        "已录用" in page.locator(".ant-table-tbody").first.inner_text(),
+        "列表行内状态同步更新为「已录用」",
     )
 
     # 5. 多视口
@@ -173,15 +184,12 @@ with sync_playwright() as p:
     print("=== 6. 删除记录 ===")
     page.set_viewport_size({"width": 1440, "height": 1000})
     page.wait_for_timeout(600)
-    page.locator(".ant-table-tbody button .anticon-more").first.click()
-    page.wait_for_timeout(700)
-    # 注意：antd 关闭状态的 Dropdown 菜单仍留在 DOM 中，必须限定可见的那个，
-    # 否则 :first 会命中隐藏菜单并一直等不到可见（点击超时）。
-    page.locator('.ant-dropdown-menu-item:has-text("删除记录"):visible').first.click()
+    # 操作列为「编辑/删除」两个直接按钮（无 more 下拉菜单）
+    page.locator(".ant-table-tbody button .anticon-delete").first.click()
     page.wait_for_timeout(700)
     check(
-        "删除这条面试记录" in page.inner_text(".ant-modal-confirm")
-        or "删除这条面试记录" in page.inner_text("body"),
+        "删除面试记录" in page.inner_text(".ant-modal-confirm")
+        or "删除面试记录" in page.inner_text("body"),
         "删除二次确认弹窗出现",
     )
     page.locator(".ant-modal-confirm .ant-btn-dangerous").first.click()

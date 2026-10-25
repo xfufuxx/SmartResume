@@ -6,6 +6,7 @@ import { MailOutlined, LockOutlined, SafetyCertificateOutlined } from '@ant-desi
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { auth } from '@/lib/api'
+import { setAuthTokens } from '@/lib/auth'
 
 export default function RegisterPage() {
   const router = useRouter()
@@ -49,7 +50,7 @@ export default function RegisterPage() {
     setLoading(true)
     try {
       const res = await auth.register(values.email, values.password, values.code)
-      localStorage.setItem('token', res.data.access_token)
+      setAuthTokens(res.data.access_token, res.data.refresh_token)
       localStorage.setItem('user', JSON.stringify(res.data.user))
       message.success('注册成功')
       router.push('/dashboard')

@@ -6,8 +6,14 @@ import { MailOutlined, LockOutlined, FileTextOutlined } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import Link from 'next/link'
 import { auth } from '@/lib/api'
-import { getToken } from '@/lib/auth'
+import { getToken, setAuthTokens, syncAuthCookie } from '@/lib/auth'
 import QqIcon from '@/components/QqIcon'
+
+/** next 参数校验：仅允许站内相对路径，防开放重定向（`//evil.com`） */
+function safeNext(raw: string | null): string {
+  if (!raw || !raw.startsWith('/') || raw.startsWith('//')) return ''
+  return raw
+}
 
 export default function LoginPage() {
   const router = useRouter()
@@ -15,8 +21,12 @@ export default function LoginPage() {
   const [qqLoading, setQqLoading] = useState(false)
 
   useEffect(() => {
+    // middleware 前置鉴权（C 方案）会把无票访问 307 到 /login?next=原路径。
+    // 已登录（存量用户：localStorage 有票但 cookie 未镜像）→ 先补 cookie 再弹回，
+    // 否则会形成「拦截→弹回→再拦截」死循环。
+    syncAuthCookie()
     const t = getToken()
-    if (t) router.replace('/dashboard')
+    if (t) router.replace(safeNext(new URLSearchParams(window.location.search).get('next')) || '/dashboard')
   }, [router])
 
   const handleLogin = async (values: { email: string; password: string; remember: boolean }) => {
@@ -26,13 +36,12 @@ export default function LoginPage() {
       localStorage.setItem('deviceId', deviceId)
 
       const res = await auth.login(values.email, values.password, deviceId)
-      localStorage.setItem('token', res.data.access_token)
-      if (res.data.refresh_token) {
-        localStorage.setItem('refreshToken', res.data.refresh_token)
-      }
+      // setAuthTokens：localStorage + cookie 镜像同步（middleware 前置鉴权认 cookie）
+      setAuthTokens(res.data.access_token, res.data.refresh_token)
       localStorage.setItem('user', JSON.stringify(res.data.user))
       message.success('登录成功')
-      router.replace('/dashboard')
+      const next = safeNext(new URLSearchParams(window.location.search).get('next'))
+      router.replace(next || '/dashboard')
     } catch (err: unknown) {
       const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
       message.error(detail || '邮箱或密码错误')

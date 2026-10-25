@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { usePathname, useRouter } from 'next/navigation'
 import { Spin } from 'antd'
-import { getToken, getRefreshToken, clearAuth, isTokenExpired } from '@/lib/auth'
+import { getToken, getRefreshToken, clearAuth, isTokenExpired, syncAuthCookie } from '@/lib/auth'
 import { refreshAccessToken } from '@/lib/api'
 
 /**
@@ -50,6 +50,11 @@ export default function AuthGatekeeper({ children }: { children: React.ReactNode
     let cancelled = false
 
     async function decide() {
+      // 兜底同步：localStorage 有票而 cookie 丢失时（存量用户 / 本方案上线前
+      // 登录的会话）补写 cookie 镜像。公开页也执行——被 middleware 拦到 /login
+      // 的存量用户在此补票，随后 login 页的「已登录自动弹回」才不会再被拦截，
+      // 不会形成「拦截→弹回→再拦截」死循环。
+      syncAuthCookie()
       // 公开页直接放行（/login 自己的「已登录跳 /dashboard」逻辑不受影响）
       if (isPublicPath(pathname)) {
         if (!cancelled) setDecided(true)

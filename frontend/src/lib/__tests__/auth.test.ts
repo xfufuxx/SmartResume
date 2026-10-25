@@ -3,11 +3,14 @@ import assert from 'node:assert/strict'
 
 import {
   getToken, getRefreshToken, clearAuth, isAuthenticated, isTokenExpired,
+  setAuthTokens, syncAuthCookie,
 } from '../auth.ts'
 
-// auth.ts 依赖浏览器全局（window/localStorage/atob）。Node 下 atob 原生可用，
-// window/localStorage 需要 stub。注意：测试进程内 globalThis.localStorage
-// 可能已被 Node 自身定义（或未定义），统一替换为可控替身。
+// auth.ts 依赖浏览器全局（window/localStorage/document.cookie/atob）。
+// Node 下 atob 原生可用，其余需要 stub。注意：测试进程内
+// globalThis.localStorage 可能已被 Node 自身定义（或未定义），统一替换为可控替身。
+let cookieJar = new Map<string, string>()
+
 function makeStorage(): Storage {
   const map = new Map<string, string>()
   return {
@@ -20,13 +23,34 @@ function makeStorage(): Storage {
   } as Storage
 }
 
+/** 迷你 cookie jar：解析 name=value 与 Max-Age（≤0 即删除），忽略 Path/SameSite/Secure */
+function installDocumentStub() {
+  ;(globalThis as any).document = {
+    get cookie() {
+      return Array.from(cookieJar.entries()).map(([k, v]) => `${k}=${v}`).join('; ')
+    },
+    set cookie(raw: string) {
+      const [pair, ...attrs] = raw.split(';').map((s) => s.trim())
+      const idx = pair.indexOf('=')
+      const name = pair.slice(0, idx)
+      const maxAge = attrs
+        .find((a) => a.toLowerCase().startsWith('max-age='))
+        ?.split('=')[1]
+      if (maxAge !== undefined && Number(maxAge) <= 0) cookieJar.delete(name)
+      else cookieJar.set(name, pair.slice(idx + 1))
+    },
+  }
+}
+
 before(() => {
   ;(globalThis as any).window = {}
   ;(globalThis as any).localStorage = makeStorage()
+  installDocumentStub()
 })
 
 beforeEach(() => {
   localStorage.clear()
+  cookieJar.clear()
 })
 
 /** 造一个仅前端可解析的 JWT 形状 token（后端不验签，atob 解 payload） */
@@ -103,13 +127,17 @@ describe('getRefreshToken', () => {
 })
 
 describe('clearAuth / isAuthenticated', () => {
-  test('clearAuth 清除全部四个认证 key', () => {
+  test('clearAuth 清除全部四个认证 key + cookie 镜像', () => {
     localStorage.setItem('token', 't')
     localStorage.setItem('refreshToken', 'rt')
     localStorage.setItem('user', 'u')
     localStorage.setItem('deviceId', 'd')
+    setAuthTokens('t', 'rt')
+    assert.ok(document.cookie.includes('sr-token='))
     clearAuth()
     assert.equal(localStorage.length, 0)
+    assert.ok(!document.cookie.includes('sr-token='), `cookie 未清: ${document.cookie}`)
+    assert.ok(!document.cookie.includes('sr-refresh='), `cookie 未清: ${document.cookie}`)
   })
 
   test('isAuthenticated 与 getToken 一致', () => {
@@ -118,5 +146,40 @@ describe('clearAuth / isAuthenticated', () => {
     assert.equal(isAuthenticated(), true)
     localStorage.setItem('token', makeJwt(-60))
     assert.equal(isAuthenticated(), false)
+  })
+})
+
+describe('cookie 镜像（C 方案：middleware 服务端前置鉴权）', () => {
+  const enc = (v: string) => encodeURIComponent(v)
+
+  test('setAuthTokens 同时写 localStorage 与 sr-token/sr-refresh cookie', () => {
+    setAuthTokens('at-1', 'rt-1')
+    assert.equal(localStorage.getItem('token'), 'at-1')
+    assert.equal(localStorage.getItem('refreshToken'), 'rt-1')
+    assert.ok(document.cookie.includes(`sr-token=${enc('at-1')}`))
+    assert.ok(document.cookie.includes(`sr-refresh=${enc('rt-1')}`))
+  })
+
+  test('setAuthTokens 无 refresh 参数时不写 refresh cookie', () => {
+    setAuthTokens('at-2')
+    assert.ok(document.cookie.includes('sr-token='))
+    assert.ok(!document.cookie.includes('sr-refresh='))
+  })
+
+  test('syncAuthCookie 从 localStorage 补写 cookie（存量用户兜底）', () => {
+    localStorage.setItem('token', 'at-3')
+    localStorage.setItem('refreshToken', 'rt-3')
+    assert.ok(!document.cookie.includes('sr-token='))
+    syncAuthCookie()
+    assert.ok(document.cookie.includes('sr-token='))
+    assert.ok(document.cookie.includes('sr-refresh='))
+  })
+
+  test('syncAuthCookie 双空时清 cookie（登出后残留清理）', () => {
+    setAuthTokens('at-4', 'rt-4')
+    localStorage.clear()
+    syncAuthCookie()
+    assert.ok(!document.cookie.includes('sr-token='))
+    assert.ok(!document.cookie.includes('sr-refresh='))
   })
 })

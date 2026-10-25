@@ -5,6 +5,7 @@ import { Card, Spin, Button, Typography } from 'antd'
 import { FileTextOutlined } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import { user as userApi } from '@/lib/api'
+import { setAuthTokens } from '@/lib/auth'
 
 /**
  * QQ 登录回调页（后端 /api/auth/qq/callback 最终跳转到此处）。
@@ -53,8 +54,8 @@ export default function QqCallbackPage() {
       }
 
       try {
-        localStorage.setItem('token', accessToken)
-        if (refreshToken) localStorage.setItem('refreshToken', refreshToken)
+        // setAuthTokens：localStorage + cookie 镜像同步（middleware 前置鉴权认 cookie）
+        setAuthTokens(accessToken, refreshToken)
         // 拉取个人资料写入 user 缓存（与邮箱登录行为一致）；失败不阻塞登录
         try {
           const res = await userApi.getProfile()

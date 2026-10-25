@@ -1,7 +1,7 @@
 import axios from 'axios'
 
 import type { InterviewTrackPayload, ApplicationPayload, CommunicationPayload, AssessmentSubmit } from '@/types'
-import { getToken } from '@/lib/auth'
+import { getToken, setAuthTokens, clearAuth } from '@/lib/auth'
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
 
@@ -45,12 +45,12 @@ export async function refreshAccessToken(): Promise<boolean> {
     try {
       const res = await refreshApi.post('/api/auth/refresh', { refresh_token: refreshToken })
       const { access_token, refresh_token } = res.data || {}
-      if (access_token) localStorage.setItem('token', access_token)
-      if (refresh_token) localStorage.setItem('refreshToken', refresh_token)
+      // setAuthTokens：localStorage + cookie 镜像同步（middleware 认 cookie）
+      if (access_token) setAuthTokens(access_token, refresh_token)
       return true
     } catch {
-      // 刷新失败（refresh 过期/被吊销）→ 清除登录态
-      ;['token', 'refreshToken', 'user', 'deviceId'].forEach((k) => localStorage.removeItem(k))
+      // 刷新失败（refresh 过期/被吊销）→ 清除登录态（含 cookie 镜像）
+      clearAuth()
       return false
     } finally {
       refreshPromise = null
@@ -96,7 +96,7 @@ function clearAuthAndRedirect(failedUrl?: string) {
   // /api/messages（用户端），管理 token 必然 401 → 会话被清 → 弹回登录页，
   // 表现为「登录成功进首页一秒后被弹走」。此时绝不能清会话，原样拒绝让页面自己提示。
   if (isAdminSession && !isAdminEndpointUrl(failedUrl)) return
-  ;['token', 'refreshToken', 'user', 'deviceId'].forEach((k) => localStorage.removeItem(k))
+  clearAuth()
   if (isAdminSession) localStorage.removeItem('admin')
   if (typeof window !== 'undefined' && !window.location.pathname.includes('/login')) {
     window.location.href = isAdminSession ? '/admin/login' : '/login'
