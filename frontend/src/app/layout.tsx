@@ -5,6 +5,7 @@ import { App, ConfigProvider, theme as antdTheme } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import AntdRegistry from '@/lib/AntdRegistry'
 import { ThemeProvider, useTheme } from '@/lib/theme'
+import AuthGatekeeper from '@/components/AuthGatekeeper'
 import './globals.css'
 
 /**
@@ -120,7 +121,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
                 minHeight: '100vh',
               }}
             >
-              {children}
+              <AuthGatekeeper>{children}</AuthGatekeeper>
             </body>
           </ThemedConfig>
         </AntdRegistry>

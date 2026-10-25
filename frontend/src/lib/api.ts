@@ -31,7 +31,13 @@ const refreshApi = axios.create({
   timeout: 20000,
 })
 
-async function refreshAccessToken(): Promise<boolean> {
+/**
+ * 单飞刷新：并发调用只发一次 /api/auth/refresh，成功则双 token 轮换写回。
+ * 两个调用方：响应拦截器（收到真实 401 后被动刷新）与根 layout 的
+ * AuthGatekeeper（启动时主动静默刷新）。失败时清除登录态但不跳转，
+ * 跳转由调用方决定（拦截器硬跳 /login；门 replace('/login')）。
+ */
+export async function refreshAccessToken(): Promise<boolean> {
   if (refreshPromise) return refreshPromise
   refreshPromise = (async () => {
     const refreshToken = localStorage.getItem('refreshToken')

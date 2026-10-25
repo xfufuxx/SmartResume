@@ -3169,3 +3169,24 @@ body {
     width: 100% !important;
   }
 }
+
+/* ── 全局鉴权门 loading（AuthGatekeeper）：SSR 与 CSR 首帧一致渲染 ──
+   未裁决前 children 不挂载，杜绝「先闪业务页骨架再跳登录」；
+   用 fixed 定位覆盖视口，不依赖任何布局上下文 */
+.auth-gate {
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  background: var(--bg-body, #f2f2f7);
+}
+
+.auth-gate-text {
+  margin: 0;
+  font-size: 14px;
+  color: var(--text-secondary, rgba(60, 60, 67, 0.6));
+}
