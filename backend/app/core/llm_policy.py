@@ -79,14 +79,16 @@ def normalize_model(model: str) -> str:
     if not model:
         return ""
     m = model.strip()
-    # 1) 直接命中
+    # 1) 带日期/版本快照的后缀 → 先归一到主名（如 qwen3.7-flash-2026-07-15 → qwen3.7-flash）。
+    #    必须先于「直接命中」：快照别名本身也登记在清单里（记录各自的到期日），
+    #    但单价表只有主名——不归一会让快照调用按保守价（Plus 档）估算。
+    stripped = re.sub(r"-\d{4}(?:-\d{2}){0,2}$", "", m)
+    if stripped != m and (stripped in FREE_QUOTA_MODELS or stripped in NO_FREE_QUOTA_MODELS):
+        return stripped
+    # 2) 直接命中（含 deepseek-v4-pro-0813 这类去后缀后不在清单的快照名）
     if m in FREE_QUOTA_MODELS or m in NO_FREE_QUOTA_MODELS:
         return m
-    # 2) 带日期快照的后缀 → 去掉
-    stripped = re.sub(r"-\d{4}(?:-\d{2}){0,2}$", "", m)
-    if stripped in FREE_QUOTA_MODELS or stripped in NO_FREE_QUOTA_MODELS:
-        return stripped
-    # 3) 清单里去掉快照后缀后的任一主名
+    # 3) 清单里任一主名是 m 的前缀
     for base in list(FREE_QUOTA_MODELS) + list(NO_FREE_QUOTA_MODELS):
         if m.startswith(base):
             return base
@@ -105,10 +107,16 @@ def billing_info(model: str) -> dict:
         }
     if norm in FREE_QUOTA_MODELS:
         expiry = FREE_QUOTA_MODELS[norm]
+        if expiry and expiry < date.today():
+            reason = f"免费额度已于 {expiry} 到期"
+        elif not expiry:
+            reason = "清单未标注到期日"
+        else:
+            reason = ""
         return {
             "model": model, "normalized": norm, "has_free_quota": True,
             "expiry": expiry,
-            "reason": "" if expiry else "清单未标注到期日",
+            "reason": reason,
             "price_in_cny_per_mtok": PRICING_CNY_PER_MTOK.get(norm, _FALLBACK_PRICING)[0],
             "price_out_cny_per_mtok": PRICING_CNY_PER_MTOK.get(norm, _FALLBACK_PRICING)[1],
         }
@@ -184,12 +192,17 @@ def check_before_call(model: str, task: str, estimated_input_tokens: int = 0,
     info = billing_info(model)
     # 重试会重复计费：3 次重试 = 最多 4 次请求，预估必须按上界放大
     est = estimate_cost_cny(model, estimated_input_tokens, estimated_output_tokens) * max(1, retry_budget)
+    # 「在免费清单里」≠「现在还能白嫖」：额度已到期同样按量计费，
+    # 仅免费模式下必须本地拦截（否则请求发到上游也是 403）
+    still_free = bool(info["has_free_quota"]) and (
+        not info["expiry"] or info["expiry"] >= date.today()
+    )
     detail = (
         f"[LLM 计费] 任务={task} 模型={model} "
-        f"{'走免费额度' if info['has_free_quota'] else '按量计费⚠️ (' + info['reason'] + ')'}"
+        f"{'走免费额度' if still_free else '按量计费⚠️ (' + info['reason'] + ')'}"
         f" 预估费用={format_cost(est)}"
     )
-    if info["has_free_quota"]:
+    if still_free:
         if info["expiry"]:
             days = (info["expiry"] - date.today()).days
             tail = f"，免费额度到期 {info['expiry']}（剩 {days} 天）"

@@ -1,11 +1,17 @@
 import json
 import asyncio
+import logging
 from openai import AsyncOpenAI
 
 from app.config import settings
+from app.core.llm_errors import is_retryable_error, wrap_llm_error
+from app.core.llm_policy import check_before_call
+from app.core.llm_policy import resolve_model as resolve_policy_model
 from app.services import ensure_mock_allowed, has_valid_api_key
 from app.prompts.match_analysis import MATCH_ANALYSIS_SYSTEM_PROMPT
 from app.prompts.optimize import OPTIMIZE_SYSTEM_PROMPT
+
+logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
 
@@ -16,10 +22,30 @@ def _get_client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.LLM_API_KEY, base_url=settings.LLM_API_BASE)
 
 
-async def _call_with_retry(client, **kwargs):
-    """带指数退避重试的 LLM 调用，自动处理 response_format 不兼容"""
+async def _call_with_retry(client, task: str = "LLM 调用", **kwargs):
+    """带指数退避重试的 LLM 调用。
+
+    与裸重试的区别：
+    - 模型名先过 llm_policy.resolve_model：免费额度已过期/不覆盖的模型
+      在 LLM_AUTO_FALLBACK 开启时自动换成仍在免费期内的替补（如 2026-10-23 后
+      qwen3.7-flash 额度到期 → 自动切 qwen3.7-max），用户无感；
+    - 调用前 check_before_call 预检：仅免费模式下命中付费模型直接拒绝，绝不发请求；
+    - 403/400/401 等确定性错误不重试（重试结果不会变），直接抛中文友好异常；
+    - response_format 不兼容时去掉该参数重试。
+    """
     kwargs.setdefault("timeout", 120.0)
     kwargs.setdefault("temperature", 0.2)  # 匹配/优化/改写需稳定输出，默认低温
+
+    # 模型解析与降级（resolve_model 是纯函数，失败行为 = 原样返回）
+    requested = kwargs.get("model", "")
+    resolved, note = resolve_policy_model(requested)
+    if note:
+        logger.warning("[模型降级] %s", note)
+    kwargs["model"] = resolved
+
+    # 调用前计费预检（免费额度内直接放行；付费且 LLM_ALLOW_PAID=false → 抛 PaidCallBlocked）
+    check_before_call(resolved, task, retry_budget=MAX_RETRIES)
+
     for attempt in range(MAX_RETRIES):
         try:
             return await client.chat.completions.create(**kwargs)
@@ -30,13 +56,18 @@ async def _call_with_retry(client, **kwargs):
                 fallback_kwargs = {k: v for k, v in kwargs.items() if k != "response_format"}
                 try:
                     return await client.chat.completions.create(**fallback_kwargs)
-                except Exception:
+                except Exception as e2:
+                    if not is_retryable_error(e2):
+                        raise wrap_llm_error(e2, resolved) from e2
                     if attempt == MAX_RETRIES - 1:
-                        raise
+                        raise wrap_llm_error(e2, resolved) from e2
                     await asyncio.sleep(1 * (attempt + 1))
                     continue
+            # 确定性错误（403 额度/权限、400、401…）：重试无意义，直接抛中文友好异常
+            if not is_retryable_error(e):
+                raise wrap_llm_error(e, resolved) from e
             if attempt == MAX_RETRIES - 1:
-                raise
+                raise wrap_llm_error(e, resolved) from e
             await asyncio.sleep(1 * (attempt + 1))
 
 
@@ -50,6 +81,7 @@ async def analyze_match(resume_json: dict, job_json: dict) -> dict:
 
     resp = await _call_with_retry(
         _get_client(),
+        task="匹配分析",
         model=settings.LLM_MODEL_TEXT,
         messages=[
             {
@@ -81,6 +113,7 @@ async def optimize_resume(resume_json: dict, job_json: dict, strategy: dict, cus
 
     resp = await _call_with_retry(
         _get_client(),
+        task="简历优化",
         model=settings.LLM_MODEL_TEXT,
         messages=[
             {
@@ -104,6 +137,7 @@ async def generate_changes_description(resume_json: dict, optimized_json: dict) 
 
     resp = await _call_with_retry(
         _get_client(),
+        task="修改说明生成",
         model=settings.LLM_MODEL_TEXT,
         messages=[
             {

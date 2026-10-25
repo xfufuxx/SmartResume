@@ -20,6 +20,9 @@ from typing import Optional
 from openai import AsyncOpenAI
 
 from app.config import settings
+from app.core.llm_errors import LLMQuotaExhausted, is_retryable_error, wrap_llm_error
+from app.core.llm_policy import check_before_call
+from app.core.llm_policy import resolve_model as resolve_policy_model
 from app.services import has_valid_api_key
 from app.services.pdf_layout_editor import TextBlock, PROTECTED_FIELDS, OPTIMIZABLE_FIELDS
 
@@ -139,6 +142,10 @@ async def optimize_text_blocks(
                         # 模型未返回该块，保留原文
                         result[block.block_index] = block.text
                         logger.warning(f"大模型未返回 {key} 的优化结果，保留原文")
+            except LLMQuotaExhausted:
+                # 额度耗尽是全局性问题（换 Key/充值才能解决）：
+                # 静默保留原文会让用户误以为「已优化」，必须上抛让接口层报错
+                raise
             except Exception as e:
                 logger.error(f"优化失败 (field={field_type}, batch={batch_start}): {e}")
                 # 失败时保留原文
@@ -176,10 +183,15 @@ async def _call_llm_optimize(
     ) + extra
 
     client = _get_client()
+    # 模型解析与降级 + 计费预检（与 agent_optimizer 同一套策略）
+    model, note = resolve_policy_model(settings.LLM_MODEL_TEXT)
+    if note:
+        logger.warning("[模型降级] %s", note)
+    check_before_call(model, "文本优化", retry_budget=MAX_RETRIES)
     for attempt in range(MAX_RETRIES):
         try:
             resp = await client.chat.completions.create(
-                model=settings.LLM_MODEL_TEXT,
+                model=model,
                 messages=[
                     {"role": "user", "content": prompt},
                 ],
@@ -203,7 +215,7 @@ async def _call_llm_optimize(
                 # 去掉 response_format 重试
                 try:
                     resp = await client.chat.completions.create(
-                        model=settings.LLM_MODEL_TEXT,
+                        model=model,
                         messages=[{"role": "user", "content": prompt}],
                         max_tokens=4096,
                         timeout=60.0,
@@ -219,11 +231,14 @@ async def _call_llm_optimize(
                         await asyncio.sleep(1 * (attempt + 1))
                         continue
                     raise
+            # 确定性错误（403 额度/权限、400、401…）：重试无意义，直接抛中文友好异常
+            if not is_retryable_error(e):
+                raise wrap_llm_error(e, model) from e
             if attempt < MAX_RETRIES - 1:
                 logger.warning(f"大模型调用失败 (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
                 await asyncio.sleep(1 * (attempt + 1))
             else:
-                raise
+                raise wrap_llm_error(e, model) from e
 
 
 async def optimize_image_blocks(
@@ -284,6 +299,9 @@ async def optimize_image_blocks(
                     result[orig_idx] = optimized[key]
                 else:
                     result[orig_idx] = block.text
+        except LLMQuotaExhausted:
+            # 同 PDF 路径：额度耗尽是全局问题，不能静默保留原文假装成功
+            raise
         except Exception as e:
             logger.error(f"图片文本优化失败 (batch={batch_start}): {e}")
             for orig_idx, block in batch:

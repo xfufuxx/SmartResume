@@ -22,6 +22,7 @@ from PIL import Image, ImageDraw, ImageFont
 from openai import AsyncOpenAI
 
 from app.config import settings
+from app.core.llm_errors import is_retryable_error, wrap_llm_error
 from app.services import has_valid_api_key
 
 logger = logging.getLogger(__name__)
@@ -185,13 +186,18 @@ async def extract_image_layout(image_bytes: bytes) -> ImageLayout:
                     )
                     break
                 except Exception as e2:
+                    if not is_retryable_error(e2):
+                        raise wrap_llm_error(e2, settings.LLM_MODEL_VISION) from e2
                     if attempt == MAX_RETRIES - 1:
-                        raise
+                        raise wrap_llm_error(e2, settings.LLM_MODEL_VISION) from e2
                     logger.warning(f"视觉模型调用失败 (attempt {attempt + 1}/{MAX_RETRIES}): {e2}")
                     await asyncio.sleep(1 * (attempt + 1))
                     continue
+            # 确定性错误（403 额度/权限、400、401…）：重试无意义，直接抛中文友好异常
+            if not is_retryable_error(e):
+                raise wrap_llm_error(e, settings.LLM_MODEL_VISION) from e
             if attempt == MAX_RETRIES - 1:
-                raise
+                raise wrap_llm_error(e, settings.LLM_MODEL_VISION) from e
             logger.warning(f"视觉模型调用失败 (attempt {attempt + 1}/{MAX_RETRIES}): {e}")
             await asyncio.sleep(1 * (attempt + 1))
 

@@ -94,24 +94,39 @@ async def stream_polish_reply(
     from openai import AsyncOpenAI
 
     from app.config import settings
+    from app.core.llm_errors import wrap_llm_error
+    from app.core.llm_policy import check_before_call
+    from app.core.llm_policy import resolve_model as resolve_policy_model
     from app.services import has_valid_api_key
 
     if not has_valid_api_key():
         raise ValueError("LLM_API_KEY 未配置或未生效，无法进行对话润色")
+
+    # 模型解析与降级 + 计费预检（与 agent_optimizer 同一套策略：
+    # 免费额度过期的模型自动切替补，仅免费模式下命中付费模型直接拒绝）
+    model, note = resolve_policy_model(settings.LLM_MODEL_TEXT)
+    if note:
+        logger.warning("[模型降级] %s", note)
+    check_before_call(model, "对话润色")
 
     client = AsyncOpenAI(api_key=settings.LLM_API_KEY, base_url=settings.LLM_API_BASE)
     messages = [
         {"role": "system", "content": polish_system_prompt(context_text)},
         *history,
     ]
-    stream = await client.chat.completions.create(
-        model=settings.LLM_MODEL_TEXT,
-        messages=messages,
-        temperature=0.6,
-        max_tokens=4096,
-        stream=True,
-        timeout=120.0,
-    )
+    try:
+        stream = await client.chat.completions.create(
+            model=model,
+            messages=messages,
+            temperature=0.6,
+            max_tokens=4096,
+            stream=True,
+            timeout=120.0,
+        )
+    except Exception as e:
+        # 统一转中文可操作异常（SSE error 事件直接展示 str(e)）：
+        # 403 额度耗尽 / 401 Key 无效 / 429 限流等都有明确下一步
+        raise wrap_llm_error(e, model) from e
     async for chunk in stream:
         delta = chunk.choices[0].delta.content if chunk.choices else None
         if delta:
