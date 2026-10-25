@@ -77,14 +77,11 @@
 | glm-5.3 | 2026-11-23 | **新增**（实测可用） |
 | deepseek-v4-pro-0813 | 2026-11-13 | 不变 |
 | qwen-mt-uni / qwen3.7-text-rerank / qwen-mt-image-2.0 / wan3.0-video-prime | 12-15 / 11-30 / 11-27 / 11-21 | 新增，登记为非文本模型 |
+| qwen3.8-livetranslate-flash-realtime / qwen3.7-text-embedding-flash | 12-16 / 11-30 | 新增，非文本（截图截断，全名经用户确认） |
 | qwen3-asr-flash | 2026-11-19 | 不变 |
 | sambert-zhichu/hanna/clara/eva-v1 | 永不过期 | 新增（None） |
 | qwen3.7-flash | 已下架 | 保留条目仅备案 |
 | qwen3.7-max | 截图未出现 | 暂按 11-01 保留（10-25 实测可用，待确认是否在其它分页） |
-
-**待用户确认的两个截断名**（均是非对话模型，不影响文本链路）：
-`qwen3.8-livetranslate-flas…`（到期 2026-12-16，实时翻译）、
-`qwen3.7-text-embedding-f…`（到期 2026-11-30，文本向量）。
 
 同时加固降级挑选逻辑（三个隐患）：
 1. **非文本模型混入选池**：max 档 11-01 到期后，旧实现按字母序会降级到 cosyvoice（TTS）

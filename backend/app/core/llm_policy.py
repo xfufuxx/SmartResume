@@ -49,6 +49,8 @@ FREE_QUOTA_MODELS: dict[str, date | None] = {
     "qwen3.7-flash-2026-07-15": date(2026, 10, 23),
     # ── 非文本模型（按 chars/seconds/images 计量，见 NON_TEXT_MODELS，仅备案） ──
     "qwen-mt-uni": date(2026, 12, 15),          # 机器翻译
+    "qwen3.8-livetranslate-flash-realtime": date(2026, 12, 16),  # 实时翻译（console 截断，用户确认全名）
+    "qwen3.7-text-embedding-flash": date(2026, 11, 30),  # 文本向量（console 截断，用户确认全名）
     "qwen3.7-text-rerank": date(2026, 11, 30),  # 文本重排
     "qwen-mt-image-2.0": date(2026, 11, 27),    # 图片翻译（100 张/期，非通用视觉）
     "wan3.0-video-prime": date(2026, 11, 21),   # 视频生成（30 秒/期）
@@ -67,17 +69,15 @@ FREE_QUOTA_MODELS: dict[str, date | None] = {
 # 非文本模型：语音合成/识别、机器翻译、向量、重排、视频、图片翻译。
 # 按 chars/seconds/images 计量，**文本与视觉对话链路均不可用**——自动降级若挑中
 # 它们会直接坏菜（max 档 11-01 到期后，旧实现按字母序会降级到 cosyvoice）。
-# 两条被控制台截断的全名待用户确认（均是非对话模型，不影响文本链路）：
-#   qwen3.8-livetranslate-flas…（到期 2026-12-16，实时翻译）
-#   qwen3.7-text-embedding-f…（到期 2026-11-30，文本向量）
+# 两条曾被控制台截断的全名已由用户确认（2026-10-25）：实时翻译与文本向量。
 NON_TEXT_MODELS: frozenset[str] = frozenset({
     "cosyvoice-v1", "cosyvoice-clone-v1",
     "qwen3-asr-flash",
     "qwen-mt-uni", "qwen-mt-image-2.0",
     "qwen3.7-text-rerank",
     "wan3.0-video-prime",
-    "qwen3.8-livetranslate-flash",     # 全名待确认（console 截断显示）
-    "qwen3.7-text-embedding-flash",    # 全名待确认（console 截断显示）
+    "qwen3.8-livetranslate-flash-realtime",  # 实时翻译
+    "qwen3.7-text-embedding-flash",          # 文本向量
     "sambart-zhyuan-v1", "sambart-zhinan-v1", "sambart-zhigui-v1",
     "sambart-zhichu-v1", "sambart-hanna-v1", "sambart-clara-v1", "sambart-eva-v1",
 })
