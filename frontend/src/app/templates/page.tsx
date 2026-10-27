@@ -15,12 +15,11 @@
 import React, { Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useRouter, useSearchParams } from 'next/navigation'
 import {
-  Card, Col, Row, Typography, Tag, Segmented, Input, Empty, Tabs, Badge,
+  Card, Col, Row, Typography, Tag, Segmented, Input, Empty, Tabs,
   Tooltip, Button, message, Skeleton,
 } from 'antd'
 import {
   SearchOutlined, EyeOutlined, AppstoreOutlined, BarsOutlined,
-  CheckCircleFilled, PictureOutlined,
 } from '@ant-design/icons'
 import { useTheme } from '@/lib/theme'
 import {
@@ -29,11 +28,21 @@ import {
   type TemplateMetadata,
   type TemplateCategory,
 } from '@/lib/templates-register'
-import { TEMPLATE_OPTIONS, DEFAULT_TEMPLATE } from '@/lib/templates'
+import { TEMPLATE_OPTIONS } from '@/lib/templates'
 import { editor, optimize } from '@/lib/api'
 import { MiniPreview, TemplatePreviewModal } from '@/components/TemplateSelector'
+import AppLayout from '@/components/AppLayout'
 
 type ViewMode = 'grid' | 'list'
+
+/** 分类计数样式：与优化流程的 TemplateSelector/FilterBar 完全一致——
+ *  弱化的普通数字（var(--text-secondary)），不用红色 pill（深色主题下突兀） */
+const countStyle: React.CSSProperties = {
+  marginLeft: 4,
+  fontSize: 12,
+  fontWeight: 500,
+  color: 'var(--text-secondary)',
+}
 
 function GalleryInner() {
   const router = useRouter()
@@ -43,7 +52,6 @@ function GalleryInner() {
 
   const [view, setView] = useState<ViewMode>('grid')
   const [category, setCategory] = useState<TemplateCategory | 'all'>('all')
-  const [tag, setTag] = useState<string | null>(null)
   const [query, setQuery] = useState('')
   const [previewKey, setPreviewKey] = useState<string | null>(null)
   const [applying, setApplying] = useState(false)
@@ -76,7 +84,6 @@ function GalleryInner() {
     return TEMPLATE_OPTIONS.filter((opt) => {
       const meta = TemplateRegistry.get(opt.key)
       if (category !== 'all' && meta?.category !== category) return false
-      if (tag && !(meta?.tags || []).includes(tag)) return false
       if (q) {
         const hay = [
           opt.key, opt.label, opt.preview.desc,
@@ -86,13 +93,7 @@ function GalleryInner() {
       }
       return true
     })
-  }, [category, tag, query])
-
-  const tags = useMemo(() => {
-    const set = new Set<string>()
-    TEMPLATE_OPTIONS.forEach((o) => TemplateRegistry.get(o.key)?.tags.forEach((t) => set.add(t)))
-    return Array.from(set).sort()
-  }, [])
+  }, [category, query])
 
   /** 「使用此模板」闭环：有记录落库并跳回详情页；无记录带参进优化页 */
   const handleUse = async (key: string) => {
@@ -252,20 +253,16 @@ function GalleryInner() {
   }
 
   return (
+    <AppLayout activeKey="templates" title="简历模板库" subtitle={`共 ${TEMPLATE_OPTIONS.length} 套模板 · 点击卡片查看大图预览`}>
     <div style={{ maxWidth: 1280, margin: '0 auto', padding: '20px 20px 40px' }}>
-      {/* ── 页头 ── */}
-      <div style={{ marginBottom: 16 }}>
-        <Typography.Title level={3} style={{ marginBottom: 4, color: 'var(--text-primary)' }}>
-          <PictureOutlined style={{ marginRight: 8 }} />
-          简历模板库
-        </Typography.Title>
-        <Typography.Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
-          共 {TEMPLATE_OPTIONS.length} 套模板，点击卡片查看大图预览；
-          {recordId
-            ? '当前正在为一条优化记录挑选模板，点击「使用此模板」将直接应用并返回详情。'
-            : '点击「使用此模板」将带着该模板进入优化页。'}
-        </Typography.Text>
-      </div>
+      {/* ── 闭环提示（仅从详情页「换模板」进入时显示） ── */}
+      {recordId && (
+        <div style={{ marginBottom: 14 }}>
+          <Typography.Text style={{ color: 'var(--text-secondary)', fontSize: 13 }}>
+            当前正在为一条优化记录挑选模板，点击「使用此模板」将直接应用并返回详情。
+          </Typography.Text>
+        </div>
+      )}
 
       {/* ── 工具栏 ── */}
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10, alignItems: 'center', marginBottom: 14 }}>
@@ -282,19 +279,16 @@ function GalleryInner() {
           activeKey={category}
           onChange={(k) => setCategory(k as TemplateCategory | 'all')}
           items={[
-            { key: 'all', label: <Badge size="small" offset={[8, 0]} count={TEMPLATE_OPTIONS.length} showZero={false}>全部</Badge> },
+            { key: 'all', label: <span>全部<span style={countStyle}>{TEMPLATE_OPTIONS.length}</span></span> },
             ...(Object.keys(CATEGORY_LABELS) as TemplateCategory[]).map((k) => ({
               key: k,
               label: (
-                <Badge
-                  key={k}
-                  size="small"
-                  offset={[8, 0]}
-                  count={TEMPLATE_OPTIONS.filter((o) => TemplateRegistry.get(o.key)?.category === k).length}
-                  showZero={false}
-                >
+                <span key={k}>
                   {CATEGORY_LABELS[k]}
-                </Badge>
+                  <span style={countStyle}>
+                    {TEMPLATE_OPTIONS.filter((o) => TemplateRegistry.get(o.key)?.category === k).length}
+                  </span>
+                </span>
               ),
             })),
           ]}
@@ -309,17 +303,6 @@ function GalleryInner() {
           style={{ width: 220 }}
         />
       </div>
-
-      {/* ── 标签 chips ── */}
-      {tags.length > 0 && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 14 }}>
-          {tags.map((t) => (
-            <Tag.CheckableTag key={t} checked={tag === t} onChange={(checked) => setTag(checked ? t : null)}>
-              #{t}
-            </Tag.CheckableTag>
-          ))}
-        </div>
-      )}
 
       {filtered.length === 0 ? (
         <Empty description="没有符合条件的模板，试试调整筛选条件" style={{ padding: '60px 0' }} />
@@ -343,6 +326,7 @@ function GalleryInner() {
         />
       )}
     </div>
+    </AppLayout>
   )
 }
 
