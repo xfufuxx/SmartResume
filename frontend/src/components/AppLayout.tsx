@@ -638,7 +638,12 @@ export default function AppLayout({
       <aside className={`wb-sidebar${drawerOpen ? ' open' : ''}`}>
         <div className="wb-brand">
           <div className="wb-brand-logo">
-            <ThunderboltOutlined />
+            {/* 与站点 logo（favicon icon.png）一致：文档+星光 */}
+            <img
+              src="/logo.png"
+              alt="智能简历"
+              style={{ width: '100%', height: '100%', borderRadius: 9, objectFit: 'cover', display: 'block' }}
+            />
           </div>
           <span className="wb-brand-name">智能简历</span>
         </div>
