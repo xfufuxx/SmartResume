@@ -364,7 +364,9 @@ function DashboardPanel() {
     color: [chartColors.primary, chartColors.success, chartColors.warning, chartColors.purple, chartColors.teal, chartColors.gray],
     legend: { orient: 'vertical', right: 0, top: 'center', textStyle: { color: chartColors.textSecondary, fontSize: 11 }, itemWidth: 10, itemHeight: 10 },
     series: [{
-      type: 'pie', radius: ['55%', '80%'], center: ['35%', '50%'],
+      // center 40% + radius 70%：右边缘位置与旧配置（35% + 80%）相同，但左边缘
+      // 收进画布内——旧配置在 ≤1440 视口会把左侧圆弧画到画布外（实测 left=-4~-14px）
+      type: 'pie', radius: ['48%', '70%'], center: ['40%', '50%'],
       data: industries.map((d) => ({ name: d.name, value: d.count })),
       label: { show: false },
       labelLine: { show: false },

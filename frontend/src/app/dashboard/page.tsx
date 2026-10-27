@@ -235,17 +235,15 @@ export default function Dashboard() {
       borderColor: getCssVar('--border-light', '#e5e7eb'),
       textStyle: { color: getCssVar('--text-primary', '#111827') },
     },
-    legend: {
-      orient: 'vertical', right: 4, top: 'center',
-      itemWidth: 10, itemHeight: 10,
-      textStyle: { color: getCssVar('--text-secondary', '#4b5563'), fontSize: 12 },
-    },
+    // 图例关掉：卡片底部已有带数值+百分比的自定义图例，内置图例在窄卡片里
+    // 既重复又会挤压圆环（曾因 center 34% + radius 80% 导致左侧圆弧被裁切）
+    legend: { show: false },
     color: PIE_COLORS,
     series: [{
       name: '优化方向',
       type: 'pie',
-      radius: ['55%', '80%'],
-      center: ['34%', '50%'],
+      radius: ['58%', '82%'],
+      center: ['50%', '50%'],
       avoidLabelOverlap: false,
       label: { show: false },
       emphasis: { label: { show: false } },
@@ -511,7 +509,7 @@ export default function Dashboard() {
                     <>
                       <div style={{ position: 'relative' }}>
                         <ReactECharts echarts={echarts} option={pieOption} style={{ height: 200 }} />
-                        <div style={{ position: 'absolute', top: '50%', left: '34%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
+                        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%, -50%)', textAlign: 'center' }}>
                           <div style={{ fontSize: 24, fontWeight: 700, color: 'var(--text-primary)' }}>{pieTotal}</div>
                           <div style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>总数</div>
                         </div>
