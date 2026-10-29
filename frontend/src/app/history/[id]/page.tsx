@@ -261,13 +261,19 @@ export default function OptimizationDetailPage() {
     }
   }
 
-  /** 切换模板：立即落库（失败不阻断交互，导出时会再次固化） */
-  const handleSelectTemplate = (key: string) => {
+  /** 切换模板：落库并立即按新模板重新生成 PDF（失败则整体回滚，提示用户重试） */
+  const handleSelectTemplate = async (key: string) => {
     setTemplate(key)
     if (!id) return
-    editor.setTemplate(id, key).catch(() => {
-      // 静默失败：导出时仍会带 template 参数并落库
-    })
+    message.loading({ content: '正在按新模板重新生成 PDF…', key: 'tpl-switch', duration: 0 })
+    try {
+      const res = await editor.setTemplate(id, key, true)
+      setDetail((prev) => (prev ? { ...prev, pdf_url: res.data?.pdf_url, template: key } : prev))
+      message.success({ content: '已切换模板，PDF 已按新版式重新生成', key: 'tpl-switch' })
+    } catch (e: any) {
+      message.error({ content: e?.response?.data?.detail || '模板切换失败，请稍后重试', key: 'tpl-switch' })
+      setTemplate(detail?.template || key)  // 回滚 UI 到记录实际状态
+    }
   }
 
   const handleReexport = async () => {

@@ -103,7 +103,9 @@ function GalleryInner() {
     }
     setApplying(true)
     try {
-      await editor.setTemplate(recordId, key)
+      // reexport=true：切换模板的同时按新模板重新生成 PDF——
+      // 否则跳回详情页后「下载 PDF」打开的还是旧模板渲染的文件
+      await editor.setTemplate(recordId, key, true)
       message.success(`已应用「${TemplateRegistry.get(key)?.name || key}」，正在返回记录详情…`)
       router.push(`/history/${recordId}`)
     } catch (e) {

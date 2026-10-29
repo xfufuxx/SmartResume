@@ -692,9 +692,12 @@ export const editor = {
     api.post(`/api/optimize/${optId}/reexport`, null, {
       params: template ? { template } : {},
     }),
-  /** 切换记录使用的模板（模板 ID 落库，成为预览/导出的唯一事实来源） */
-  setTemplate: (optId: string, template: string) =>
-    api.put(`/api/optimize/${optId}/template`, { template }),
+  /** 切换记录使用的模板（模板 ID 落库，成为预览/导出的唯一事实来源）。
+   *  reexport 默认 true：切换后立即按新模板重新生成 PDF——否则记录已切换、
+   *  pdf_url 还是旧模板渲染的文件，用户点「下载 PDF」拿到的永远是旧版式
+   *  （2026-10-29 用户反馈：改模板后导出 PDF 依旧无效，根因即此处）。 */
+  setTemplate: (optId: string, template: string, reexport = true) =>
+    api.put(`/api/optimize/${optId}/template`, { template }, { params: reexport ? { reexport: true } : {} }),
   /** 更新记录的主题定制（与模板默认合并落库；保存即重导出，保持文件与记录一致） */
   setTheme: (optId: string, theme: Record<string, string | number>) =>
     api.put(`/api/optimize/${optId}/theme`, theme, { params: { reexport: true } }),
