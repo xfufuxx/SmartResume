@@ -701,6 +701,9 @@ export const editor = {
   /** 更新记录的主题定制（与模板默认合并落库；保存即重导出，保持文件与记录一致） */
   setTheme: (optId: string, theme: Record<string, string | number>) =>
     api.put(`/api/optimize/${optId}/theme`, theme, { params: { reexport: true } }),
+  /** 设置/移除简历底部二维码（image=null 移除；保存即重导出，文件与记录一致） */
+  setQrCode: (optId: string, qr: { image: string | null; label?: string; url?: string }) =>
+    api.put(`/api/optimize/${optId}/qr-code`, qr, { params: { reexport: true } }),
   /** 可视化排版：保存布局文档（layout_json） */
   saveLayout: (optId: string, layout: Record<string, unknown>) =>
     api.put(`/api/optimize/${optId}/layout`, { layout }),

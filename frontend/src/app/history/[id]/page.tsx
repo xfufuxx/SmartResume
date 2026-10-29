@@ -11,7 +11,7 @@ import {
 } from '@ant-design/icons'
 import { Tooltip } from 'antd'
 import ThemeDrawer from '@/components/ThemeDrawer'
-import QrCodeCard from '@/components/QrCodeCard'
+import QrCodeCard, { type ResumeQr } from '@/components/QrCodeCard'
 import { useRouter, useParams } from 'next/navigation'
 import { optimize, toBackendUrl, editor } from '@/lib/api'
 import { getToken } from '@/lib/auth'
@@ -290,6 +290,29 @@ export default function OptimizationDetailPage() {
     }
   }
 
+  /** 设置/移除简历底部二维码：落库并立即重导出 PDF（失败提示，UI 不落半套状态） */
+  const handleSetQr = async (qr: ResumeQr | null) => {
+    if (!id) return
+    message.loading({ content: '正在重新生成 PDF…', key: 'qr-set', duration: 0 })
+    try {
+      const res = await editor.setQrCode(
+        id,
+        qr ? { image: qr.image, label: qr.label, url: qr.url } : { image: null },
+      )
+      setDetail((prev) => (prev ? {
+        ...prev,
+        pdf_url: res.data?.pdf_url ?? prev.pdf_url,
+        optimized_json: { ...(prev.optimized_json ?? {}), qr_code: qr ?? undefined } as ResumeParseResult,
+      } : prev))
+      message.success({
+        content: qr ? '二维码已添加到简历底部，PDF 已重新生成' : '已移除底部二维码，PDF 已重新生成',
+        key: 'qr-set',
+      })
+    } catch (e: any) {
+      message.error({ content: e?.response?.data?.detail || '二维码设置失败，请稍后重试', key: 'qr-set' })
+    }
+  }
+
   if (!token) return <AuthGate activeKey="history" />
 
   if (loading) {
@@ -559,6 +582,12 @@ export default function OptimizationDetailPage() {
           suggestions={qrSuggestions}
           initialLabel={detail?.job_title || ''}
           compact
+          onAddToResume={handleSetQr}
+          existingQr={
+            ((detail?.optimized_json as Record<string, unknown> | undefined)?.qr_code as
+              | { label?: string; url?: string }
+              | undefined) ?? null
+          }
         />
       </Modal>
     </AppLayout>

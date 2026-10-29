@@ -87,6 +87,17 @@ class TemplateUpdateRequest(BaseModel):
     template: str
 
 
+class QrCodeUpdateRequest(BaseModel):
+    """设置/移除简历底部二维码（存于 optimized_json['qr_code']，渲染时统一注入）。
+
+    - image：data URL（base64 png/jpeg/webp，解码后 ≤300KB）；None/空 = 移除
+    - label / url：可选文字说明与链接（渲染为图片旁的两行小字）
+    """
+    image: Optional[str] = None
+    label: Optional[str] = None
+    url: Optional[str] = None
+
+
 class ThemeUpdateRequest(BaseModel):
     """更新记录的主题定制（部分字段即可；与模板默认合并，见 resume_theme.normalize_theme_config）。
 

@@ -22,7 +22,7 @@ from app.schemas.optimization import (
     OptimizeRequest, OptimizeResponse, MatchAnalysis, DiffResponse,
     SatisfactionFeedbackRequest, QuickOptimizeRequest, RenderRequest, RenderTextRequest,
     UpdateContentRequest, SaveLayoutRequest, ExportLayoutRequest, TemplateUpdateRequest,
-    ThemeUpdateRequest,
+    ThemeUpdateRequest, QrCodeUpdateRequest,
     ChangeReviewResponse, ChangeApplyRequest,
 )
 from app.services.agent_optimizer import analyze_match, optimize_resume, generate_changes_description
@@ -654,6 +654,59 @@ async def update_theme(
             new_url = await _render_record_pdf(record, user.id, key)
         except Exception as e:
             logger.error(f"[切换主题] PDF 生成失败 opt={opt_id}: {e}", exc_info=True)
+            raise HTTPException(status_code=500, detail=f"PDF 生成失败: {type(e).__name__}: {str(e)[:200]}")
+        record.pdf_url = new_url
+
+    await db.commit()
+    await db.refresh(record)
+
+    if reexport and old_url and old_url != record.pdf_url:
+        try:
+            await storage.delete(old_url)
+        except Exception:
+            pass  # 旧文件清理失败不影响主流程
+
+    return _to_response(record)
+
+
+@router.put("/{opt_id}/qr-code", response_model=OptimizeResponse)
+async def set_qr_code(
+    opt_id: str,
+    body: QrCodeUpdateRequest,
+    reexport: bool = Query(True, description="true = 保存后立即重新生成 PDF（默认开，保证文件与记录一致）"),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """设置/移除简历底部二维码（存于 optimized_json['qr_code']）。
+
+    - image 传有效 data URL → 写入并（默认）重导出 PDF
+    - image 为空 → 移除已有二维码并重导出（恢复无码版式）
+    - 数据校验不过 → 400，消息可直接展示给用户
+    """
+    from app.services.qr_footer import QrCodeInvalid, sanitize_qr_code
+
+    record = await _get_owned_record(db, opt_id, user)
+    if not record.optimized_json:
+        raise HTTPException(status_code=400, detail="该记录没有可导出的内容")
+
+    try:
+        qr = sanitize_qr_code(body.model_dump())
+    except QrCodeInvalid as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    data = dict(record.optimized_json)
+    if qr:
+        data["qr_code"] = qr
+    else:
+        data.pop("qr_code", None)
+    record.optimized_json = data
+
+    old_url = record.pdf_url
+    if reexport:
+        try:
+            new_url = await _render_record_pdf(record, user.id, resolve_template_id(record.template))
+        except Exception as e:
+            logger.error(f"[二维码] PDF 重导出失败 opt={opt_id}: {e}", exc_info=True)
             raise HTTPException(status_code=500, detail=f"PDF 生成失败: {type(e).__name__}: {str(e)[:200]}")
         record.pdf_url = new_url
 

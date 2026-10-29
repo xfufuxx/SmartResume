@@ -1,13 +1,14 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Button, Card, Input, Space, Tag, Typography, message } from 'antd';
+import { Button, Card, Divider, Input, Space, Tag, Typography, Upload, message } from 'antd';
 import {
   CopyOutlined,
   DownloadOutlined,
   LinkOutlined,
   QrcodeOutlined,
   SyncOutlined,
+  UploadOutlined,
 } from '@ant-design/icons';
 
 import {
@@ -26,6 +27,13 @@ const { Text } = Typography;
 export interface QrLink {
   label: string;
   url: string;
+}
+
+/** 写入简历底部的二维码数据（image 为 data URL，后端 ≤300KB 校验） */
+export interface ResumeQr {
+  image: string;
+  url: string;
+  label: string;
 }
 
 interface QrCodeCardProps {
@@ -47,6 +55,12 @@ interface QrCodeCardProps {
   onGenerated?: (url: string, label: string) => void;
   /** 紧凑模式（嵌入弹窗/抽屉时隐藏说明文案） */
   compact?: boolean;
+  /** 提供「添加到简历底部」能力（传入后显示该入口；null 入参 = 移除） */
+  onAddToResume?: (qr: ResumeQr | null) => Promise<void> | void;
+  /** 添加请求进行中（按钮 loading） */
+  adding?: boolean;
+  /** 记录当前已存在的底部二维码（用于展示「已添加」状态与移除入口） */
+  existingQr?: { label?: string; url?: string } | null;
 }
 
 /**
@@ -66,6 +80,9 @@ export default function QrCodeCard({
   suggestions,
   onGenerated,
   compact = false,
+  onAddToResume,
+  adding = false,
+  existingQr = null,
 }: QrCodeCardProps) {
   const [innerUrl, setInnerUrl] = useState(initialUrl);
   const [innerLabel, setInnerLabel] = useState(initialLabel);
@@ -74,6 +91,8 @@ export default function QrCodeCard({
   const [error, setError] = useState('');
   const [rendering, setRendering] = useState(false);
   const [regenNonce, setRegenNonce] = useState(0);
+  /** 用户上传的已有二维码（data URL）；非空时「添加到简历」优先用它 */
+  const [uploadedImage, setUploadedImage] = useState<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 受控 / 非受控双模态：传入 url/label 时完全由外部驱动
@@ -170,6 +189,62 @@ export default function QrCodeCard({
       message.error('复制失败，请手动复制');
     }
   }, [url]);
+
+  /** 上传已有二维码：读为 data URL 并压到 ≤512px PNG（黑白码，PNG 小且清晰） */
+  const handleUploadFile = useCallback(async (file: File) => {
+    if (!file.type.startsWith('image/')) {
+      message.error('请选择图片文件');
+      return false;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      message.error('图片不能超过 5MB');
+      return false;
+    }
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result as string);
+        r.onerror = () => reject(new Error('图片读取失败'));
+        r.readAsDataURL(file);
+      });
+      const img = new Image();
+      await new Promise<void>((resolve, reject) => {
+        img.onload = () => resolve();
+        img.onerror = () => reject(new Error('图片解析失败'));
+        img.src = dataUrl;
+      });
+      const max = 512;
+      const scale = Math.min(1, max / Math.max(img.width, img.height));
+      let out = dataUrl;
+      if (scale < 1) {
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.round(img.width * scale);
+        canvas.height = Math.round(img.height * scale);
+        canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height);
+        out = canvas.toDataURL('image/png');
+      }
+      setUploadedImage(out);
+      message.success('已读取二维码图片，点击下方按钮添加到简历');
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : '图片读取失败');
+    }
+    return false; // 阻止 antd Upload 自动上传
+  }, []);
+
+  /** 把二维码写进简历底部：优先用户上传的图片，否则用当前链接现生成 */
+  const handleAddToResume = useCallback(async () => {
+    if (!onAddToResume) return;
+    if (uploadedImage) {
+      await onAddToResume({ image: uploadedImage, url: normalizeUrl(url), label });
+      return;
+    }
+    if (!canRender) {
+      message.warning('请先输入有效链接，或上传已有二维码图片');
+      return;
+    }
+    const png = pngDataUrl || (await generateQrPngDataUrl(url));
+    await onAddToResume({ image: png, url: normalizeUrl(url), label });
+  }, [onAddToResume, uploadedImage, url, label, canRender, pngDataUrl]);
 
   return (
     <Card
@@ -290,6 +365,61 @@ export default function QrCodeCard({
               </Button>
             </Space>
           </div>
+        ) : null}
+
+        {onAddToResume ? (
+          <>
+            <Divider style={{ margin: '4px 0' }} />
+            {existingQr ? (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 8,
+                  flexWrap: 'wrap',
+                }}
+              >
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  已在简历底部
+                  {existingQr.label ? `：${existingQr.label}` : ''}
+                  （重新添加将覆盖）
+                </Text>
+                <Button size="small" type="text" danger loading={adding} onClick={() => onAddToResume(null)}>
+                  移除
+                </Button>
+              </div>
+            ) : null}
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Button
+                type="primary"
+                icon={<QrcodeOutlined />}
+                loading={adding}
+                onClick={handleAddToResume}
+              >
+                {uploadedImage ? '把上传的二维码添加到简历底部' : '添加到简历底部'}
+              </Button>
+              <Upload accept="image/*" showUploadList={false} beforeUpload={handleUploadFile}>
+                <Button icon={<UploadOutlined />}>上传已有二维码</Button>
+              </Upload>
+            </div>
+            {uploadedImage ? (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={uploadedImage}
+                  alt="已上传的二维码"
+                  style={{ width: 56, height: 56, objectFit: 'contain', border: '1px solid var(--border-light, #eee)', borderRadius: 6 }}
+                />
+                <Text type="secondary" style={{ fontSize: 12 }}>
+                  将使用这张图片（覆盖当前链接生成）
+                </Text>
+                <Button size="small" type="text" danger onClick={() => setUploadedImage(null)}>
+                  丢弃
+                </Button>
+              </div>
+            ) : null}
+          </>
         ) : null}
 
         {!compact ? (

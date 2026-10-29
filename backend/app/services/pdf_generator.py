@@ -320,6 +320,11 @@ def render_template_html(
 
     html = inject_print_css(html, features, theme=theme.css_variables())
 
+    # 简历底部二维码（qr_code 字段，见 app/services/qr_footer.py）：
+    # 统一注入而非改 56 套模板，预览与 PDF 导出走同一条链路
+    from app.services.qr_footer import inject_qr_footer
+    html = inject_qr_footer(html, resume_json)
+
     if meta and '<meta name="template-id"' not in html:
         marker = f'<meta name="template-id" content="{meta.id}">'
         lowered = html.lower()
