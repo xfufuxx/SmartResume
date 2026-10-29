@@ -15,7 +15,7 @@ import {
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import {
-  resumes, jobs, optimize, user, toBackendUrl,
+  resumes, jobs, optimize, user, toBackendUrl, editor,
   analysis as analysisApi, render as renderApi,
 } from '@/lib/api'
 import { getToken } from '@/lib/auth'
@@ -472,9 +472,36 @@ export default function Home() {
     setAppliedSuggestions((prev) => ({ ...prev, [title]: !prev[title] }))
   }, [])
 
-  /** 导出 PDF：已有结果直接下载；否则按当前模板直接渲染一份（跳过 AI 优化）*/
+  /** 导出 PDF：结果与当前模板一致 → 直接下载现成文件；
+      已有结果但换了模板 → 按新模板重导出优化结果（同步落库模板选择）；
+      无结果 → 按当前模板直接渲染一份（跳过 AI 优化）*/
   const handleExportPdf = useCallback(async () => {
-    if (result?.pdf_url) { window.open(toBackendUrl(result.pdf_url), '_blank'); return }
+    if (result?.pdf_url) {
+      // 模板没变（或未选择）：直接下载优化完成时生成的 PDF
+      if (!selectedTemplate || selectedTemplate === result.template) {
+        window.open(toBackendUrl(result.pdf_url), '_blank'); return
+      }
+      // 换了导出模板：重新渲染优化后内容，而不是打开旧 PDF（2026-10-29 用户反馈：改格式无效）
+      if (blockedByRunning()) return
+      setExporting(true)
+      beginRun()
+      try {
+        const res = await editor.reexport(result.id, selectedTemplate)
+        if (cancelledRef.current) return
+        const url = res.data?.pdf_url as string | undefined
+        if (!url) { message.error('PDF 生成失败'); return }
+        setResult((prev) => (prev ? { ...prev, pdf_url: url, template: selectedTemplate } : prev))
+        window.open(toBackendUrl(url), '_blank')
+        message.success('已按新模板重新导出')
+      } catch (err: unknown) {
+        if (cancelledRef.current) return
+        const msg = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '导出失败'
+        message.error(msg)
+      } finally {
+        finishRun()
+      }
+      return
+    }
     if (!resumeId) { message.warning('请先上传简历'); return }
     if (blockedByRunning()) return
     const controller = new AbortController()
@@ -1107,7 +1134,6 @@ export default function Home() {
           before={resumeData}
           scoreBefore={baseAnalysis?.match_rate ?? null}
           scoreAfter={optimizedAnalysis?.match_rate ?? null}
-          onOpenDetail={result ? () => router.push(`/history/${result.id}`) : undefined}
           onOpenReview={result ? () => setReviewModalOpen(true) : undefined}
           onOpenLayoutEditor={result?.optimized_json ? () => setLayoutEditorOpen(true) : undefined}
           onExport={handleExportPdf}
