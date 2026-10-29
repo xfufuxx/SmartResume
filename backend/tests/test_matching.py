@@ -284,7 +284,7 @@ class TestMatchAPI:
                 "/api/match/",
                 json={"resume_id": "non-existent", "job_id": "non-existent"},
             )
-            assert response.status_code in (401, 404), f"Unexpected status: {response.status_code}"
+            assert response.status_code in (401, 403, 404), f"Unexpected status: {response.status_code}"  # 403=HTTPBearer(auto_error) 未带票据
 
     @pytest.mark.asyncio
     async def test_batch_optimize_validation(self):
@@ -299,10 +299,10 @@ class TestMatchAPI:
                 "/api/batch-optimize",
                 json={"source_resume_id": "x", "job_ids": []},
             )
-            assert response.status_code in (400, 401, 422), f"Unexpected status: {response.status_code}"
+            assert response.status_code in (400, 401, 403, 422), f"Unexpected status: {response.status_code}"  # 403=HTTPBearer(auto_error) 未带票据
 
             response = await client.post(
                 "/api/batch-optimize",
                 json={"source_resume_id": "x", "job_ids": ["1", "2", "3", "4", "5", "6"]},
             )
-            assert response.status_code in (400, 401, 422), f"Unexpected status: {response.status_code}"
+            assert response.status_code in (400, 401, 403, 422), f"Unexpected status: {response.status_code}"  # 403=HTTPBearer(auto_error) 未带票据
