@@ -73,6 +73,7 @@ export default function QrCodeCard({
   const [pngDataUrl, setPngDataUrl] = useState('');
   const [error, setError] = useState('');
   const [rendering, setRendering] = useState(false);
+  const [regenNonce, setRegenNonce] = useState(0);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // 受控 / 非受控双模态：传入 url/label 时完全由外部驱动
@@ -97,7 +98,7 @@ export default function QrCodeCard({
   const urlValid = useMemo(() => isValidQrUrl(url), [url]);
   const canRender = urlValid && !!url.trim();
 
-  // URL 变化 → 防抖重渲染（输入过程中不打断用户）
+  // URL 变化（或手动重新生成）→ 防抖重渲染（输入过程中不打断用户）
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
     if (!canRender) {
@@ -129,7 +130,7 @@ export default function QrCodeCard({
     return () => {
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
-  }, [url, canRender, urlValid]);
+  }, [url, canRender, urlValid, regenNonce]);
 
   const handleDownloadPng = useCallback(async () => {
     if (!svg) return;
@@ -193,14 +194,23 @@ export default function QrCodeCard({
       }
     >
       <Space direction="vertical" style={{ width: '100%' }} size="middle">
-        <Space.Compact style={{ width: '100%' }}>
+        <div>
+          <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+            标签（可选，如 GitHub）
+          </Text>
           <Input
             value={label}
-            placeholder="标签（可选，如 GitHub）"
+            placeholder="如：GitHub / 个人主页 / 岗位名称"
             onChange={(e) => setLabel(e.target.value)}
-            style={{ width: 140 }}
             maxLength={20}
+            showCount
+            allowClear
           />
+        </div>
+        <div>
+          <Text type="secondary" style={{ display: 'block', fontSize: 12, marginBottom: 4 }}>
+            链接地址
+          </Text>
           <Input
             value={url}
             placeholder="粘贴链接，如 github.com/yourname"
@@ -208,7 +218,7 @@ export default function QrCodeCard({
             status={error ? 'error' : undefined}
             allowClear
           />
-        </Space.Compact>
+        </div>
         {error ? <Text type="danger" style={{ fontSize: 12 }}>{error}</Text> : null}
 
         {suggestions && suggestions.length > 0 ? (
@@ -247,18 +257,39 @@ export default function QrCodeCard({
         </div>
 
         {svg ? (
-          <Space style={{ justifyContent: 'center', width: '100%' }}>
-            {label ? <Tag color="blue">{label}</Tag> : null}
-            <Text type="secondary" style={{ fontSize: 12 }}>
-              {normalizeUrl(url)}
-            </Text>
-            <Button size="small" type="text" icon={<CopyOutlined />} onClick={handleCopy}>
-              复制链接
-            </Button>
-            <Button size="small" type="text" icon={<SyncOutlined />} onClick={() => { setSvg(''); setUrl(url); }}>
-              重新生成
-            </Button>
-          </Space>
+          <div style={{ textAlign: 'center' }}>
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                gap: 8,
+                flexWrap: 'wrap',
+                minWidth: 0,
+              }}
+            >
+              {label ? <Tag color="blue" style={{ marginInlineEnd: 0 }}>{label}</Tag> : null}
+              <Text
+                type="secondary"
+                style={{ fontSize: 12, wordBreak: 'break-all', minWidth: 0 }}
+              >
+                {normalizeUrl(url)}
+              </Text>
+            </div>
+            <Space style={{ marginTop: 10 }}>
+              <Button size="small" type="text" icon={<CopyOutlined />} onClick={handleCopy}>
+                复制链接
+              </Button>
+              <Button
+                size="small"
+                type="text"
+                icon={<SyncOutlined />}
+                onClick={() => setRegenNonce((n) => n + 1)}
+              >
+                重新生成
+              </Button>
+            </Space>
+          </div>
         ) : null}
 
         {!compact ? (
