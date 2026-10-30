@@ -39,7 +39,18 @@ export interface ResumeLike {
   education?: Array<Record<string, unknown>> | null;
   skills?: string[] | null;
   projects?: Array<Record<string, unknown>> | null;
+  /** 底部二维码（与后端 optimized_json.qr_code 同形状）：排版模式据此生成二维码块 */
+  qr_code?: { image?: string; label?: string; url?: string } | null;
   [key: string]: unknown;
+}
+
+/** 取简历里可用的二维码数据（image 非空才算有） */
+function validQrCode(data: ResumeLike | null | undefined) {
+  const qr = data?.qr_code;
+  if (!qr || typeof qr !== 'object') return null;
+  const image = typeof qr.image === 'string' ? qr.image.trim() : '';
+  if (!image) return null;
+  return { image, label: typeof qr.label === 'string' ? qr.label : '', url: typeof qr.url === 'string' ? qr.url : '' };
 }
 
 export interface BuildLayoutOptions {
@@ -71,6 +82,8 @@ const EDUCATION_HEIGHT_MM = 12;
 /** 职业照块默认尺寸：30×42mm（5:7 一寸照比例），固定页面右上角 */
 const AVATAR_WIDTH_MM = 30;
 const AVATAR_HEIGHT_MM = 42;
+/** 二维码块默认高度（mm）：图按块高 contain，24mm ≈ 模板页脚二维码的视觉大小 */
+const QRCODE_HEIGHT_MM = 24;
 
 /** 分页收集阶段的中间产物：高度已定，位置留给第二阶段流式排布 */
 interface Draft {
@@ -294,6 +307,13 @@ export function buildLayout(
     });
   }
 
+  // 底部二维码：内容流最末（项目经历之后），与模板导出的页脚位置口径一致。
+  // 只有 image 非空才生成——空壳块只会占版面。
+  const qr = validQrCode(data);
+  if (qr) {
+    push('blk_qrcode', 'qrcode', QRCODE_HEIGHT_MM, 'qr_code', qr);
+  }
+
   // 职业照：固定页面右上角（不参与垂直流；无照片不生成，版式与无头像时一致）。
   // 放在 drafts 末尾 = blocks 数组末尾 = z 序最上，压住可能很长的联系方式行。
   if (avatarUrl) {
@@ -368,6 +388,70 @@ export function buildLayout(
     blocks,
     updatedAt: new Date().toISOString(),
   };
+}
+
+/**
+ * 给已有布局补齐二维码块 —— 旧存档（生成于 qrcode 类型之前）也带得出二维码。
+ *
+ * 场景：用户在模板路径加了底部二维码，之后才第一次打开排版，或存档早于二维码
+ * 功能——parseLayout 拿到的 doc 里没有 qrcode 块，直接渲染就会「画布看不到、
+ * 导出的排版 PDF 也没有」，与详情页的「已添加二维码」状态自相矛盾。
+ *
+ * 放置：最后一页内容底部之下（gap 间隔）；本页放不下就落到新的一页顶部——
+ * 与内容流的分页规则一致，绝不叠在已有块上。
+ */
+export function ensureQrCodeBlock(
+  doc: LayoutDocument,
+  data: ResumeLike | null | undefined,
+  options: BuildLayoutOptions = {},
+): LayoutDocument {
+  const qr = validQrCode(data);
+  if (!qr) return doc;
+  if (doc.blocks.some((b) => b.type === 'qrcode')) return doc;
+
+  const canvas = options.canvas ?? doc.canvas ?? CANVAS_MM;
+  const margin = options.margin ?? SAFE_MARGIN_MM;
+  const lastPage = doc.blocks.reduce((m, b) => Math.max(m, b.page ?? 0), 0);
+  const place = qrPlacement(doc, lastPage, options);
+
+  const defaults = defaultsForTypeClone('qrcode');
+  const block: Block = {
+    id: 'blk_qrcode',
+    type: 'qrcode',
+    page: place.page,
+    rect: { x: margin, y: place.y, w: roundMm(canvas.width - margin * 2), h: place.h },
+    freedom: defaults.freedom,
+    sizePolicy: defaults.sizePolicy,
+    contentRef: { source: 'qr_code', payload: qr },
+  };
+  return {
+    ...doc,
+    pageCount: Math.max(doc.pageCount ?? 1, place.page + 1),
+    blocks: [...doc.blocks, block],
+  };
+}
+
+/**
+ * 二维码块的落位：指定页内容底部之下（gap 间隔）；本页放不下 → 落到新页顶部。
+ * 与内容流分页规则一致，绝不叠在已有块上（矩形重叠会进 validate 警告）。
+ */
+export function qrPlacement(
+  doc: LayoutDocument,
+  targetPage: number,
+  options: BuildLayoutOptions = {},
+): { page: number; y: number; h: number } {
+  const canvas = options.canvas ?? doc.canvas ?? CANVAS_MM;
+  const margin = options.margin ?? SAFE_MARGIN_MM;
+  const gap = options.gapMm ?? doc.gap ?? 4;
+  const h = QRCODE_HEIGHT_MM;
+  const bottom = doc.blocks
+    .filter((b) => (b.page ?? 0) === targetPage && b.visible !== false)
+    .reduce((m, b) => Math.max(m, b.rect.y + b.rect.h), margin);
+  const y = roundMm(bottom + gap);
+  if (roundMm(y + h) > roundMm(canvas.height - margin) + 0.01) {
+    return { page: Math.max(doc.pageCount ?? 1, targetPage + 1), y: margin, h };
+  }
+  return { page: targetPage, y, h };
 }
 
 /** 比较两份布局是否一致（忽略 updatedAt / view），供幂等测试与 store 去重 */

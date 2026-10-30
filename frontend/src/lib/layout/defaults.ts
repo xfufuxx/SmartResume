@@ -25,6 +25,8 @@ export const DEFAULT_SIZE_POLICY: Readonly<Record<BlockType, BlockSizePolicy>> =
   item: { resizableW: true, resizableH: true, minW: 60, minH: 16 },
   'skill-group': { resizableW: true, resizableH: true, minW: 60, minH: 12 },
   text: { resizableW: true, resizableH: true, minW: 30, minH: 8 },
+  // 二维码：图 + 文字同框，等比缩放（图按块高 contain），最小 15mm 保证可扫
+  qrcode: { resizableW: true, resizableH: true, minW: 15, minH: 15 },
 } as const);
 
 /** 默认拖动自由度 */
@@ -38,6 +40,8 @@ export const DEFAULT_FREEDOM: Readonly<Record<BlockType, DragFreedom>> = Object.
   item: 'free',
   'skill-group': 'horizontal',
   text: 'free',
+  // 二维码像职业照一样任意摆放（常放页脚右下角）
+  qrcode: 'free',
 } as const);
 
 export interface BlockTypeDefaults {

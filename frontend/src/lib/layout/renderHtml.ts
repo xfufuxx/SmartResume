@@ -195,6 +195,29 @@ function avatarHtml(block: Block): string {
 }
 
 /**
+ * 二维码块：payload = { image, label?, url? }（与 optimized_json.qr_code 同形状）。
+ * 图片按块高 contain 缩放（宽度自适应 → 任意块比例都不变形），文字在右侧；
+ * 无图时渲染占位框，提示用户去属性面板补二维码——比空白块更容易发现问题。
+ */
+function qrCodeHtml(block: Block): string {
+  const p = asRecord(block.contentRef.payload);
+  const image = str(p.image) || str(p.src) || str(p.url_image);
+  if (!image) return '<div class="lk-qrcode-empty">未设置二维码</div>';
+  const label = str(p.label);
+  const link = str(p.url);
+  const text =
+    label || link
+      ? '<div class="lk-qrcode-text">' +
+        (label ? `<div class="lk-qrcode-label">${escapeHtml(label)}</div>` : '') +
+        (link ? `<div class="lk-qrcode-url">${escapeHtml(link)}</div>` : '') +
+        '</div>'
+      : '';
+  return (
+    `<div class="lk-qrcode"><img class="lk-qrcode-img" src="${escapeHtml(image)}" alt="二维码" />${text}</div>`
+  );
+}
+
+/**
  * 单个 block 的内容 HTML（不含定位外层）。
  * 预览（BlockFrame 的 dangerouslySetInnerHTML）与导出（layoutBodyHtml）
  * 调用的是同一个函数 —— 这是 1:1 的核心保证。
@@ -219,6 +242,8 @@ export function blockInnerHtml(block: Block): string {
       return textHtml(block);
     case 'avatar':
       return avatarHtml(block);
+    case 'qrcode':
+      return qrCodeHtml(block);
     default:
       return '';
   }
@@ -285,6 +310,16 @@ export const BLOCK_CSS = `
 .lk-text{font-size:10pt;color:#333;line-height:1.6;}
 .lk-avatar-img{width:100%;height:100%;object-fit:cover;border-radius:2mm;display:block;}
 .lk-avatar-empty{width:100%;height:100%;border:0.3mm dashed #d9d9d9;border-radius:2mm;box-sizing:border-box;}
+/* 二维码块：图按块高 contain（宽度自适应，任意块比例不变形），文字在右侧 */
+.lk-qrcode{display:flex;align-items:center;gap:3mm;height:100%;box-sizing:border-box;}
+.lk-qrcode-img{height:100%;width:auto;max-width:100%;object-fit:contain;display:block;}
+.lk-qrcode-text{min-width:0;overflow:hidden;}
+.lk-qrcode-label{font-size:9pt;font-weight:600;color:#1a1a1a;line-height:1.4;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.lk-qrcode-url{font-size:8pt;color:#555;line-height:1.4;word-break:break-all;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.lk-qrcode-empty{width:100%;height:100%;display:flex;align-items:center;justify-content:center;
+  border:0.3mm dashed #d9d9d9;border-radius:1mm;font-size:9pt;color:#999;box-sizing:border-box;}
 /* ── 模板主题（templates.ts 的视觉半边；几何由 applyTemplate 负责） ──
    作用域挂 .lk-page[data-template]，只改字号/颜色，不碰定位。
    字号与 fontScale 口径一致：compact 缩小（高度按 classic 口径估算，偏保守不裁切）；

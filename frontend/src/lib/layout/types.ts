@@ -33,6 +33,12 @@ export const BLOCK_TYPES = [
   'item',
   'skill-group',
   'text',
+  /**
+   * 二维码块：payload = { image: dataURL, label?, url? }（与 optimized_json.qr_code 同形状）。
+   * 模板导出走 qr_footer.py 注入；排版模式是绝对定位画布，必须作为独立块才能
+   * 所见即所得（直接往文档流追加会压在内容上），故单列一种类型。
+   */
+  'qrcode',
 ] as const;
 export type BlockType = (typeof BLOCK_TYPES)[number];
 

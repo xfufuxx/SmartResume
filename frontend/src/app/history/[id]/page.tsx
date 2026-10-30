@@ -22,7 +22,7 @@ import AuthGate from '@/components/AuthGate'
 import ResumeEditor from '@/components/ResumeEditor'
 import TemplateSelector from '@/components/TemplateSelector'
 import { LayoutEditor } from '@/components/layout-editor'
-import { buildLayout, type ResumeLike } from '@/lib/layout/buildLayout'
+import { buildLayout, ensureQrCodeBlock, type ResumeLike } from '@/lib/layout/buildLayout'
 import { parseLayout } from '@/lib/layout/serialize'
 import { TEMPLATE_OPTIONS, TEMPLATE_LABELS, DEFAULT_TEMPLATE } from '@/lib/templates'
 import { collectResumeLinks } from '@/lib/qrcode'
@@ -227,10 +227,17 @@ export default function OptimizationDetailPage() {
     setLayoutEditing(true)
   }
 
-  /** 布局文档：已保存过排版 → 读档；否则按内容生成默认布局 */
+  /** 布局文档：已保存过排版 → 读档（并补齐二维码块）；否则按内容生成默认布局 */
   const initialLayoutDoc = useMemo(() => {
     if (!detail) return null
-    return parseLayout(detail.layout_json) ?? buildLayout(detail.optimized_json as ResumeLike | undefined)
+    const saved = parseLayout(detail.layout_json)
+    const base =
+      saved ?? buildLayout(detail.optimized_json as ResumeLike | undefined)
+    // 存档早于二维码功能、或二维码是后来才加的：读档后补一个二维码块，
+    // 否则「详情页显示已添加二维码、排版画布却没有」会自相矛盾。
+    return saved
+      ? ensureQrCodeBlock(saved, detail.optimized_json as ResumeLike | undefined)
+      : base
   }, [detail?.layout_json, detail?.optimized_json])
 
   const handleSave = async () => {

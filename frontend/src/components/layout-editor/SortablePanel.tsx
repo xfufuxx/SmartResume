@@ -40,6 +40,7 @@ const TYPE_LABELS: Record<Block['type'], string> = {
   item: '条目',
   'skill-group': '技能组',
   text: '文本',
+  qrcode: '二维码',
 };
 
 /** 列表行摘要：块文本第一行（extractBlockText 已按渲染口径提取） */

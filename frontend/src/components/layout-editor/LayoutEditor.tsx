@@ -20,7 +20,11 @@ import {
   rebuildContent, hasContentChanges, cleanResumeContent,
 } from '../../lib/layout/rebuildContent';
 import { pageCountOf } from '../../lib/layout/paging';
+import { qrPlacement } from '../../lib/layout/buildLayout';
+import { roundMm } from '../../lib/layout/geometry';
+import { defaultsForTypeClone } from '../../lib/layout/defaults';
 import { DEFAULT_TEMPLATE_ID, getTemplate } from '../../lib/layout/templates';
+import { SAFE_MARGIN_MM } from '../../lib/layout/types';
 import { editor, API_BASE_URL } from '../../lib/api';
 import type { ZoomLevel } from '../../hooks/layout-editor/layoutReducer';
 import {
@@ -33,6 +37,8 @@ import { A4Canvas } from './A4Canvas';
 import { InspectorPanel } from './InspectorPanel';
 import { SortablePanel } from './SortablePanel';
 import { ValidationDialog } from './ValidationDialog';
+import QrCodeCard from '../QrCodeCard';
+import type { ResumeQr } from '../QrCodeCard';
 import './editor.css';
 
 export interface LayoutEditorProps {
@@ -100,6 +106,23 @@ function useUndoShortcuts(onUndo: () => void, onRedo: () => void) {
   }, [onUndo, onRedo]);
 }
 
+/** 二维码块的当前 payload（弹窗预填用）：优先「更换中」的块，否则画布里已有的那个 */
+function qrPayloadOf(
+  doc: LayoutDocument,
+  target: string | null,
+): { label: string; url: string } | null {
+  const id = target?.startsWith('replace:') ? target.slice('replace:'.length) : null;
+  const block = id
+    ? doc.blocks.find((b) => b.id === id)
+    : doc.blocks.find((b) => b.type === 'qrcode');
+  const p = block?.contentRef?.payload as { label?: unknown; url?: unknown } | undefined;
+  if (!p) return null;
+  return {
+    label: typeof p.label === 'string' ? p.label : '',
+    url: typeof p.url === 'string' ? p.url : '',
+  };
+}
+
 function LayoutEditorInner({
   optId, onClose, onExported, onSaved, initialContent,
 }: Omit<LayoutEditorProps, 'initialDoc'>) {
@@ -107,6 +130,8 @@ function LayoutEditorInner({
   const selected = useSelectedBlock();
   const [saving, setSaving] = useState(false);
   const [exporting, setExporting] = useState(false);
+  /** 二维码弹窗：null=关闭；'insert'=新增块；'replace:<id>'=更换已有块的图片 */
+  const [qrTarget, setQrTarget] = useState<string | null>(null);
   // 窄屏（≤1023px，与 editor.css 的布局堆叠断点一致）：画布下方出排序面板，
   // 拖拽重排走这里；画布自身在 ≤767px 时只读（useIsMobile）。
   const compact = useMediaQuery('(max-width: 1023px)');
@@ -174,6 +199,66 @@ function LayoutEditorInner({
 
   const guard = useExportGuard({ onExport: runExport });
 
+  /** 画布里的二维码块（至多一个）：工具栏按钮据此在「插入 / 定位」间切换 */
+  const qrBlock = state.doc.blocks.find((b) => b.type === 'qrcode') ?? null;
+
+  /**
+   * 工具栏二维码按钮：无块 → 弹窗生成/上传；有块 → 直接定位（切到它所在页并选中）。
+   * 自动带出的块常常落在第二页（内容已占满首页），不给定位入口的话
+   * 用户翻不到那页就会以为「二维码没进来」。
+   */
+  const handleQrButton = useCallback(() => {
+    if (!qrBlock) {
+      setQrTarget('insert');
+      return;
+    }
+    dispatch({ type: 'SET_PAGE', page: qrBlock.page ?? 0 });
+    dispatch({ type: 'SELECT_BLOCK', id: qrBlock.id });
+    message.info('已定位到画布中的二维码块');
+  }, [qrBlock, dispatch]);
+
+  /**
+   * 二维码落库到画布：新增块 / 更换已有块的图片。
+   * 落位由 qrPlacement 算（当前页内容底部，放不下则新开一页），
+   * 绝不叠在已有块上；payload 与 optimized_json.qr_code 同形状，
+   * 保存/导出时后端会同步回去，保证模板导出与排版两边一致。
+   */
+  const applyQr = useCallback(
+    async (qr: ResumeQr | null) => {
+      if (!qr?.image) return;
+      const replaceId = qrTarget?.startsWith('replace:') ? qrTarget.slice('replace:'.length) : null;
+      const payload = { image: qr.image, label: qr.label ?? '', url: qr.url ?? '' };
+      if (replaceId) {
+        dispatch({ type: 'UPDATE_CONTENT', id: replaceId, payload });
+      } else {
+        const place = qrPlacement(state.doc, state.activePage);
+        const defaults = defaultsForTypeClone('qrcode');
+        dispatch({
+          type: 'ADD_BLOCK',
+          block: {
+            id: 'blk_qrcode',
+            type: 'qrcode',
+            page: place.page,
+            rect: {
+              x: SAFE_MARGIN_MM,
+              y: place.y,
+              w: roundMm(state.doc.canvas.width - SAFE_MARGIN_MM * 2),
+              h: place.h,
+            },
+            freedom: defaults.freedom,
+            sizePolicy: defaults.sizePolicy,
+            contentRef: { source: 'qr_code', payload },
+          },
+        });
+        dispatch({ type: 'SET_PAGE', page: place.page });
+        dispatch({ type: 'SELECT_BLOCK', id: 'blk_qrcode' });
+      }
+      setQrTarget(null);
+      message.success(replaceId ? '二维码已更新' : '二维码已插入到画布');
+    },
+    [qrTarget, state.doc, state.activePage, dispatch],
+  );
+
   /** 模板切换：弹确认（重排会重置手调位置/分页），确认后入历史栈可撤销 */
   const handleApplyTemplate = useCallback(
     (templateId: string) => {
@@ -216,6 +301,8 @@ function LayoutEditorInner({
         onClose={onClose}
         onAddPage={() => dispatch({ type: 'ADD_PAGE' })}
         onApplyTemplate={handleApplyTemplate}
+        onInsertQrCode={handleQrButton}
+        hasQrCode={qrBlock !== null}
       />
 
       <div className="le-body">
@@ -258,6 +345,8 @@ function LayoutEditorInner({
           onStartEdit={(id) => dispatch({ type: 'START_EDIT', id })}
           onEndEdit={() => dispatch({ type: 'END_EDIT' })}
           onMoveToPage={(id, targetPage) => dispatch({ type: 'MOVE_BLOCK_TO_PAGE', id, targetPage })}
+          onEditQrCode={(id) => setQrTarget(`replace:${id}`)}
+          onRemoveBlock={(id) => dispatch({ type: 'REMOVE_BLOCK', id })}
         />
       </div>
 
@@ -268,6 +357,24 @@ function LayoutEditorInner({
         onConfirm={guard.confirmExport}
         onCancel={guard.cancelExport}
       />
+
+      {/* 二维码弹窗：复用详情页那张卡（生成 / 上传 / 预览），只换按钮措辞与落地动作 */}
+      <Modal
+        open={qrTarget !== null}
+        title={qrTarget?.startsWith('replace:') ? '更换二维码' : '插入二维码'}
+        onCancel={() => setQrTarget(null)}
+        footer={null}
+        width={560}
+        destroyOnHidden
+      >
+        <QrCodeCard
+          compact
+          addButtonText={qrTarget?.startsWith('replace:') ? '使用这个二维码' : '插入到画布'}
+          initialUrl={qrPayloadOf(state.doc, qrTarget)?.url ?? ''}
+          initialLabel={qrPayloadOf(state.doc, qrTarget)?.label ?? ''}
+          onAddToResume={applyQr}
+        />
+      </Modal>
     </div>
   );
 }

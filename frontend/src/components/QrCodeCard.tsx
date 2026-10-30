@@ -61,6 +61,8 @@ interface QrCodeCardProps {
   adding?: boolean;
   /** 记录当前已存在的底部二维码（用于展示「已添加」状态与移除入口） */
   existingQr?: { label?: string; url?: string } | null;
+  /** 「添加到简历」按钮文案（排版编辑器里改为「插入到画布」等场景化措辞） */
+  addButtonText?: string;
 }
 
 /**
@@ -83,6 +85,7 @@ export default function QrCodeCard({
   onAddToResume,
   adding = false,
   existingQr = null,
+  addButtonText,
 }: QrCodeCardProps) {
   const [innerUrl, setInnerUrl] = useState(initialUrl);
   const [innerLabel, setInnerLabel] = useState(initialLabel);
@@ -397,7 +400,9 @@ export default function QrCodeCard({
                 loading={adding}
                 onClick={handleAddToResume}
               >
-                {uploadedImage ? '把上传的二维码添加到简历底部' : '添加到简历底部'}
+                {uploadedImage
+                  ? addButtonText ?? '把上传的二维码添加到简历底部'
+                  : addButtonText ?? '添加到简历底部'}
               </Button>
               <Upload accept="image/*" showUploadList={false} beforeUpload={handleUploadFile}>
                 <Button icon={<UploadOutlined />}>上传已有二维码</Button>

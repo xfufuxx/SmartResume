@@ -590,3 +590,68 @@ describe('layoutReducer: 模板切换（APPLY_TEMPLATE）', () => {
     assert.equal(s0.dirty, false);
   });
 });
+
+describe('layoutReducer: 二维码块增删（ADD_BLOCK / REMOVE_BLOCK）', () => {
+  const qrBlock: Block = {
+    id: 'blk_qrcode',
+    type: 'qrcode',
+    page: 0,
+    rect: { x: 15, y: 200, w: 180, h: 24 },
+    freedom: 'free',
+    sizePolicy: { resizableW: true, resizableH: true, minW: 15, minH: 15 },
+    contentRef: { source: 'qr_code', payload: { image: 'data:image/png;base64,x', label: 'L', url: 'https://a' } },
+  };
+
+  it('ADD_BLOCK 追加并入栈（可撤销），pageCount 跟着块走', () => {
+    const s0 = createInitialState(fixture());
+    const s1 = run(s0, { type: 'ADD_BLOCK', block: qrBlock });
+    assert.equal(s1.doc.blocks.length, 3);
+    assert.equal(s1.doc.blocks[2].id, 'blk_qrcode');
+    assert.equal(s1.dirty, true);
+    assert.equal(s1.past.length, 1);
+
+    const s2 = run(s1, { type: 'UNDO' });
+    assert.equal(s2.doc.blocks.length, 2);
+  });
+
+  it('ADD_BLOCK 同 id 重复插入 → 无变化（不污染历史）', () => {
+    const s0 = createInitialState(fixture());
+    const s1 = run(s0, { type: 'ADD_BLOCK', block: qrBlock });
+    const s2 = run(s1, { type: 'ADD_BLOCK', block: qrBlock });
+    assert.equal(s2, s1);
+    assert.equal(s2.doc.blocks.length, 3);
+  });
+
+  it('REMOVE_BLOCK 删除并清空选中态', () => {
+    const s0 = createInitialState(fixture());
+    const s1 = run(s0, { type: 'ADD_BLOCK', block: qrBlock }, { type: 'SELECT_BLOCK', id: 'blk_qrcode' });
+    assert.equal(s1.selectedId, 'blk_qrcode');
+    const s2 = run(s1, { type: 'REMOVE_BLOCK', id: 'blk_qrcode' });
+    assert.equal(s2.doc.blocks.length, 2);
+    assert.equal(s2.selectedId, null);
+    const s3 = run(s2, { type: 'UNDO' });
+    assert.equal(s3.doc.blocks.length, 3);
+  });
+
+  it('REMOVE_BLOCK 未知 id → 原样返回', () => {
+    const s0 = createInitialState(fixture());
+    assert.equal(run(s0, { type: 'REMOVE_BLOCK', id: 'nope' }), s0);
+  });
+
+  it('UPDATE_CONTENT 改二维码 payload（更换图片走这条）', () => {
+    const s0 = createInitialState(fixture());
+    const s1 = run(s0, { type: 'ADD_BLOCK', block: qrBlock });
+    const s2 = run(s1, {
+      type: 'UPDATE_CONTENT',
+      id: 'blk_qrcode',
+      payload: { image: 'data:image/png;base64,new', label: '新标签', url: 'https://b' },
+    });
+    assert.deepEqual(s2.doc.blocks[2].contentRef.payload, {
+      image: 'data:image/png;base64,new',
+      label: '新标签',
+      url: 'https://b',
+    });
+    // 二维码高度不参与文字估算：块高保持用户拖出来的值
+    assert.equal(s2.doc.blocks[2].rect.h, 24);
+  });
+});

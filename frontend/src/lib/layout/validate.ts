@@ -91,6 +91,7 @@ const TYPE_LABELS: Record<BlockType, string> = {
   item: '内容条目',
   'skill-group': '技能组',
   text: '文本',
+  qrcode: '二维码',
 };
 
 /**

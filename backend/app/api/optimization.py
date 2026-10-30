@@ -776,6 +776,45 @@ async def reexport_pdf(
 # ── 可视化排版编辑器：布局存取 + 按布局导出 ──
 
 
+def _sync_qr_code_from_layout(record, layout) -> None:
+    """把排版画布里的二维码块同步回 ``optimized_json['qr_code']``。
+
+    排版模式是绝对定位画布，二维码必须作为独立块存在才能所见即所得；而模板
+    导出走 ``qr_footer.py`` 注入，读的是 ``optimized_json['qr_code']``——两条
+    链路的数据源不同，不打通就会出现「排版里有、模板导出没有」的分裂。
+
+    规则：块里拿到合法数据就回写；没有二维码块（用户在画布里删了）也同步清空，
+    保持「画布即真相」；数据不合法只 warning，绝不阻断保存/导出。
+    """
+    blocks = (layout or {}).get("blocks") if isinstance(layout, dict) else None
+    if not isinstance(blocks, list):
+        return
+    qr_block = None
+    for b in blocks:
+        if isinstance(b, dict) and b.get("type") == "qrcode" and b.get("visible") is not False:
+            qr_block = b
+            break
+    raw = None
+    if qr_block is not None:
+        ref = qr_block.get("contentRef") or {}
+        payload = ref.get("payload") if isinstance(ref, dict) else None
+        if isinstance(payload, dict):
+            raw = payload
+    try:
+        from app.services.qr_footer import sanitize_qr_code
+
+        cleaned = sanitize_qr_code(raw)
+    except Exception as e:  # noqa: BLE001 —— 坏数据不阻断保存
+        logger.warning("[排版二维码] 同步跳过（数据不合法）: %s", e)
+        return
+    data = dict(record.optimized_json or {})
+    if cleaned:
+        data["qr_code"] = cleaned
+    else:
+        data.pop("qr_code", None)
+    record.optimized_json = data
+
+
 def _is_valid_layout(value) -> bool:
     """最基础的形状校验：version/canvas/blocks 三要素齐备即接受（细校验在前端 validateLayout）"""
     if not isinstance(value, dict):
@@ -807,6 +846,8 @@ async def save_layout(
     if not record:
         raise HTTPException(status_code=404, detail="优化记录不存在")
 
+    # 画布即真相：二维码块 ↔ optimized_json.qr_code 双向一致（模板导出也带得上）
+    _sync_qr_code_from_layout(record, body.layout)
     record.layout_json = body.layout
     await db.commit()
     return {"detail": "布局已保存"}
@@ -836,6 +877,8 @@ async def export_layout_pdf(
     # 顺带持久化布局（导出即存档，下次打开排版不丢）
     if body.layout is not None:
         if _is_valid_layout(body.layout):
+            # 导出即存档：布局与二维码一起落库（模板导出链路同源）
+            _sync_qr_code_from_layout(record, body.layout)
             record.layout_json = body.layout
         else:
             raise HTTPException(status_code=400, detail="布局数据不合法")

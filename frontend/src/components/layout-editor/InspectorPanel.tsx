@@ -31,6 +31,7 @@ const TYPE_LABELS: Record<Block['type'], string> = {
   item: '内容条目',
   'skill-group': '技能组',
   text: '文本',
+  qrcode: '二维码',
 };
 
 export interface InspectorPanelProps {
@@ -46,6 +47,10 @@ export interface InspectorPanelProps {
   onEndEdit?: () => void;
   /** 把选中块移到另一页（多页简历） */
   onMoveToPage?: (id: string, targetPage: number) => void;
+  /** 二维码块：更换图片/标签/链接（打开二维码弹窗） */
+  onEditQrCode?: (id: string) => void;
+  /** 删除选中块（二维码块用；通用删除入口尚未开放） */
+  onRemoveBlock?: (id: string) => void;
 }
 
 function fmt(v: number): string {
@@ -54,7 +59,7 @@ function fmt(v: number): string {
 
 export function InspectorPanel({
   state, selected, onSetFreedom, onToggleLock, onToggleVisible, onBringFront, onSendBack,
-  onStartEdit, onEndEdit, onMoveToPage,
+  onStartEdit, onEndEdit, onMoveToPage, onEditQrCode, onRemoveBlock,
 }: InspectorPanelProps) {
   if (!selected) {
     return (
@@ -80,9 +85,19 @@ export function InspectorPanel({
   }
 
   const { rect, sizePolicy } = selected;
+  /** 二维码块的展示用 payload（label / url），类型安全降级为空串 */
+  const qrPayload = (() => {
+    const p = (selected.contentRef?.payload ?? {}) as { label?: unknown; url?: unknown };
+    return {
+      label: typeof p.label === 'string' ? p.label : '',
+      url: typeof p.url === 'string' ? p.url : '',
+    };
+  })();
   const locked = selected.locked === true;
   const editing = state.editingId === selected.id;
-  const canEdit = !locked && selected.type !== 'divider';
+  // 二维码没有可编辑的文本：行内编辑（contentEditable）会破坏图片结构，
+  // 走属性面板的「更换二维码」弹窗。
+  const canEdit = !locked && selected.type !== 'divider' && selected.type !== 'qrcode';
   const blockPage = pageOf(selected);
   const totalPages = pageCountOf(state.doc);
 
@@ -136,6 +151,36 @@ export function InspectorPanel({
                 编辑内容（双击区块）
               </Button>
             )}
+          </div>
+        )}
+
+        {selected.type === 'qrcode' && (
+          <div>
+            <div className="le-inspector-label">二维码内容</div>
+            <Descriptions size="small" column={1} style={{ width: '100%' }}>
+              <Descriptions.Item label="标签">
+                {qrPayload.label || '（无）'}
+              </Descriptions.Item>
+              <Descriptions.Item label="链接">
+                {qrPayload.url ? (
+                  <span style={{ wordBreak: 'break-all' }}>{qrPayload.url}</span>
+                ) : (
+                  '（无）'
+                )}
+              </Descriptions.Item>
+            </Descriptions>
+            <Space wrap size={[8, 8]} style={{ marginTop: 8 }}>
+              {onEditQrCode && (
+                <Button size="small" type="primary" ghost onClick={() => onEditQrCode(selected.id)}>
+                  更换二维码
+                </Button>
+              )}
+              {onRemoveBlock && (
+                <Button size="small" danger onClick={() => onRemoveBlock(selected.id)}>
+                  移除此区块
+                </Button>
+              )}
+            </Space>
           </div>
         )}
 

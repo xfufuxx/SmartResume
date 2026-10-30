@@ -17,7 +17,7 @@
  * React 封装（Context/Provider/hook）在 useLayoutStore.tsx。
  */
 
-import type { BlockRect, DragFreedom, LayoutDocument } from '../../lib/layout/types.ts';
+import type { Block, BlockRect, DragFreedom, LayoutDocument } from '../../lib/layout/types.ts';
 import { autoFixLayout } from '../../lib/layout/validate.ts';
 import { reorderBlocks } from '../../lib/layout/reorder.ts';
 import { addPage, moveBlockToPage, normalizePages, pageCountOf, removePage } from '../../lib/layout/paging.ts';
@@ -61,6 +61,10 @@ export type EditorAction =
   | { type: 'START_EDIT'; id: string }
   | { type: 'END_EDIT' }
   | { type: 'UPDATE_CONTENT'; id: string; payload: unknown }
+  /** 末尾追加块（二维码等运行时新增的块）：入历史栈可撤销 */
+  | { type: 'ADD_BLOCK'; block: Block }
+  /** 删除块（移除二维码块等）：入历史栈可撤销 */
+  | { type: 'REMOVE_BLOCK'; id: string }
   | { type: 'MOVE_BLOCK'; id: string; rect: BlockRect }
   | { type: 'RESIZE_BLOCK'; id: string; rect: BlockRect }
   | { type: 'SET_FREEDOM'; id: string; freedom: DragFreedom }
@@ -202,7 +206,10 @@ export function layoutReducer(state: EditorState, action: EditorAction): EditorS
       const nextDoc = updateBlock(state.doc, action.id, (b) => {
         b.contentRef = { ...b.contentRef, payload: action.payload };
         // 内容变了 → 按 validate 同一口径重估高度；只长高不压低：
-        // 用户手动拖高的块保留空间，内容变多则保证不被裁
+        // 用户手动拖高的块保留空间，内容变多则保证不被裁。
+        // 二维码例外：图片按块高 contain 缩放，高度全由用户拖定——
+        // 参与重估会让每次换图都白长 OVERFLOW_MARGIN（0.5mm 级抖动）。
+        if (b.type === 'qrcode') return;
         const need = estimateContentHeightMm(b);
         if (need + OVERFLOW_MARGIN_MM > b.rect.h) {
           b.rect.h = roundMm(need + OVERFLOW_MARGIN_MM);
@@ -215,6 +222,28 @@ export function layoutReducer(state: EditorState, action: EditorAction): EditorS
         return { ...state, doc: nextDoc, dirty: true };
       }
       return commitDoc(state, nextDoc);
+    }
+
+    case 'ADD_BLOCK': {
+      // 同 id 已存在（重复点击插入）→ 视为无变化，避免污染历史
+      if (state.doc.blocks.some((b) => b.id === action.block.id)) return state;
+      const next = cloneDoc(state.doc);
+      next.blocks.push(action.block);
+      next.pageCount = Math.max(next.pageCount ?? 1, (action.block.page ?? 0) + 1);
+      return commitDoc(state, next);
+    }
+
+    case 'REMOVE_BLOCK': {
+      const next = cloneDoc(state.doc);
+      const idx = next.blocks.findIndex((b) => b.id === action.id);
+      if (idx < 0) return state;
+      next.blocks.splice(idx, 1);
+      const committed = commitDoc(state, next);
+      // 删掉当前选中的块：清空选中态，避免面板停在已不存在的 id 上
+      if (committed.selectedId === action.id) {
+        return { ...committed, selectedId: null, editingId: null };
+      }
+      return committed;
     }
 
     case 'MOVE_BLOCK':

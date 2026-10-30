@@ -227,6 +227,9 @@ export function estimateContentHeightMm(block: Block): number {
     }
     case 'divider':
       return block.rect.h; // 纯边框，无内容
+    case 'qrcode':
+      // 图片按块高 contain 缩放（宽度自适应）——高度全由用户拖出来，不判内容溢出
+      return block.rect.h;
     case 'summary': {
       const text = typeof p.summary === 'string' ? p.summary : '';
       if (!text.trim()) return block.rect.h;

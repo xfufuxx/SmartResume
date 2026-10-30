@@ -7,7 +7,7 @@ import { Button, Segmented, Space, Switch, Tooltip } from 'antd';
 import {
   UndoOutlined, RedoOutlined, ReloadOutlined, SaveOutlined,
   DownloadOutlined, CloseOutlined, BorderOuterOutlined, ColumnHeightOutlined,
-  PlusOutlined,
+  PlusOutlined, QrcodeOutlined,
 } from '@ant-design/icons';
 
 import type { ZoomLevel } from '../../hooks/layout-editor/layoutReducer';
@@ -40,6 +40,10 @@ export interface EditorToolbarProps {
   onAddPage?: () => void;
   /** 切换模板（调用方负责确认弹窗与 dispatch） */
   onApplyTemplate?: (templateId: string) => void;
+  /** 插入二维码块（调用方弹二维码生成/上传窗）；已有块时改为定位到该块 */
+  onInsertQrCode?: () => void;
+  /** 画布已有二维码块 → 按钮语义变成「定位」（不重复插入） */
+  hasQrCode?: boolean;
 }
 
 const ZOOM_OPTIONS = [
@@ -53,7 +57,7 @@ export function EditorToolbar(props: EditorToolbarProps) {
     canUndo, canRedo, dirty, zoom, gridSnap, alignAssist,
     saving, exporting, blockCount, pageCount, templateId,
     onUndo, onRedo, onReset, onZoom, onToggleGrid, onToggleAlign,
-    onSave, onExport, onClose, onAddPage, onApplyTemplate,
+    onSave, onExport, onClose, onAddPage, onApplyTemplate, onInsertQrCode, hasQrCode,
   } = props;
 
   const currentTemplate = TEMPLATE_OPTIONS.find((t) => t.value === templateId);
@@ -110,6 +114,19 @@ export function EditorToolbar(props: EditorToolbarProps) {
           <Tooltip title="在末尾追加一页（随后可用「移到下页」把块搬过去）">
             <Button size="small" icon={<PlusOutlined />} onClick={onAddPage}>
               添加页
+            </Button>
+          </Tooltip>
+        )}
+        {onInsertQrCode && (
+          <Tooltip
+            title={
+              hasQrCode
+                ? '画布已有二维码块：点击定位到它（可在右侧面板更换/移除）'
+                : '生成或上传二维码，插入到当前页内容底部'
+            }
+          >
+            <Button size="small" icon={<QrcodeOutlined />} onClick={onInsertQrCode}>
+              {hasQrCode ? '定位二维码' : '二维码'}
             </Button>
           </Tooltip>
         )}
