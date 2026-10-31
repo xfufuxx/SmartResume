@@ -1,7 +1,7 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Card, Col, Empty, List, Row, Skeleton, Space, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Empty, List, Row, Skeleton, Space, Tag, Typography, message } from 'antd';
 import { FileTextOutlined, QrcodeOutlined } from '@ant-design/icons';
 
 import AppLayout from '@/components/AppLayout';
@@ -15,6 +15,26 @@ const { Text, Paragraph } = Typography;
 
 const RECENT_KEY = 'qr_recent_links';
 const RECENT_MAX = 8;
+
+/** 从 axios 错误里提炼人话：优先后端 detail，网络层错误给原因码 */
+function errText(err: unknown): string {
+  const e = err as { response?: { status?: number; data?: { detail?: unknown } }; code?: string; message?: string };
+  const detail = e?.response?.data?.detail;
+  if (typeof detail === 'string' && detail.trim()) return detail;
+  if (e?.code === 'ECONNABORTED') return '请求超时';
+  if (e?.code === 'ERR_NETWORK') return '无法连接到服务（后端可能未启动或正在重启）';
+  if (e?.response?.status) return `服务返回 ${e.response.status}`;
+  return e?.message || '未知错误';
+}
+
+/** 列表行的展示标题：接口不带 title，从简历内容里取姓名兜底 */
+function recordTitle(r: Record<string, unknown>): string {
+  const direct = r.title || r.position;
+  if (direct) return String(direct);
+  const oj = (r.optimized_json || {}) as { personal_info?: { name?: string } };
+  const name = oj?.personal_info?.name;
+  return name ? `${name}的简历` : '未命名简历';
+}
 
 interface RecentItem {
   url: string;
@@ -42,6 +62,8 @@ export default function QrCodePage() {
   const [token, setToken] = useState<string | null>(null);
   const [records, setRecords] = useState<Array<{ id: string; title: string }>>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
+  // 加载失败的原因与重试入口：内联展示，避免只在 toast 闪一下就消失
+  const [recordsError, setRecordsError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState('');
   const [links, setLinks] = useState<QrLink[]>([]);
   const [recent, setRecent] = useState<RecentItem[]>([]);
@@ -49,27 +71,32 @@ export default function QrCodePage() {
   const [activeUrl, setActiveUrl] = useState('');
   const [activeLabel, setActiveLabel] = useState('');
 
+  const loadRecords = useCallback(async () => {
+    setRecordsLoading(true);
+    setRecordsError(null);
+    try {
+      // optimize.list() 返回 AxiosResponse，简历数组在 .data 里（漏了会 map 报错）
+      const res = await optimize.list();
+      const list = ((res.data || []) as unknown as Array<Record<string, unknown>>);
+      const mapped = list.map((r) => ({
+        id: String(r.id),
+        title: recordTitle(r),
+      }));
+      setRecords(mapped);
+    } catch (err) {
+      setRecordsError(errText(err));
+    } finally {
+      setRecordsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     const t = getToken();
     if (!t) return;
     setToken(t);
     setRecent(loadRecent());
-    (async () => {
-      setRecordsLoading(true);
-      try {
-        const list = (await optimize.list()) as unknown as Array<Record<string, unknown>>;
-        const mapped = (list || []).map((r) => ({
-          id: String(r.id),
-          title: String(r.title || r.position || '未命名简历'),
-        }));
-        setRecords(mapped);
-      } catch {
-        message.error('简历列表加载失败');
-      } finally {
-        setRecordsLoading(false);
-      }
-    })();
-  }, []);
+    loadRecords();
+  }, [token, loadRecords]);
 
   const handlePickResume = useCallback(async (id: string) => {
     setSelectedId(id);
@@ -83,8 +110,8 @@ export default function QrCodePage() {
       const found = collectResumeLinks(json);
       setLinks(found);
       if (found.length === 0) message.info('这份简历里没有提取到可用的链接');
-    } catch {
-      message.error('简历内容加载失败');
+    } catch (err) {
+      message.error(`简历内容加载失败：${errText(err)}`);
       setLinks([]);
     }
   }, []);
@@ -166,7 +193,21 @@ export default function QrCodePage() {
               <Paragraph type="secondary" style={{ fontSize: 12 }}>
                 选择一份优化记录，自动提取简历正文中出现的链接（GitHub、项目主页、博客等）作为候选。
               </Paragraph>
-              {recordsLoading ? (
+              {recordsError ? (
+                <Alert
+                  type="error"
+                  showIcon
+                  message="简历列表加载失败"
+                  description={
+                    <Space direction="vertical" size={4}>
+                      <Text type="secondary" style={{ fontSize: 12 }}>{recordsError}</Text>
+                      <Button size="small" type="primary" onClick={loadRecords} loading={recordsLoading}>
+                        重试
+                      </Button>
+                    </Space>
+                  }
+                />
+              ) : recordsLoading ? (
                 <Skeleton active paragraph={{ rows: 3 }} />
               ) : records.length === 0 ? (
                 <Empty description="暂无优化记录" />
