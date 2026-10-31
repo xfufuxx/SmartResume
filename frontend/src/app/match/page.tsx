@@ -137,7 +137,7 @@ export default function MatchBoardPage() {
       subtitle="一份简历同时对比全部目标岗位，先看清楚该投哪个"
     >
       <div className="app-page-enter">
-        <div className="app-card" style={{ padding: 20, marginBottom: 16 }}>
+        <div className="app-card" style={{ padding: 20, marginBottom: 20 }}>
           <Space wrap size={12} align="center">
             <span style={{ fontSize: 13, color: 'var(--text-tertiary)' }}>
               <FileTextOutlined /> 选择简历
@@ -167,7 +167,7 @@ export default function MatchBoardPage() {
 
         {!loading && result && (
           <>
-            <Row gutter={[16, 16]} style={{ marginBottom: 16 }}>
+            <Row gutter={[20, 20]} style={{ marginBottom: 20 }}>
               <Col xs={12} md={6}>
                 <Card><Statistic title="已解析岗位" value={result.matched_jobs} suffix={`/ ${result.total_jobs}`} /></Card>
               </Col>
@@ -201,7 +201,7 @@ export default function MatchBoardPage() {
               <Alert
                 type="info"
                 showIcon
-                style={{ marginBottom: 16 }}
+                style={{ marginBottom: 20 }}
                 message={`有 ${result.skipped_jobs} 个岗位尚未解析完成，未参与本次排名`}
               />
             )}
@@ -211,7 +211,7 @@ export default function MatchBoardPage() {
                 type="success"
                 showIcon
                 icon={<CheckCircleOutlined />}
-                style={{ marginBottom: 16 }}
+                style={{ marginBottom: 20 }}
                 message={
                   <span>
                     最匹配的是 <b>{best.title}</b>{best.company ? ` @ ${best.company}` : ''}（{best.match_rate} 分）
@@ -231,10 +231,17 @@ export default function MatchBoardPage() {
             )}
 
             {result.items.length ? (
-              <Row gutter={[16, 16]}>
+              <Row gutter={[20, 20]}>
                 {result.items.map((item, idx) => (
-                  <Col xs={24} md={12} xl={8} key={item.job_id}>
-                    <div className="app-card" style={{ padding: 18, height: '100%' }}>
+                  <Col xs={24} md={12} xl={8} key={item.job_id} style={{ display: 'flex' }}>
+                    <div
+                      className="app-card"
+                      style={{
+                        padding: 20, height: '100%', width: '100%',
+                        display: 'flex', flexDirection: 'column', gap: 12,
+                        transition: 'box-shadow .2s ease, transform .2s ease',
+                      }}
+                    >
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
                         <div style={{ minWidth: 0 }}>
                           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -252,15 +259,18 @@ export default function MatchBoardPage() {
                             </span>
                             {item.is_favorite && <StarFilled style={{ color: 'var(--warning-500)', fontSize: 12 }} />}
                           </div>
-                          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 2 }}>
-                            {item.company || '未填写公司'} · <Tag style={{ marginInlineEnd: 0 }}>{item.category}</Tag>
+                          <div style={{ fontSize: 12, color: 'var(--text-tertiary)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {item.company || '未填写公司'}
+                            </span>
+                            <Tag style={{ marginInlineEnd: 0, flexShrink: 0 }}>{item.category}</Tag>
                           </div>
                         </div>
                         <div style={{ textAlign: 'right', flexShrink: 0 }}>
-                          <div style={{ fontSize: 22, fontWeight: 700, color: rateColor(item.match_rate), lineHeight: 1 }}>
+                          <div style={{ fontSize: 24, fontWeight: 700, color: rateColor(item.match_rate), lineHeight: 1 }}>
                             {item.match_rate}
                           </div>
-                          <div style={{ fontSize: 11, color: 'var(--text-tertiary)' }}>匹配度</div>
+                          <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginTop: 2 }}>匹配度</div>
                         </div>
                       </div>
 
@@ -268,15 +278,15 @@ export default function MatchBoardPage() {
                         percent={item.match_rate}
                         showInfo={false}
                         strokeColor={rateColor(item.match_rate)}
-                        style={{ margin: '12px 0 8px' }}
+                        style={{ margin: 0 }}
                       />
 
-                      <div style={{ fontSize: 12, color: 'var(--text-secondary)', marginBottom: 10 }}>
+                      <div style={{ fontSize: 12, color: 'var(--text-secondary)' }}>
                         {rateLabel(item.match_rate)}
                       </div>
 
                       {item.missing_keywords.length ? (
-                        <div style={{ marginBottom: 12 }}>
+                        <div>
                           <div style={{ fontSize: 11, color: 'var(--text-tertiary)', marginBottom: 6 }}>
                             <WarningOutlined /> 缺失关键词（{item.missing_keywords.length}）
                           </div>
@@ -287,12 +297,13 @@ export default function MatchBoardPage() {
                           </div>
                         </div>
                       ) : (
-                        <div style={{ fontSize: 12, color: 'var(--success-500)', marginBottom: 12 }}>
+                        <div style={{ fontSize: 12, color: 'var(--success-500)' }}>
                           <CheckCircleOutlined /> 岗位关键词已全部覆盖
                         </div>
                       )}
 
-                      <Space>
+                      {/* marginTop:auto 把操作行压到卡片底部——同排卡片按钮对齐 */}
+                      <Space style={{ marginTop: 'auto', paddingTop: 4 }}>
                         <Button
                           type="primary"
                           size="small"
