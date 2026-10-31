@@ -1,6 +1,6 @@
 'use client'
 
-import React, { useEffect, useState, useCallback, useMemo } from 'react'
+import React, { useEffect, useState, useCallback, useMemo, useRef } from 'react'
 import {
   Button, Typography, Spin, message,
   Tag, Space, Modal, Input, Empty, Tooltip, Tabs, Select, Table, Dropdown, Pagination,
@@ -171,11 +171,17 @@ export default function JobLibrary() {
   const [selectedIds, setSelectedIds] = useState<React.Key[]>([])
   const [batchLoading, setBatchLoading] = useState(false)
 
-  // 深链支持：/jobs?q=xxx（匹配罗盘「未解析岗位 → 去处理」跳转用）。
+  // 深链支持：/jobs?q=xxx（搜索词）、/jobs?focus=<job_id>（匹配罗盘「未解析岗位 → 去处理」
+  // 直达具体岗位：打开该岗位的预览弹窗 + 翻到所在页 + 高亮该行）。
   // 不用 useSearchParams，避免 Next.js 预渲染要求 Suspense 边界。
+  const [highlightId, setHighlightId] = useState<string | null>(null)
+  const focusHandledRef = useRef<string | null>(null)
   useEffect(() => {
-    const q = new URLSearchParams(window.location.search).get('q')
+    const sp = new URLSearchParams(window.location.search)
+    const q = sp.get('q')
+    const focus = sp.get('focus')
     if (q) setSearchQ(q)
+    if (focus) setHighlightId(focus)
   }, [])
 
   // 弹窗状态
@@ -360,6 +366,30 @@ export default function JobLibrary() {
     () => filtered.slice((page - 1) * pageSize, page * pageSize),
     [filtered, page, pageSize],
   )
+
+  // 深链定位（/jobs?focus=<job_id>，匹配罗盘「去处理」）：等数据加载后按 id 找到目标岗位
+  // → 打开该岗位预览弹窗 + 翻到所在页 + 滚动到高亮行。
+  // focusHandledRef 保证同一次跳转只处理一次（后续 loadData 刷新不会重复弹窗）。
+  useEffect(() => {
+    if (!highlightId || allJobs.length === 0) return
+    if (focusHandledRef.current === highlightId) return
+    const job = allJobs.find((j) => j.id === highlightId)
+    if (!job) return
+    focusHandledRef.current = highlightId
+    if (activeTab !== 'trash') {
+      setPreviewJob(job)
+      setPreviewModalOpen(true)
+    }
+    const idx = filtered.findIndex((j) => j.id === highlightId)
+    if (idx >= 0) {
+      setPage(Math.floor(idx / pageSize) + 1)
+      window.setTimeout(() => {
+        document
+          .querySelector(`tr[data-row-key="${highlightId}"]`)
+          ?.scrollIntoView({ block: 'center', behavior: 'smooth' })
+      }, 300)
+    }
+  }, [highlightId, allJobs, activeTab, filtered, pageSize])
 
   const cityOptions = useMemo(() => {
     const set = new Set<string>()
@@ -1193,6 +1223,7 @@ export default function JobLibrary() {
               onRow={(job) => ({
                 onClick: () => { if (activeTab !== 'trash') openPreview(job) },
               })}
+              rowClassName={(job) => (job.id === highlightId ? 'job-row-highlight' : '')}
             />
             <div className="jobs-table-footer">
               <span className="jobs-table-total">共 {filtered.length} 条</span>

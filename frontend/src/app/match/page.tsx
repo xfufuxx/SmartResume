@@ -209,7 +209,7 @@ export default function MatchBoardPage() {
                       <Tag
                         key={s.job_id}
                         style={{ marginInlineEnd: 0, cursor: 'pointer' }}
-                        onClick={() => router.push(`/jobs?q=${encodeURIComponent(s.title)}`)}
+                        onClick={() => router.push(`/jobs?focus=${s.job_id}`)}
                       >
                         {s.title}{s.company ? ` @ ${s.company}` : ''} · 去处理 →
                       </Tag>
