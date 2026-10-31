@@ -124,7 +124,7 @@ export default function RegisterPage() {
           </Form.Item>
 
           <Form.Item name="password" rules={[{ required: true, min: 6, message: '密码至少 6 位' }]}>
-            <Input.Password prefix={<LockOutlined style={{ color: 'var(--text-tertiary)' }} />} placeholder="密码（至少 6 位）" />
+            <Input.Password prefix={<LockOutlined style={{ color: 'var(--text-tertiary)' }} />} placeholder="密码（至少 6 位）" autoComplete="new-password" />
           </Form.Item>
 
           <Form.Item>

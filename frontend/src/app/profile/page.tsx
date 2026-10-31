@@ -489,10 +489,10 @@ export default function ProfilePage() {
         <Modal title="修改密码" open={changePwdOpen} onCancel={() => setChangePwdOpen(false)} footer={null}>
           <Form form={pwdForm} layout="vertical" onFinish={handleChangePassword}>
             <Form.Item name="old_password" label="当前密码" rules={[{ required: true, message: '请输入当前密码' }]}>
-              <Input.Password />
+              <Input.Password autoComplete="current-password" />
             </Form.Item>
             <Form.Item name="new_password" label="新密码" rules={[{ required: true, min: 6, message: '至少6位' }]}>
-              <Input.Password />
+              <Input.Password autoComplete="new-password" />
             </Form.Item>
             <Button type="primary" htmlType="submit" loading={pwdLoading} block>确认修改</Button>
           </Form>

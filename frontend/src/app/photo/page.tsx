@@ -382,6 +382,9 @@ export default function PhotoPage() {
                 placeholder="粘贴你的 Gemini API Key（AIza...）"
                 onChange={(e) => setApiKey(e.target.value)}
                 onPressEnter={saveKey}
+                // 这是 API Key 不是登录密码；不加会被 Chrome 当成登录框，
+                // 弹出「保存的密码」自动填充下拉（new-password 才能压住）
+                autoComplete="new-password"
                 autoFocus
               />
               <Button type="primary" onClick={saveKey} data-testid="save-api-key">

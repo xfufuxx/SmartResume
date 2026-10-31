@@ -145,7 +145,7 @@ export default function ForgotPasswordPage() {
               } />
             </Form.Item>
             <Form.Item name="password" rules={[{ required: true, min: 6, message: '新密码至少 6 位' }]}>
-              <Input.Password prefix={<LockOutlined style={{ color: 'var(--text-tertiary)' }} />} placeholder="新密码（至少 6 位）" />
+              <Input.Password prefix={<LockOutlined style={{ color: 'var(--text-tertiary)' }} />} placeholder="新密码（至少 6 位）" autoComplete="new-password" />
             </Form.Item>
             <Form.Item>
               <Button type="primary" htmlType="submit" loading={loading} block style={{ height: 44, fontSize: 16, fontWeight: 600 }}>
