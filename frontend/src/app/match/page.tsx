@@ -237,9 +237,8 @@ export default function MatchBoardPage() {
                     <div
                       className="app-card"
                       style={{
-                        padding: 20, height: '100%', width: '100%',
+                        padding: 20, width: '100%', flex: 1,
                         display: 'flex', flexDirection: 'column', gap: 12,
-                        transition: 'box-shadow .2s ease, transform .2s ease',
                       }}
                     >
                       <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 8 }}>
