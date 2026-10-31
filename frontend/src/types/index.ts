@@ -651,6 +651,13 @@ export interface MatchRankResult {
   total_jobs: number
   matched_jobs: number
   skipped_jobs: number
+  /** 未参与排名的岗位明细（解析未完成），前端据此提示用户去处理 */
+  skipped_items?: Array<{
+    job_id: string
+    title: string
+    company: string
+    category: string
+  }>
   best_rate: number
   avg_rate: number
   items: MatchRankItem[]

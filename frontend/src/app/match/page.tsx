@@ -203,6 +203,19 @@ export default function MatchBoardPage() {
                 showIcon
                 style={{ marginBottom: 20 }}
                 message={`有 ${result.skipped_jobs} 个岗位尚未解析完成，未参与本次排名`}
+                description={
+                  <Space size={[6, 6]} wrap style={{ marginTop: 2 }}>
+                    {(result.skipped_items || []).map((s) => (
+                      <Tag
+                        key={s.job_id}
+                        style={{ marginInlineEnd: 0, cursor: 'pointer' }}
+                        onClick={() => router.push(`/jobs?q=${encodeURIComponent(s.title)}`)}
+                      >
+                        {s.title}{s.company ? ` @ ${s.company}` : ''} · 去处理 →
+                      </Tag>
+                    ))}
+                  </Space>
+                }
               />
             )}
 

@@ -79,10 +79,15 @@ async def rank_jobs_for_resume(
     ).scalars().all()
 
     items: list[dict] = []
-    skipped = 0
+    skipped_items: list[dict] = []
     for j in jobs:
         if not j.parsed_job_json:
-            skipped += 1
+            skipped_items.append({
+                "job_id": j.id,
+                "title": j.title or "未命名岗位",
+                "company": j.company or "",
+                "category": j.category or "其他",
+            })
             continue
         r = await calculate_match(resume.parsed_json, j.parsed_job_json)
         parsed = j.parsed_job_json or {}
@@ -106,7 +111,8 @@ async def rank_jobs_for_resume(
         "resume_title": resume.title or "简历",
         "total_jobs": len(jobs),
         "matched_jobs": len(items),
-        "skipped_jobs": skipped,
+        "skipped_jobs": len(skipped_items),
+        "skipped_items": skipped_items,
         "best_rate": max(scored) if scored else 0,
         "avg_rate": round(sum(scored) / len(scored), 1) if scored else 0,
         "items": items,

@@ -171,6 +171,13 @@ export default function JobLibrary() {
   const [selectedIds, setSelectedIds] = useState<React.Key[]>([])
   const [batchLoading, setBatchLoading] = useState(false)
 
+  // 深链支持：/jobs?q=xxx（匹配罗盘「未解析岗位 → 去处理」跳转用）。
+  // 不用 useSearchParams，避免 Next.js 预渲染要求 Suspense 边界。
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search).get('q')
+    if (q) setSearchQ(q)
+  }, [])
+
   // 弹窗状态
   const [addModalOpen, setAddModalOpen] = useState(false)
   const [addForm, setAddForm] = useState({
