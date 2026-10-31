@@ -27,13 +27,27 @@ function errText(err: unknown): string {
   return e?.message || '未知错误';
 }
 
-/** 列表行的展示标题：接口不带 title，从简历内容里取姓名兜底 */
+/** 列表行的展示标题：优先「姓名 · 岗位」（与历史页口径一致），逐级兜底 */
 function recordTitle(r: Record<string, unknown>): string {
-  const direct = r.title || r.position;
-  if (direct) return String(direct);
-  const oj = (r.optimized_json || {}) as { personal_info?: { name?: string } };
-  const name = oj?.personal_info?.name;
-  return name ? `${name}的简历` : '未命名简历';
+  if (r.job_title) {
+    const oj = (r.optimized_json || {}) as { personal_info?: { name?: string } };
+    const name = oj?.personal_info?.name;
+    return name ? `${name} · ${r.job_title}` : String(r.job_title);
+  }
+  if (r.position) return String(r.position);
+  const oj2 = (r.optimized_json || {}) as { personal_info?: { name?: string } };
+  const name2 = oj2?.personal_info?.name;
+  return name2 ? `${name2}的简历` : '未命名简历';
+}
+
+/** created_at → 'YYYY-MM-DD HH:mm'（同岗位的多条记录靠它区分） */
+function recordTime(r: Record<string, unknown>): string {
+  const raw = r.created_at as string | undefined;
+  if (!raw) return '';
+  const d = new Date(raw);
+  return Number.isNaN(d.getTime())
+    ? ''
+    : `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
 }
 
 interface RecentItem {
@@ -60,7 +74,7 @@ function loadRecent(): RecentItem[] {
  */
 export default function QrCodePage() {
   const [token, setToken] = useState<string | null>(null);
-  const [records, setRecords] = useState<Array<{ id: string; title: string }>>([]);
+  const [records, setRecords] = useState<Array<{ id: string; title: string; time: string }>>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   // 加载失败的原因与重试入口：内联展示，避免只在 toast 闪一下就消失
   const [recordsError, setRecordsError] = useState<string | null>(null);
@@ -81,6 +95,7 @@ export default function QrCodePage() {
       const mapped = list.map((r) => ({
         id: String(r.id),
         title: recordTitle(r),
+        time: recordTime(r),
       }));
       setRecords(mapped);
     } catch (err) {
@@ -226,10 +241,19 @@ export default function QrCodePage() {
                         padding: '6px 10px',
                       }}
                     >
-                      <Space>
-                        <Text ellipsis style={{ maxWidth: 220 }}>{r.title}</Text>
-                        {selectedId === r.id ? <Tag color="blue">已选择</Tag> : null}
-                      </Space>
+                      <List.Item.Meta
+                        title={
+                          <Space size={6}>
+                            <Text ellipsis style={{ maxWidth: 200 }}>{r.title}</Text>
+                            {selectedId === r.id ? <Tag color="blue">已选择</Tag> : null}
+                          </Space>
+                        }
+                        description={
+                          r.time ? (
+                            <Text type="secondary" style={{ fontSize: 12 }}>{r.time}</Text>
+                          ) : undefined
+                        }
+                      />
                     </List.Item>
                   )}
                 />
