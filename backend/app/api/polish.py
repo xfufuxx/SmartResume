@@ -56,6 +56,9 @@ class PolishSessionCreate(BaseModel):
 class PolishChatRequest(BaseModel):
     session_id: str
     message: str
+    # 编辑器实时草稿（optimized_json）：每次对话携带最新内容，
+    # 后端据此刷新 context_snapshot —— AI 感知的是"正在编辑的版本"而非会话创建时的旧快照
+    context: dict | None = None
 
 
 # ── 额度（Redis 自然日分桶，与 AI 职业照同模式） ──────────────────
@@ -155,6 +158,7 @@ async def list_sessions(
             "id": s.id,
             "title": s.title,
             "target_type": s.target_type,
+            "target_id": s.target_id,
             "updated_at": s.updated_at.isoformat() if s.updated_at else None,
             "last_message": (last_msg.content[:60] if last_msg else ""),
         })
@@ -249,6 +253,11 @@ async def polish_chat_stream(
         raise HTTPException(status_code=400, detail="消息不能为空")
     if len(message) > 4000:
         raise HTTPException(status_code=400, detail="消息过长（上限 4000 字）")
+
+    # 智能感知：编辑器每次对话携带当前草稿 → 刷新上下文快照（未保存的编辑也生效）
+    if isinstance(body.context, dict) and body.context:
+        session.context_snapshot = polish_chat.extract_context_from_optimized(body.context)
+        await db.commit()
 
     # 落库用户消息（流式开始前持久化，刷新不丢）
     db.add(PolishMessage(session_id=session.id, role="user", content=message))

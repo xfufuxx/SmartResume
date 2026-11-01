@@ -181,3 +181,41 @@ async def test_quota_release_swallows_error():
             raise AssertionError("不应到达")
 
     await polish_api._release_quota(_BrokenRedis(), "u1")
+
+
+# ── 智能感知：chat 请求携带编辑器草稿（context） ─────────────────
+
+from app.services import polish_chat  # noqa: E402
+
+
+def test_chat_request_context_optional_and_typed():
+    """context 字段可选；传 dict（编辑器 optimized_json 草稿）合法，缺省为 None"""
+    req = polish_api.PolishChatRequest(session_id="s1", message="润色总结")
+    assert req.context is None
+    req2 = polish_api.PolishChatRequest(
+        session_id="s1", message="润色总结",
+        context={"summary": "资深后端", "experience": [{"points": ["a"]}]},
+    )
+    assert isinstance(req2.context, dict) and req2.context["summary"] == "资深后端"
+
+
+def test_chat_request_rejects_non_dict_context():
+    """context 传标量应被 pydantic 拒绝（防脏数据覆盖快照）"""
+    from pydantic import ValidationError
+    with pytest.raises(ValidationError):
+        polish_api.PolishChatRequest(session_id="s1", message="m", context="纯文本")
+
+
+def test_extract_context_from_optimized_truncates():
+    """超长草稿上下文截断到约 6000 字符，且不抛异常"""
+    big = {"summary": "长" * 20000}
+    out = polish_chat.extract_context_from_optimized(big)
+    assert len(out) < 6200
+    assert out.endswith("…（内容过长已截断）")
+
+
+def test_extract_context_handles_none_and_dirty():
+    assert polish_chat.extract_context_from_optimized(None) == ""
+    assert polish_chat.extract_context_from_optimized({}) == ""
+    # 不可 JSON 序列化的对象安全降级为空串
+    assert polish_chat.extract_context_from_optimized({"bad": object()}) == ""

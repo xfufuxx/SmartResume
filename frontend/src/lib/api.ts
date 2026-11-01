@@ -368,21 +368,6 @@ export const resumes = {
   batchRestore: (ids: string[]) => api.post('/api/resumes/batch-restore', { ids }),
 }
 
-/** 简历解析导入：parse 只解析不落库（预览），apply 确认后落库并可用于一键优化 */
-export const resumeImport = {
-  parse: (file: File) => {
-    const form = new FormData()
-    form.append('file', file)
-    return api.post('/api/resume-import/parse', form)
-  },
-  apply: (body: {
-    parsed_json: Record<string, unknown>
-    raw_text?: string
-    file_type?: string
-    title?: string
-  }) => api.post('/api/resume-import/apply', body),
-}
-
 export const jobs = {
   upload: (file: File, useOcr = false) => {
     const form = new FormData()
@@ -740,6 +725,8 @@ export const polish = {
       onError?: (message: string) => void
     },
     signal?: AbortSignal,
+    /** 编辑器当前草稿（optimized_json）：随消息刷新 AI 上下文快照，感知未保存的编辑 */
+    context?: Record<string, unknown> | null,
   ) => {
     const token = getToken()
     return fetch(`${API_BASE_URL}/api/polish/chat`, {
@@ -748,7 +735,7 @@ export const polish = {
         'Content-Type': 'application/json',
         ...(token ? { Authorization: `Bearer ${token}` } : {}),
       },
-      body: JSON.stringify({ session_id: sessionId, message }),
+      body: JSON.stringify({ session_id: sessionId, message, context: context ?? null }),
       signal,
     }).then(async (res) => {
       if (!res.ok || !res.body) {

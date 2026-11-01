@@ -26,6 +26,8 @@ import { buildLayout, ensureQrCodeBlock, type ResumeLike } from '@/lib/layout/bu
 import { parseLayout } from '@/lib/layout/serialize'
 import { TEMPLATE_OPTIONS, TEMPLATE_LABELS, DEFAULT_TEMPLATE } from '@/lib/templates'
 import { collectResumeLinks } from '@/lib/qrcode'
+import { replaceTextInJson, countTextInJson } from '@/lib/text-replace'
+import PolishDock from '@/components/polish/PolishDock'
 
 function ExperienceDiff({ original, optimized }: { original: ResumeParseResult; optimized: ResumeParseResult }) {
   const origExps = original.experience || []
@@ -320,6 +322,45 @@ export default function OptimizationDetailPage() {
     }
   }
 
+  /** 润色建议应用：编辑态写回草稿（用户可见、保存生效）；查看态直接落库并重导出 PDF */
+  const handlePolishApply = useCallback(async (originalText: string, improvedText: string): Promise<boolean> => {
+    const base = (editing && draft ? draft : detail?.optimized_json) as unknown as Record<string, unknown> | null
+    if (!base || !id) {
+      message.error('当前没有可修改的简历内容')
+      return false
+    }
+    if (countTextInJson(base, originalText) === 0) {
+      message.error('原文不在当前简历中（可能已被修改），请让 AI 重新给出建议')
+      return false
+    }
+    const { json, replaced } = replaceTextInJson(base, originalText, improvedText)
+    if (!replaced) {
+      message.error('替换失败，请重试')
+      return false
+    }
+    if (editing) {
+      setDraft(json as unknown as ResumeParseResult)
+      message.success('已应用到编辑器，保存修改后生效')
+      return true
+    }
+    try {
+      const res = await editor.updateContent(id, json)
+      setDetail(res.data)
+      message.loading({ content: '正在重新生成 PDF…', key: 'polish-apply', duration: 0 })
+      try {
+        const re = await editor.reexport(id)
+        setDetail((prev) => (prev ? { ...prev, pdf_url: re.data?.pdf_url ?? prev.pdf_url } : prev))
+        message.success({ content: '已应用建议，PDF 已重新生成', key: 'polish-apply' })
+      } catch {
+        message.info({ content: '已保存修改，重新导出 PDF 失败，可手动点击「重新导出 PDF」', key: 'polish-apply' })
+      }
+      return true
+    } catch (e: any) {
+      message.error(e?.response?.data?.detail || '应用建议失败')
+      return false
+    }
+  }, [editing, draft, detail?.optimized_json, id])
+
   if (!token) return <AuthGate activeKey="history" />
 
   if (loading) {
@@ -597,6 +638,14 @@ export default function OptimizationDetailPage() {
           }
         />
       </Modal>
+
+      {/* AI 润色悬浮窗：常驻编辑器，感知当前草稿，建议一键应用 */}
+      <PolishDock
+        targetId={id}
+        targetTitle={detail.job_title || detail.company || '当前简历'}
+        getDraft={() => (editing && draft ? (draft as unknown as Record<string, unknown>) : ((detail?.optimized_json ?? null) as Record<string, unknown> | null))}
+        onApply={handlePolishApply}
+      />
     </AppLayout>
   )
 }
