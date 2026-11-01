@@ -1296,10 +1296,11 @@ body {
 }
 
 .wb-navitem.active {
-  background: var(--ios-systemfill);
+  background: color-mix(in srgb, var(--primary-500, #007AFF) 12%, transparent);
   color: var(--ios-blue);
   font-weight: 600;
   text-decoration: none;
+  box-shadow: inset 3px 0 0 var(--primary-500, #007AFF);
 }
 
 .wb-navitem .wb-nav-icon {

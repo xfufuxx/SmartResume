@@ -541,18 +541,23 @@ export default function AppLayout({
   const activeItemRef = useRef<HTMLAnchorElement>(null)
 
   useEffect(() => {
-    const nav = navScrollRef.current
-    const el = activeItemRef.current
-    if (!nav || !el) return
-    const navRect = nav.getBoundingClientRect()
-    const rect = el.getBoundingClientRect()
-    const margin = 12
-    if (rect.top < navRect.top + margin) {
-      nav.scrollTop += rect.top - navRect.top - margin
-    } else if (rect.bottom > navRect.bottom - margin) {
-      nav.scrollTop += rect.bottom - navRect.bottom + margin
-    }
-  }, [pathname, activeKey])
+    // 双 rAF：等路由切换后的新布局真正绘制完成再测量滚动，避免量到旧布局
+    const raf = requestAnimationFrame(() => requestAnimationFrame(() => {
+      const nav = navScrollRef.current
+      const el = activeItemRef.current
+      if (!nav || !el) return
+      const navRect = nav.getBoundingClientRect()
+      const rect = el.getBoundingClientRect()
+      const margin = 12
+      if (rect.top < navRect.top + margin) {
+        nav.scrollTop += rect.top - navRect.top - margin
+      } else if (rect.bottom > navRect.bottom - margin) {
+        nav.scrollTop += rect.bottom - navRect.bottom + margin
+      }
+    }))
+    return () => cancelAnimationFrame(raf)
+    // drawerOpen：移动端抽屉每次重新打开也要把高亮项带到可视区
+  }, [pathname, activeKey, drawerOpen])
 
   // 路由切换时顶部显示细进度条；在新路由真正提交（commit）后通过双 rAF 收起，
   // 不再写死 600ms，避免“进度条走完但页面还没好”的虚假即时反馈
