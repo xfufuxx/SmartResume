@@ -535,6 +535,24 @@ export default function AppLayout({
   const [drawerOpen, setDrawerOpen] = useState(false)
   const prevPathRef = useRef(pathname)
   const prefetchedRef = useRef(false)
+  // 侧边栏滚动容器 + 当前高亮项：路由变化时把高亮项滚进可视区
+  //（否则点 ATS 体检等靠下功能后，视口停留在「首页」，看不到自己在哪里）
+  const navScrollRef = useRef<HTMLElement>(null)
+  const activeItemRef = useRef<HTMLAnchorElement>(null)
+
+  useEffect(() => {
+    const nav = navScrollRef.current
+    const el = activeItemRef.current
+    if (!nav || !el) return
+    const navRect = nav.getBoundingClientRect()
+    const rect = el.getBoundingClientRect()
+    const margin = 12
+    if (rect.top < navRect.top + margin) {
+      nav.scrollTop += rect.top - navRect.top - margin
+    } else if (rect.bottom > navRect.bottom - margin) {
+      nav.scrollTop += rect.bottom - navRect.bottom + margin
+    }
+  }, [pathname, activeKey])
 
   // 路由切换时顶部显示细进度条；在新路由真正提交（commit）后通过双 rAF 收起，
   // 不再写死 600ms，避免“进度条走完但页面还没好”的虚假即时反馈
@@ -645,14 +663,20 @@ export default function AppLayout({
           <span className="wb-brand-name">智能简历</span>
         </div>
 
-        <nav className="wb-nav-scroll" aria-label="功能导航">
+        <nav className="wb-nav-scroll" aria-label="功能导航" ref={navScrollRef}>
         {NAV_GROUPS.map((group) => (
           <div key={group.label}>
             <div className="wb-nav-group-label">{group.label}</div>
             {group.items.map((it) => {
               const active = isActive(it, pathname, activeKey)
               return (
-                <Link key={it.key} href={it.path} className={`wb-navitem${active ? ' active' : ''}`} onClick={() => { setNavigating(true); setDrawerOpen(false) }}>
+                <Link
+                  key={it.key}
+                  href={it.path}
+                  ref={active ? activeItemRef : undefined}
+                  className={`wb-navitem${active ? ' active' : ''}`}
+                  onClick={() => { setNavigating(true); setDrawerOpen(false) }}
+                >
                   <span className="wb-nav-icon">{it.icon}</span>
                   <span>{it.label}</span>
                 </Link>
