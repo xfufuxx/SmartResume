@@ -16,6 +16,7 @@ from app.api import capability
 from app.api import templates as templates_api
 from app.api import ai_photo
 from app.api import polish as polish_api
+from app.api import cert_recommend
 from app.core.log_filter import install_sensitive_log_filter
 
 # 确保 uploads 目录存在（模块加载时创建）
@@ -100,6 +101,7 @@ app.include_router(analysis.router, tags=["Analysis"])
 app.include_router(capability.router)
 app.include_router(templates_api.router, prefix="/api/templates", tags=["Templates"])
 app.include_router(ai_photo.router, tags=["AI Photo"])
+app.include_router(cert_recommend.router, tags=["Cert Recommend"])
 app.include_router(polish_api.router, tags=["AI Polish"])
 
 

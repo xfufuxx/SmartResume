@@ -663,6 +663,30 @@ export interface MatchRankResult {
   items: MatchRankItem[]
 }
 
+// ── 证书与学习方向推荐 ──
+export interface CertRecommendationItem {
+  title: string
+  category: '证书' | '课程' | '竞赛' | '其他' | string
+  issuer: string
+  /** 经白名单校验的官方链接；null 表示请自行搜索官方报名入口 */
+  link: string | null
+  level: '入门级' | '中级' | '高级' | string
+  estimated_cost: string
+  estimated_duration: string
+  why: string
+  priority: number
+}
+
+export interface CertRecommendResult {
+  gap_analysis: {
+    resume_skills: string[]
+    jd_requirements: string[]
+    gaps: string[]
+  }
+  recommendations: CertRecommendationItem[]
+  learning_path: string[]
+}
+
 // ── 全局搜索 ──
 export interface SearchResultItem {
   id: string
