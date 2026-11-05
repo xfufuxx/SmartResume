@@ -208,15 +208,16 @@ async def recommend_certs(
     resp = await _call_with_retry(
         _get_client(),
         task="证书推荐",
+        # 单次最长 300s（实测生成 2~5 分钟），最多 2 次（含重试）→ 上界约 600s，
+        # 与前端 10.5 分钟等待对齐；默认 3 次重试会到 900s，用户先看到超时后端还在跑
+        max_attempts=2,
         model=settings.LLM_MODEL_TEXT,
         messages=[
             {"role": "system", "content": system},
             {"role": "user", "content": user},
         ],
         response_format={"type": "json_object"},
-        max_tokens=3500,
-        # 证书推荐输出长（3~6 项推荐 + 差距分析 + 学习路径），单次生成实测可达 2~5 分钟，
-        # 放宽单次尝试超时，避免 120s 默认值白白超时重试
+        max_tokens=3200,
         timeout=300.0,
     )
 

@@ -83,7 +83,7 @@ def api(method: str, path: str, token: str | None = None, body: dict | None = No
         },
     )
     try:
-        with _opener().open(req, timeout=400) as r:
+        with _opener().open(req, timeout=620) as r:
             return r.status, json.loads(r.read().decode())
     except urllib.error.HTTPError as e:
         try:
@@ -194,7 +194,7 @@ def main() -> int:
         page.locator('[data-testid="certs-generate-btn"]').click()
 
         # LLM 生成实测可达 2~5 分钟，放宽等待
-        page.wait_for_selector('[data-testid="certs-gap-analysis"]', timeout=400000)
+        page.wait_for_selector('[data-testid="certs-gap-analysis"]', timeout=620000)
         check("差距分析区块渲染", True)
         rec_count = page.locator('[data-testid^="certs-rec-item-"]').count()
         check("推荐卡片渲染（1~6 张）", 1 <= rec_count <= 6, f"count={rec_count}")

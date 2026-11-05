@@ -145,36 +145,66 @@ def normalize_model(model: str) -> str:
     return m
 
 
+def _price_key(model: str) -> str:
+    """查单价用的模型名。单价表只登记主名，快照名需归一再查。"""
+    m = (model or "").strip()
+    if m in PRICING_CNY_PER_MTOK:
+        return m
+    return normalize_model(m)
+
+
+def _quota_entry(model: str) -> dict | None:
+    """按「精确命中优先，再归一」的顺序查免费额度清单。"""
+    m = (model or "").strip()
+    if m in FREE_QUOTA_MODELS or m in NO_FREE_QUOTA_MODELS:
+        return {"key": m, "has_free_quota": m in FREE_QUOTA_MODELS,
+                "expiry": FREE_QUOTA_MODELS.get(m)}
+    norm = normalize_model(m)
+    if norm in FREE_QUOTA_MODELS or norm in NO_FREE_QUOTA_MODELS:
+        return {"key": norm, "has_free_quota": norm in FREE_QUOTA_MODELS,
+                "expiry": FREE_QUOTA_MODELS.get(norm)}
+    return None
+
+
 def billing_info(model: str) -> dict:
-    """返回该模型的计费信息：是否走免费额度、到期日、单价。"""
-    norm = normalize_model(model)
-    if norm in NO_FREE_QUOTA_MODELS:
+    """返回该模型的计费信息：是否走免费额度、到期日、单价。
+
+    ⚠️ 口径：**先精确命中，再归一**。同一主模型的快照各有独立到期日
+    （`qwen3.8-max` 已于 2026-11-01 到期，而 `qwen3.8-max-0902` 到 2026-12-01），
+    先归一会把后者错判成「已过期」，导致仅免费模式下自动降级刚切过去的模型
+    又被本地拦截（2026-11-03 实机 bug：证书推荐 500）。
+    """
+    m = (model or "").strip()
+    price_key = _price_key(m)
+    price_in = PRICING_CNY_PER_MTOK.get(price_key, _FALLBACK_PRICING)[0]
+    price_out = PRICING_CNY_PER_MTOK.get(price_key, _FALLBACK_PRICING)[1]
+    base = {
+        "model": model, "normalized": m,
+        "price_in_cny_per_mtok": price_in,
+        "price_out_cny_per_mtok": price_out,
+    }
+
+    entry = _quota_entry(m)
+    if entry is None:
         return {
-            "model": model, "normalized": norm, "has_free_quota": False,
+            **base, "has_free_quota": False, "expiry": None,
+            "reason": "未知模型，按付费模型处理（保守）",
+        }
+    if not entry["has_free_quota"]:
+        return {
+            **base, "normalized": entry["key"], "has_free_quota": False,
             "expiry": None, "reason": "模型不在百炼免费额度清单内（或免费额度已过期）",
-            "price_in_cny_per_mtok": PRICING_CNY_PER_MTOK.get(norm, _FALLBACK_PRICING)[0],
-            "price_out_cny_per_mtok": PRICING_CNY_PER_MTOK.get(norm, _FALLBACK_PRICING)[1],
         }
-    if norm in FREE_QUOTA_MODELS:
-        expiry = FREE_QUOTA_MODELS[norm]
-        if expiry and expiry < date.today():
-            reason = f"免费额度已于 {expiry} 到期"
-        elif not expiry:
-            reason = "清单未标注到期日"
-        else:
-            reason = ""
-        return {
-            "model": model, "normalized": norm, "has_free_quota": True,
-            "expiry": expiry,
-            "reason": reason,
-            "price_in_cny_per_mtok": PRICING_CNY_PER_MTOK.get(norm, _FALLBACK_PRICING)[0],
-            "price_out_cny_per_mtok": PRICING_CNY_PER_MTOK.get(norm, _FALLBACK_PRICING)[1],
-        }
+    expiry = entry["expiry"]
+    if expiry and expiry < date.today():
+        reason = f"免费额度已于 {expiry} 到期"
+    elif not expiry:
+        reason = "清单未标注到期日"
+    else:
+        reason = ""
     return {
-        "model": model, "normalized": norm, "has_free_quota": False,
-        "expiry": None, "reason": "未知模型，按付费模型处理（保守）",
-        "price_in_cny_per_mtok": _FALLBACK_PRICING[0],
-        "price_out_cny_per_mtok": _FALLBACK_PRICING[1],
+        **base, "normalized": entry["key"], "has_free_quota": True,
+        "expiry": expiry, "reason": reason,
     }
 
 

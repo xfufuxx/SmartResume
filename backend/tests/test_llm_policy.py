@@ -81,6 +81,36 @@ def test_max_still_free_at_fixed_today(frozen_today):
     assert info["expiry"] == date(2026, 11, 1)  # 晚于 FIXED_TODAY → 仍在免费期
 
 
+def test_snapshot_keeps_own_expiry_not_normalized(monkeypatch):
+    """回归（2026-11-03 实机 bug）：快照名必须用**自己的**到期日。
+
+    qwen3.8-max 11-01 到期，而 qwen3.8-max-0902 到 12-01。旧实现先归一化，
+    把快照判成「已过期」→ 自动降级刚切过去的模型又被本地拦截 → 证书推荐 500。
+    """
+    _freeze_to(monkeypatch, date(2026, 11, 2))
+    info = billing_info("qwen3.8-max-0902")
+    assert info["has_free_quota"] is True
+    assert info["expiry"] == date(2026, 12, 1)
+    assert info["reason"] == ""  # 未到期，不应有「已到期」说明
+    # 归一化仍保留（供单价查询），但到期判定不能被它带偏
+    assert info["normalized"] == "qwen3.8-max-0902"
+    # 主名仍按自己的到期日判定为已过期
+    assert "2026-11-01" in billing_info("qwen3.8-max")["reason"]
+
+
+def test_fallback_target_passes_precheck(monkeypatch):
+    """降级切到的模型必须在仅免费模式下能通过预检（不再 500）。"""
+    from app.config import settings
+
+    _freeze_to(monkeypatch, date(2026, 11, 2))
+    monkeypatch.setattr(settings, "LLM_AUTO_FALLBACK", True)
+    monkeypatch.setattr(settings, "LLM_ALLOW_PAID", False)
+    resolved, _note = resolve_model("qwen3.8-max")
+    assert resolved == "qwen3.8-max-0902"
+    info = check_before_call(resolved, "证书推荐")  # 不应抛 PaidCallBlocked
+    assert info["has_free_quota"] is True
+
+
 def test_plus_has_no_free_quota():
     info = billing_info("qwen3.7-plus")
     assert info["has_free_quota"] is False

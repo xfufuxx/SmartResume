@@ -22,7 +22,7 @@ def _get_client() -> AsyncOpenAI:
     return AsyncOpenAI(api_key=settings.LLM_API_KEY, base_url=settings.LLM_API_BASE)
 
 
-async def _call_with_retry(client, task: str = "LLM 调用", **kwargs):
+async def _call_with_retry(client, task: str = "LLM 调用", max_attempts: int | None = None, **kwargs):
     """带指数退避重试的 LLM 调用。
 
     与裸重试的区别：
@@ -32,9 +32,14 @@ async def _call_with_retry(client, task: str = "LLM 调用", **kwargs):
     - 调用前 check_before_call 预检：仅免费模式下命中付费模型直接拒绝，绝不发请求；
     - 403/400/401 等确定性错误不重试（重试结果不会变），直接抛中文友好异常；
     - response_format 不兼容时去掉该参数重试。
+
+    max_attempts：本调用点的最大尝试次数（默认 MAX_RETRIES）。长耗时任务
+    （如证书推荐单次可达 300s）必须显式调小，否则「单次超时 × 多次重试」
+    会远超前端等待上限，用户先看到超时、后端还在跑。
     """
     kwargs.setdefault("timeout", 120.0)
     kwargs.setdefault("temperature", 0.2)  # 匹配/优化/改写需稳定输出，默认低温
+    attempts = max(1, int(max_attempts or MAX_RETRIES))
 
     # 模型解析与降级（resolve_model 是纯函数，失败行为 = 原样返回）
     requested = kwargs.get("model", "")
@@ -44,9 +49,9 @@ async def _call_with_retry(client, task: str = "LLM 调用", **kwargs):
     kwargs["model"] = resolved
 
     # 调用前计费预检（免费额度内直接放行；付费且 LLM_ALLOW_PAID=false → 抛 PaidCallBlocked）
-    check_before_call(resolved, task, retry_budget=MAX_RETRIES)
+    check_before_call(resolved, task, retry_budget=attempts)
 
-    for attempt in range(MAX_RETRIES):
+    for attempt in range(attempts):
         try:
             return await client.chat.completions.create(**kwargs)
         except Exception as e:
@@ -59,14 +64,14 @@ async def _call_with_retry(client, task: str = "LLM 调用", **kwargs):
                 except Exception as e2:
                     if not is_retryable_error(e2):
                         raise wrap_llm_error(e2, resolved) from e2
-                    if attempt == MAX_RETRIES - 1:
+                    if attempt == attempts - 1:
                         raise wrap_llm_error(e2, resolved) from e2
                     await asyncio.sleep(1 * (attempt + 1))
                     continue
             # 确定性错误（403 额度/权限、400、401…）：重试无意义，直接抛中文友好异常
             if not is_retryable_error(e):
                 raise wrap_llm_error(e, resolved) from e
-            if attempt == MAX_RETRIES - 1:
+            if attempt == attempts - 1:
                 raise wrap_llm_error(e, resolved) from e
             await asyncio.sleep(1 * (attempt + 1))
 

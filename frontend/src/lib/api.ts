@@ -479,7 +479,7 @@ export const matching = {
     api.post('/api/match/rank', { resume_id: resumeId, limit: limit ?? null }),
 }
 
-/** 证书与学习方向推荐（LLM，按人岗差距生成，链接经白名单校验）；生成较慢，超时放宽到 6 分钟 */
+/** 证书与学习方向推荐（LLM，按人岗差距生成，链接经白名单校验）；生成较慢，超时放宽到 10.5 分钟 */
 export const certs = {
   recommend: (body: {
     resume_id: string
@@ -487,7 +487,7 @@ export const certs = {
     existing_certifications?: string
     time_budget?: string
     budget?: string
-  }) => api.post('/api/certs/recommend', body, { timeout: 360000 }),
+  }) => api.post('/api/certs/recommend', body, { timeout: 630000 }),
 }
 
 export const batch = {
