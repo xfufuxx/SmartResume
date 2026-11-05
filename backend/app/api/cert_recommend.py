@@ -15,6 +15,7 @@ from app.core.llm_policy import PaidCallBlocked
 from app.models.job_image import JobImage
 from app.models.resume import Resume
 from app.models.user import User
+from app.services.cert_catalog import CATEGORIES, CERT_CATALOG
 from app.services.cert_recommend import recommend_certs
 
 logger = logging.getLogger(__name__)
@@ -30,6 +31,12 @@ class CertRecommendRequest(BaseModel):
     existing_certifications: str | None = Field(default=None, max_length=2000)
     time_budget: str | None = Field(default=None, max_length=100)
     budget: str | None = Field(default=None, max_length=100)
+
+
+@router.get("/catalog")
+async def get_cert_catalog(user: User = Depends(get_current_user)):
+    """内置行业证书 & 学习资源库（静态目录，人工整理；不调 LLM、不耗额度）。"""
+    return {"categories": CATEGORIES, "items": CERT_CATALOG}
 
 
 @router.post("/recommend")

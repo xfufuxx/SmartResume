@@ -186,3 +186,71 @@ class TestEndpointSmoke:
                 "/api/certs/recommend", json={"resume_id": "x", "job_id": "y"}
             )
             assert resp.status_code in (401, 403)
+
+
+# ── 内置行业证书资源库 ──────────────────────────────────────────
+
+
+class TestCertCatalog:
+    def test_catalog_shape_and_coverage(self):
+        from app.services.cert_catalog import CATEGORIES, CERT_CATALOG
+
+        assert len(CERT_CATALOG) >= 60
+        assert len(CATEGORIES) >= 10
+        seen = set()
+        for it in CERT_CATALOG:
+            assert set(it) == {"category", "name", "issuer", "type", "link", "desc"}
+            assert it["name"] and it["link"] and it["category"]
+            assert it["type"] in ("certificate", "course")
+            assert it["category"] in CATEGORIES
+            seen.add(it["name"])
+        assert len(seen) == len(CERT_CATALOG), "目录内名称不应重复"
+
+    def test_catalog_links_https_or_explicit_http(self):
+        from app.services.cert_catalog import CERT_CATALOG
+
+        for it in CERT_CATALOG:
+            assert it["link"].startswith(("https://", "http://")), it["name"]
+
+    def test_catalog_matches_whitelist(self):
+        """目录中 https 链接应全部通过 _safe_link 白名单（保证 AI 挂靠链接可信）。"""
+        from app.services.cert_catalog import CERT_CATALOG
+        from app.services.cert_recommend import _safe_link
+
+        bad = [
+            it["name"]
+            for it in CERT_CATALOG
+            if it["link"].startswith("https://") and _safe_link(it["link"]) != it["link"]
+        ]
+        assert not bad, f"以下目录链接不在白名单: {bad}"
+
+    def test_new_whitelist_domains(self):
+        from app.services.cert_recommend import _safe_link
+
+        for url in (
+            "https://kzp.mof.gov.cn/",
+            "https://ielts.neea.edu.cn/",
+            "https://www.cncf.io/training/certification/",
+            "https://www.cdaglobal.com/",
+            "https://skillbuilder.aws/",
+            "https://learn.microsoft.com/zh-cn/credentials/",
+            "https://exam.chinapmp.cn/",
+            "https://www.isc2.org/Certifications/CISSP",
+        ):
+            assert _safe_link(url) == url, url
+
+
+class TestCatalogDigest:
+    def test_digest_contains_entries_and_links(self):
+        from app.services.cert_catalog import CERT_CATALOG
+        from app.services.cert_recommend import _catalog_digest
+
+        digest = _catalog_digest()
+        assert digest.count("\n") >= 60
+        assert CERT_CATALOG[0]["name"] in digest
+        assert CERT_CATALOG[0]["link"] in digest
+
+    def test_prompt_has_catalog_placeholder(self):
+        from app.prompts.cert_recommend import CERT_RECOMMEND_USER_PROMPT
+
+        assert "{catalog}" in CERT_RECOMMEND_USER_PROMPT

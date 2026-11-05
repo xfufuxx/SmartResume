@@ -53,6 +53,55 @@ WHITELIST_PREFIXES = (
     "https://time.geekbang.org",
     "https://edu.lagou.com",
     "https://leetcode.cn",
+    # 与后端 LINK_WHITELIST_PREFIXES 保持同步（资源库扩充域名）
+    "https://learn.microsoft.com/zh-cn/credentials",
+    "https://cpaexam.cicpa.org.cn",
+    "https://kzp.mof.gov.cn",
+    "https://www.imachina.org.cn",
+    "https://ksbm.ecctaa.cn",
+    "https://ielts.neea.edu.cn",
+    "https://toefl.neea.edu.cn",
+    "https://jlpt.neea.edu.cn",
+    "https://topik.neea.edu.cn",
+    "https://bec.neea.edu.cn",
+    "https://cet-bm.neea.edu.cn",
+    "https://cet.neea.edu.cn",
+    "https://ntce.neea.edu.cn",
+    "https://www.cltt.org",
+    "https://www.moj.gov.cn",
+    "https://www.nmec.org.cn",
+    "https://www.cpta.com.cn",
+    "https://higher.smartedu.cn",
+    "https://www.tensorflow.org",
+    "https://www.kaggle.com",
+    "https://skillbuilder.aws",
+    "https://www.cncf.io",
+    "https://training.linuxfoundation.org",
+    "https://training.linuxfoundation.cn",
+    "https://www.pdma.org",
+    "https://www.peoplecert.org",
+    "https://www.scrum.org",
+    "https://exam.chinapmp.cn",
+    "https://www.garp.org",
+    "https://www.cdaglobal.com",
+    "https://edu.cda.cn",
+    "https://www.cda.cn",
+    "https://www.tableau.com",
+    "https://www.adobe.com",
+    "https://www.figma.com",
+    "https://www.gogoup.com",
+    "https://alicert.taobao.com",
+    "https://ke.qq.com",
+    "https://ke.dingtalk.com",
+    "https://sce.siemens.com.cn",
+    "https://www.cisp.org.cn",
+    "https://www.isc2.org",
+    "https://www.istqb.org.cn",
+    "https://www.postman.com",
+    "https://www.chinascm.org.cn",
+    "https://www.cqpa.org.cn",
+    "https://home.pearsonvue.com/huawei",
+    "https://www.autodesk.com/certification",
 )
 
 passed, failed = 0, 0
@@ -162,6 +211,16 @@ def main() -> int:
             bad_fields.append(f"#{i} 链接越白名单: {r.get('link')}")
     check("推荐项字段齐全 + 链接全在白名单", not bad_fields, "; ".join(bad_fields[:3]))
 
+    # ── 3.5 内置资源库（静态目录，不耗额度）──
+    status, cat = api("GET", "/api/certs/catalog", token)
+    check("GET /api/certs/catalog 200", status == 200, f"status={status}")
+    cat_items = (cat or {}).get("items") or []
+    cat_cats = (cat or {}).get("categories") or []
+    check(f"资源库条目充足（{len(cat_items)} 项 / {len(cat_cats)} 类）",
+          len(cat_items) >= 60 and len(cat_cats) >= 10)
+    bad_links = [i.get("name") for i in cat_items if not str(i.get("link", "")).startswith(("https://", "http://"))]
+    check("资源库链接均可访问格式", not bad_links, str(bad_links[:3]))
+
     # ── 4. UI 链路 ──
     with sync_playwright() as p:
         browser = p.chromium.launch()
@@ -205,6 +264,19 @@ def main() -> int:
         urls = [official.nth(i).get_attribute("href") or "" for i in range(n_links)]
         check(f"卡片官方链接可点且在白名单（{n_links} 个）",
               all(link_ok(u) for u in urls), "; ".join(u for u in urls if not link_ok(u))[:120])
+
+        # ── 5. 资源库区块 ──
+        page.wait_for_selector('[data-testid="certs-catalog"]', timeout=15000)
+        check("行业证书资源库区块渲染", True)
+        cat_sel = page.locator('[data-testid="certs-catalog-category"]')
+        cat_sel.click()
+        page.locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option").first.click()
+        page.wait_for_timeout(500)
+        search = page.get_by_placeholder("搜索证书")
+        search.fill("华为")
+        page.wait_for_timeout(600)
+        rows = page.locator(".certs-catalog-item")
+        check(f"资源库分类过滤+搜索生效（华为 → {rows.count()} 条）", rows.count() >= 1, f"count={rows.count()}")
 
         browser.close()
 

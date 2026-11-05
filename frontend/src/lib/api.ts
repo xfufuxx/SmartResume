@@ -488,6 +488,8 @@ export const certs = {
     time_budget?: string
     budget?: string
   }) => api.post('/api/certs/recommend', body, { timeout: 630000 }),
+  /** 内置行业证书 & 学习资源库（静态目录，不耗额度） */
+  catalog: () => api.get('/api/certs/catalog'),
 }
 
 export const batch = {

@@ -687,6 +687,22 @@ export interface CertRecommendResult {
   learning_path: string[]
 }
 
+/** 内置行业证书 & 学习资源库条目 */
+export interface CertCatalogItem {
+  category: string
+  name: string
+  issuer: string
+  /** certificate=证书 / course=学习课程 */
+  type: 'certificate' | 'course' | string
+  link: string
+  desc: string
+}
+
+export interface CertCatalogResult {
+  categories: string[]
+  items: CertCatalogItem[]
+}
+
 // ── 全局搜索 ──
 export interface SearchResultItem {
   id: string

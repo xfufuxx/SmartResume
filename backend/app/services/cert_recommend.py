@@ -11,6 +11,7 @@ from app.prompts.cert_recommend import (
 )
 from app.services import ensure_mock_allowed, has_valid_api_key
 from app.services.agent_optimizer import _call_with_retry, _get_client, _require_content
+from app.services.cert_catalog import CERT_CATALOG
 
 logger = logging.getLogger(__name__)
 
@@ -47,6 +48,55 @@ LINK_WHITELIST_PREFIXES = (
     "https://time.geekbang.org",
     "https://edu.lagou.com",
     "https://leetcode.cn",
+    # ── 行业证书资源库扩充（与 cert_catalog.py 数据同源）──
+    "https://learn.microsoft.com/zh-cn/credentials",
+    "https://cpaexam.cicpa.org.cn",
+    "https://kzp.mof.gov.cn",
+    "https://www.imachina.org.cn",
+    "https://ksbm.ecctaa.cn",
+    "https://ielts.neea.edu.cn",
+    "https://toefl.neea.edu.cn",
+    "https://jlpt.neea.edu.cn",
+    "https://topik.neea.edu.cn",
+    "https://bec.neea.edu.cn",
+    "https://cet-bm.neea.edu.cn",
+    "https://cet.neea.edu.cn",
+    "https://ntce.neea.edu.cn",
+    "https://www.cltt.org",
+    "https://www.moj.gov.cn",
+    "https://www.nmec.org.cn",
+    "https://www.cpta.com.cn",
+    "https://higher.smartedu.cn",
+    "https://www.tensorflow.org",
+    "https://www.kaggle.com",
+    "https://skillbuilder.aws",
+    "https://www.cncf.io",
+    "https://training.linuxfoundation.org",
+    "https://training.linuxfoundation.cn",
+    "https://www.pdma.org",
+    "https://www.peoplecert.org",
+    "https://www.scrum.org",
+    "https://exam.chinapmp.cn",
+    "https://www.garp.org",
+    "https://www.cdaglobal.com",
+    "https://edu.cda.cn",
+    "https://www.cda.cn",
+    "https://www.tableau.com",
+    "https://www.adobe.com",
+    "https://www.figma.com",
+    "https://www.gogoup.com",
+    "https://alicert.taobao.com",
+    "https://ke.qq.com",
+    "https://ke.dingtalk.com",
+    "https://sce.siemens.com.cn",
+    "https://www.cisp.org.cn",
+    "https://www.isc2.org",
+    "https://www.istqb.org.cn",
+    "https://www.postman.com",
+    "https://www.chinascm.org.cn",
+    "https://www.cqpa.org.cn",
+    "https://home.pearsonvue.com/huawei",
+    "https://www.autodesk.com/certification",
 )
 
 _VALID_CATEGORIES = {"证书", "课程", "竞赛", "其他"}
@@ -183,6 +233,15 @@ def _mock_cert_recommend() -> dict:
     }
 
 
+def _catalog_digest() -> str:
+    """内置资源库压缩摘要：一行一条（名称｜类型｜机构｜链接），供 LLM 挂靠可信链接。"""
+    lines = []
+    for it in CERT_CATALOG:
+        type_label = "证书" if it.get("type") == "certificate" else "课程"
+        lines.append(f"- {it['name']}｜{type_label}｜{it.get('issuer', '')}｜{it['link']}")
+    return "\n".join(lines)
+
+
 async def recommend_certs(
     resume_json: dict,
     job_json: dict,
@@ -203,7 +262,9 @@ async def recommend_certs(
         time_budget=(time_budget or "未提供").strip() or "未提供",
         budget=(budget or "未提供").strip() or "未提供",
     )
-    user = CERT_RECOMMEND_USER_PROMPT.format(resume_text=resume_str, jd_text=jd_str)
+    user = CERT_RECOMMEND_USER_PROMPT.format(
+        resume_text=resume_str, jd_text=jd_str, catalog=_catalog_digest()
+    )
 
     resp = await _call_with_retry(
         _get_client(),

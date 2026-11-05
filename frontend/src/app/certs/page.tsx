@@ -1,21 +1,21 @@
 'use client'
 
-import React, { useEffect, useState } from 'react'
+import React, { useEffect, useMemo, useState } from 'react'
 import {
-  Button, Spin, Row, Col, message, Select, Input, Alert,
+  Button, Spin, Row, Col, message, Select, Input, Alert, Collapse,
 } from 'antd'
 import {
   SafetyCertificateOutlined, LinkOutlined, TrophyOutlined,
   FileTextOutlined, AimOutlined, ClockCircleOutlined, WalletOutlined,
   BulbOutlined, CheckCircleFilled, ReloadOutlined, RocketOutlined,
-  BookOutlined, ThunderboltOutlined,
+  BookOutlined, ThunderboltOutlined, SearchOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
 import { certs, jobs, resumes } from '@/lib/api'
 import { getToken } from '@/lib/auth'
-import type { CertRecommendResult, ResumeRecord } from '@/types'
+import type { CertCatalogItem, CertCatalogResult, CertRecommendResult, ResumeRecord } from '@/types'
 
 interface JobOption {
   id: string
@@ -88,6 +88,10 @@ export default function CertRecommendPage() {
   const [loading, setLoading] = useState(false)
   const [loadingData, setLoadingData] = useState(true)
   const [result, setResult] = useState<CertRecommendResult | null>(null)
+  // 内置证书资源库
+  const [catalog, setCatalog] = useState<CertCatalogResult | null>(null)
+  const [catalogCategory, setCatalogCategory] = useState<string>('')
+  const [catalogSearch, setCatalogSearch] = useState('')
   const [errorText, setErrorText] = useState<string>('')
 
   useEffect(() => {
@@ -118,6 +122,10 @@ export default function CertRecommendPage() {
       }
     }
     load()
+    // 资源库独立加载（失败不打扰 AI 推荐主流程）
+    certs.catalog()
+      .then((res) => setCatalog(res.data as CertCatalogResult))
+      .catch(() => setCatalog({ categories: [], items: [] }))
   }, [token])
 
   const generate = async () => {
@@ -153,6 +161,31 @@ export default function CertRecommendPage() {
   }
 
   const reset = () => { setResult(null); setErrorText('') }
+
+  // 资源库：按分类 + 关键词过滤（名称/机构/说明）
+  const catalogItems: CertCatalogItem[] = useMemo(() => {
+    const all = catalog?.items ?? []
+    const kw = catalogSearch.trim().toLowerCase()
+    return all.filter((it) => {
+      if (catalogCategory && it.category !== catalogCategory) return false
+      if (!kw) return true
+      return (
+        it.name.toLowerCase().includes(kw)
+        || (it.issuer || '').toLowerCase().includes(kw)
+        || (it.desc || '').toLowerCase().includes(kw)
+      )
+    })
+  }, [catalog, catalogCategory, catalogSearch])
+
+  const catalogGroups = useMemo(() => {
+    const groups: Array<{ category: string; items: CertCatalogItem[] }> = []
+    for (const it of catalogItems) {
+      let g = groups.find((x) => x.category === it.category)
+      if (!g) { g = { category: it.category, items: [] }; groups.push(g) }
+      g.items.push(it)
+    }
+    return groups
+  }, [catalogItems])
 
   const gap = result?.gap_analysis
   const recs = result?.recommendations ?? []
@@ -452,6 +485,86 @@ export default function CertRecommendPage() {
               </ol>
             </section>
           )}
+
+          {/* ── 行业证书资源库 ── */}
+          {catalog && catalog.items.length > 0 && (
+            <section className="app-card certs-catalog" data-testid="certs-catalog">
+              <div className="certs-section-head">
+                <span className="certs-section-title"><BookOutlined /> 行业证书资源库</span>
+                <span className="certs-section-sub">
+                  共 {catalog.items.length} 项 · {catalog.categories.length} 个行业方向 · 官方入口人工整理
+                </span>
+              </div>
+
+              <div className="certs-catalog-bar">
+                <Select
+                  style={{ width: 220, maxWidth: '60vw' }}
+                  allowClear
+                  placeholder="全部行业分类"
+                  value={catalogCategory || undefined}
+                  onChange={(v) => setCatalogCategory(v || '')}
+                  options={catalog.categories.map((c) => ({ value: c, label: c }))}
+                  data-testid="certs-catalog-category"
+                />
+                <Input
+                  allowClear
+                  prefix={<SearchOutlined style={{ color: 'var(--text-quaternary)' }} />}
+                  placeholder="搜索证书 / 机构 / 关键词，如：华为、会计、PMP"
+                  style={{ flex: 1, minWidth: 0 }}
+                  value={catalogSearch}
+                  onChange={(e) => setCatalogSearch(e.target.value)}
+                  data-testid="certs-catalog-search"
+                />
+              </div>
+
+              {catalogItems.length === 0 ? (
+                <div className="certs-muted" style={{ textAlign: 'center', padding: '24px 0' }}>
+                  没有匹配的资源，换个关键词试试
+                </div>
+              ) : (
+                <Collapse
+                  className="certs-catalog-collapse"
+                  defaultActiveKey={catalogGroups.slice(0, 1).map((g) => g.category)}
+                  items={catalogGroups.map((g) => ({
+                    key: g.category,
+                    label: (
+                      <span className="certs-catalog-cat">
+                        {g.category}
+                        <span className="certs-count">{g.items.length}</span>
+                      </span>
+                    ),
+                    children: (
+                      <div className="certs-catalog-list">
+                        {g.items.map((it, i) => (
+                          <div className="certs-catalog-item" key={`${it.name}-${i}`}>
+                            <span className={`certs-pill ${it.type === 'certificate' ? 'is-cert' : 'is-course'}`}>
+                              {it.type === 'certificate' ? '证书' : '课程'}
+                            </span>
+                            <div className="certs-catalog-body">
+                              <div className="certs-catalog-name">
+                                {it.name}
+                                {it.issuer && <span className="certs-catalog-issuer"> · {it.issuer}</span>}
+                              </div>
+                              {it.desc && <div className="certs-catalog-desc">{it.desc}</div>}
+                            </div>
+                            <a
+                              className="certs-link"
+                              href={it.link}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <LinkOutlined /> 官网
+                            </a>
+                          </div>
+                        ))}
+                      </div>
+                    ),
+                  }))}
+                />
+              )}
+            </section>
+          )}
         </div>
       )}
 
@@ -689,6 +802,38 @@ export default function CertRecommendPage() {
           padding-top: 3px; font-size: 13px; line-height: 1.75;
           color: var(--text-secondary);
         }
+
+        /* ── 行业证书资源库 ── */
+        .certs-catalog { padding: 18px 20px 20px; }
+        .certs-catalog-bar { display: flex; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+        .certs-catalog-cat {
+          display: inline-flex; align-items: center; gap: 8px;
+          font-size: 13px; font-weight: 600; color: var(--text-primary);
+        }
+        :global(.certs-catalog-collapse) { background: transparent; }
+        :global(.certs-catalog-collapse .ant-collapse-item) {
+          border: 1px solid var(--border-light); border-radius: var(--radius-lg) !important;
+          margin-bottom: 8px; background: var(--bg-card); overflow: hidden;
+        }
+        :global(.certs-catalog-collapse .ant-collapse-header) { align-items: center !important; }
+        .certs-catalog-list { display: flex; flex-direction: column; gap: 2px; }
+        .certs-catalog-item {
+          display: flex; align-items: flex-start; gap: 10px;
+          padding: 9px 4px; border-radius: 10px;
+        }
+        .certs-catalog-item:hover { background: var(--bg-hover); }
+        .certs-catalog-item .certs-pill { flex: none; margin-top: 1px; }
+        :global(.certs-pill.is-cert) { color: #0062CC; background: rgba(0, 122, 255, 0.13); }
+        :global(.certs-pill.is-course) { color: #5E5CE6; background: rgba(94, 92, 230, 0.13); }
+        :global([data-theme="dark"] .certs-pill.is-cert) { color: #6FAFFF; }
+        :global([data-theme="dark"] .certs-pill.is-course) { color: #A5A3F5; }
+        .certs-catalog-body { flex: 1; min-width: 0; }
+        .certs-catalog-name {
+          font-size: 13px; font-weight: 550; color: var(--text-primary); line-height: 1.55;
+        }
+        .certs-catalog-issuer { font-weight: 400; color: var(--text-tertiary); font-size: 12px; }
+        .certs-catalog-desc { font-size: 12px; color: var(--text-tertiary); line-height: 1.6; margin-top: 2px; }
+        .certs-catalog-item .certs-link { flex: none; font-size: 12px; padding: 4px 10px; }
 
         @media (max-width: 768px) {
           .certs-hero { flex-wrap: wrap; }

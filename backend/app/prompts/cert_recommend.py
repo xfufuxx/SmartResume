@@ -21,14 +21,23 @@ CERT_RECOMMEND_SYSTEM_PROMPT = """你是一名资深职业发展顾问与职业�
 
 # 链接规则（严格遵守）
 - 只能使用下方白名单中的官方域名拼链接，禁止编造 URL：
-  e.huawei.com / edu.huaweicloud.com / edu.aliyun.com / cloud.tencent.com /
-  www.ruankao.org.cn / www.pmi.org / www.pmichina.org / aws.amazon.com/certification /
-  learn.microsoft.com/credentials / www.cloudskillsboost.google / learningnetwork.cisco.com /
-  education.oracle.com / www.redhat.com/en/services/training / www.cfainstitute.org /
-  www.accaglobal.com / www.cicpa.org.cn / www.china-cba.net / www.amac.org.cn /
-  www.sac.net.cn / www.catticenter.com / www.neea.edu.cn / www.mohrss.gov.cn /
-  www.icourse163.org / www.coursera.org / www.edx.org / www.udacity.com /
-  time.geekbang.org / edu.lagou.com / leetcode.cn
+  e.huawei.com / edu.huaweicloud.com / edu.aliyun.com / cloud.tencent.com/edu /
+  www.ruankao.org.cn / www.pmi.org / www.pmichina.org / exam.chinapmp.cn /
+  aws.amazon.com/certification / skillbuilder.aws / learn.microsoft.com（/credentials 或 /zh-cn/credentials） /
+  www.cloudskillsboost.google / learningnetwork.cisco.com / education.oracle.com /
+  www.redhat.com/en/services/training / www.cfainstitute.org / www.accaglobal.com /
+  www.cicpa.org.cn / cpaexam.cicpa.org.cn / kzp.mof.gov.cn / www.imachina.org.cn /
+  ksbm.ecctaa.cn / www.china-cba.net / www.amac.org.cn / www.sac.net.cn / www.garp.org /
+  www.catticenter.com / www.neea.edu.cn（含 cet-bm/ielts/toefl/jlpt/topik/bec/ntce 子域） /
+  www.mohrss.gov.cn / www.cpta.com.cn / www.cltt.org / www.moj.gov.cn / www.nmec.org.cn /
+  www.icourse163.org / higher.smartedu.cn / www.coursera.org / www.edx.org / www.udacity.com /
+  time.geekbang.org / edu.lagou.com / leetcode.cn / www.tensorflow.org / www.kaggle.com /
+  www.cncf.io / training.linuxfoundation.org（/.cn）/ www.pdma.org / www.peoplecert.org /
+  www.scrum.org / www.cdaglobal.com / edu.cda.cn / www.cda.cn / www.tableau.com /
+  www.adobe.com / www.figma.com / www.gogoup.com / alicert.taobao.com / ke.qq.com /
+  ke.dingtalk.com / sce.siemens.com.cn / www.cisp.org.cn / www.isc2.org /
+  www.istqb.org.cn / www.postman.com / www.chinascm.org.cn / www.cqpa.org.cn /
+  home.pearsonvue.com/huawei
 - 若某项的官网入口不确定，link 字段填 null，并在 why 中注明"请自行搜索官方报名入口"。
 - 不得使用白名单以外的任何域名。
 
@@ -61,4 +70,7 @@ CERT_RECOMMEND_USER_PROMPT = """【用户简历】
 【目标岗位 JD】
 {jd_text}
 
-请严格按系统要求的 JSON 格式输出推荐结果。"""
+【内置证书资源库（可优先从中挑选推荐，条目的 link 已验证可信；但不必局限于此，也可推荐库外证书）】
+{catalog}
+
+请严格按系统要求的 JSON 格式输出推荐结果。若推荐条目来自资源库，link 字段直接使用资源库中的链接。"""
