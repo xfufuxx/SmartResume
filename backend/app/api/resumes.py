@@ -20,7 +20,8 @@ from app.models.optimized_resume import OptimizedResume
 from app.models.interview import InterviewSession
 from app.models.interview_track import InterviewTrack
 from app.schemas.resume import ResumeResponse, ResumeUploadResponse, ResumeCreateRequest, ResumeUpdateRequest, ResumeBatchDeleteRequest, ResumeStats, FavoriteRequest, ResumeVersionTree, VersionNode
-from app.services.resume_parser import parse_resume_from_bytes
+from app.services.resume_parser import ResumeNoTextError, parse_resume_from_bytes
+from app.core.llm_policy import PaidCallBlocked
 from app.services.optimized_record_cleanup import detach_optimized_record_refs
 from app.services.storage import storage, resign_file_url
 from app.services.text_formatter import format_resume_text
@@ -32,6 +33,29 @@ MAX_RESUMES = 10
 
 # 回收站保留天数：超过后自动物理删除（记录 + 磁盘文件）
 TRASH_RETENTION_DAYS = 7
+
+
+def _classify_parse_error(exc: Exception) -> tuple[str, str | None]:
+    """把解析异常映射成 (错误码, 可安全展示的中文原因)。
+
+    只透传本项目自己定义的中文说明；上游原始异常串可能含 API Key、内网地址、
+    堆栈信息，一律只进日志、不出网关。
+    """
+    if isinstance(exc, ResumeNoTextError):
+        return "RESUME_PARSE_NO_TEXT", (
+            f"{exc} 建议：① 另存为 Word（.docx）后上传；"
+            "② 导出 PDF 时选择「包含文字层 / 可搜索」；③ 扫描件请提高清晰度后重试。"
+        )
+    if isinstance(exc, PaidCallBlocked):
+        return "RESUME_PARSE_LLM_FAILED", "大模型免费额度已用尽，请稍后重试或联系管理员"
+    msg = str(exc).lower()
+    if any(k in msg for k in ("403", "quota", "arrearage", "insufficient balance")):
+        return "RESUME_PARSE_LLM_FAILED", "解析服务额度不足，请稍后重试"
+    if any(k in msg for k in ("timeout", "timed out", "超时")):
+        return "RESUME_PARSE_LLM_FAILED", "解析超时，请稍后重试，或改用 Word（.docx）格式上传"
+    if any(k in msg for k in ("json", "expecting value", "返回内容为空", "输出被截断")):
+        return "RESUME_PARSE_FAILED", "解析结果格式异常，请重试或改用 Word（.docx）格式上传"
+    return "RESUME_PARSE_FAILED", None
 
 
 def _file_key_from_url(url: str | None) -> str | None:
@@ -145,12 +169,19 @@ async def upload_resume(
 
     try:
         result = await parse_resume_from_bytes(content, filename)
-    except ValueError as e:
-        logger.error(f"简历解析失败: {e}")
-        raise app_err("RESUME_PARSE_FAILED")
     except Exception as e:
-        logger.error(f"简历解析异常: {e}", exc_info=True)
-        raise app_err("RESUME_PARSE_FAILED")
+        # 文件已在解析前落盘：解析失败不会产生任何数据库记录，须删掉这个孤儿文件，
+        # 否则每次失败上传都会在 uploads/ 里永久堆积一份含 PII 的简历原件。
+        try:
+            await storage.delete(key)
+        except Exception:
+            logger.warning("清理解析失败的上传文件失败: %s", key, exc_info=True)
+        logger.error(
+            "简历解析失败(filename=%s, ext=%s, size=%d): %s",
+            filename, ext, len(content), e, exc_info=True,
+        )
+        code, detail = _classify_parse_error(e)
+        raise app_err(code, detail=detail) from e
 
     # PII 加密存储：raw_text 含姓名/电话/邮箱等敏感原文（PIPL 第 51 条）
     raw_text = result["raw_text"]

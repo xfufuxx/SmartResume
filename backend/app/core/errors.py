@@ -20,7 +20,11 @@ ERRORS: dict[str, tuple[int, str]] = {
     "FILE_CONTENT_INVALID": (400, "文件内容无法识别，请确认文件未损坏或尝试其他格式"),
     "PDF_PAGE_LIMIT": (400, "PDF 页数过多（上限 50 页），请拆分或压缩后重试"),
     # 解析 / 处理
-    "RESUME_PARSE_FAILED": (400, "简历解析失败，请尝试更清晰的 PDF，或改用 Word 格式后重试"),
+    # 旧文案「请尝试更清晰的 PDF」把所有失败（含服务端额度耗尽、OCR 引擎故障）
+    # 都甩给文件清晰度，误导用户反复重传，已弃用。
+    "RESUME_PARSE_FAILED": (400, "简历解析失败，请稍后重试；若持续失败可改用 Word（.docx）格式上传"),
+    "RESUME_PARSE_NO_TEXT": (400, "文件中未识别到文字内容。建议：① 另存为 Word（.docx）后上传；② 导出 PDF 时选择「包含文字层 / 可搜索」；③ 扫描件请提高清晰度后重试"),
+    "RESUME_PARSE_LLM_FAILED": (400, "简历解析服务暂时不可用，请稍后重试；如持续失败请联系管理员"),
     "JOB_PARSE_FAILED": (400, "岗位图片解析失败，请确认图片清晰、文字未被遮挡后重试"),
     "PARSE_BEFORE_OPTIMIZE": (400, "简历或岗位尚未解析完成，请先等待解析结束再优化"),
     # 配额 / 限流
@@ -35,13 +39,19 @@ ERRORS: dict[str, tuple[int, str]] = {
 }
 
 
-def app_err(code: str, **kwargs) -> HTTPException:
-    """根据错误码抛出中文 HTTPException；kwargs 用于格式化提示模板。"""
+def app_err(code: str, detail: str | None = None, **kwargs) -> HTTPException:
+    """根据错误码抛出中文 HTTPException。
+
+    - kwargs 用于格式化提示模板（如 RATE_LIMITED 的 seconds）；
+    - detail 可覆盖默认文案，用于透传**已清洗过**的可操作原因。
+      调用方不得把上游原始异常串直接塞进来（可能含 API Key / 内部路径）。
+    """
     if code not in ERRORS:
         return HTTPException(status_code=500, detail="未知错误")
     status_code, template = ERRORS[code]
-    try:
-        detail = template.format(**kwargs) if kwargs else template
-    except (KeyError, IndexError):
-        detail = template
+    if detail is None:
+        try:
+            detail = template.format(**kwargs) if kwargs else template
+        except (KeyError, IndexError):
+            detail = template
     return HTTPException(status_code=status_code, detail=detail)

@@ -82,10 +82,14 @@ NON_TEXT_MODELS: frozenset[str] = frozenset({
     "sambart-zhichu-v1", "sambart-hanna-v1", "sambart-clara-v1", "sambart-eva-v1",
 })
 
-# 视觉对话模型（图文理解）：控制台免费额度清单里**暂无**——qwen-mt-image-2.0 是
-# 图片翻译而非通用视觉模型。因此视觉链路不参与自动降级：额度耗尽时由 llm_errors
-# 转中文提示（充值/换 Key），而不是把图片请求降级到文本模型。
-VISION_MODELS: frozenset[str] = frozenset()
+# 视觉对话模型（图文理解）：2026-11-14 实测 qwen3.8-flash / qwen3.8-max-0902
+# 均支持 image_url 图文输入（读图返回正确文字），且仍在免费额度内。
+# 控制台「视觉专用模型」免费额度已耗尽（qwen3.7-flash-2026-07-15 返回 403
+# AllocationQuota.FreeTierOnly），因此视觉链路复用这两个多模态文本模型。
+# 注意：qwen-mt-image-2.0 是图片翻译而非通用视觉模型，勿加入。
+VISION_MODELS: frozenset[str] = frozenset({
+    "qwen3.8-flash", "qwen3.8-max-0902",
+})
 
 # 思考（reasoning）模型：先产出 reasoning_content 再产出 content，小 max_tokens 下
 # content 直接为空（实测 deepseek-v4.1-flash max_tokens=8 返回空串）。本项目管线是
@@ -341,7 +345,7 @@ def pick_free_model(kind: str = "text", expired_only: bool = False) -> str | Non
         ]
 
     if kind == "vision":
-        # 只认真正的视觉对话模型；清单内暂无（见 VISION_MODELS 注释）
+        # 只认实测支持 image_url 的多模态模型（见 VISION_MODELS 注释）
         pool = [m for m in pool if m in VISION_MODELS]
         pool.sort(key=lambda m: (-_days_left(m), m))
     else:

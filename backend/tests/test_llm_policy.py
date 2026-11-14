@@ -263,7 +263,14 @@ def test_no_candidate_after_all_quotas_expire(monkeypatch):
     assert pick_free_model("text") is None
 
 
-def test_vision_pool_empty_without_free_vision_model(frozen_today):
-    # 控制台免费清单内无视觉对话模型（qwen-mt-image-2.0 是图片翻译）：
-    # 视觉链路不降级，由 llm_errors 转中文提示，绝不把图片请求发给文本模型
+def test_vision_pool_prefers_longest_free_vision_model(frozen_today):
+    # 2026-11-14 实测：qwen3.8-flash / qwen3.8-max-0902 均支持 image_url；
+    # 控制台视觉专用模型免费额度已耗尽（403 FreeTierOnly），视觉链路复用
+    # 这两个多模态文本模型。同档按剩余免费天数降序挑 runway 最长的。
+    assert pick_free_model("vision") == "qwen3.8-max-0902"
+
+
+def test_no_vision_candidate_after_all_quotas_expire(monkeypatch):
+    # 冻结到 2026-12-14：两个视觉候选都到期 → 无候选，由计费守卫本地拦截
+    _freeze_to(monkeypatch, date(2026, 12, 14))
     assert pick_free_model("vision") is None

@@ -4,6 +4,7 @@
 同时提供 PDF 页数上限校验（需 PyMuPDF）。
 """
 import struct
+from fastapi import HTTPException
 from app.core.errors import app_err
 
 # 扩展名 -> 允许的头部特征（满足任一即通过）
@@ -52,8 +53,11 @@ def validate_pdf_pages(content: bytes) -> None:
         doc.close()
         if pages > MAX_PDF_PAGES:
             raise app_err("PDF_PAGE_LIMIT")
-    except app_err:
+    except HTTPException:
+        # app_err() 返回的是 HTTPException，不是异常类：旧代码写成
+        # `except app_err:` 会对任何异常抛 TypeError（函数不能作为异常类），
+        # 使损坏/加密 PDF 直接 500。这里必须按实际类型捕获并原样上抛。
         raise
     except Exception:
-        # 无法打开则交由上层解析流程报错，这里不阻断
+        # 无法打开（损坏 / 加密 / 伪造）则交由上层解析流程给出可操作提示
         return
