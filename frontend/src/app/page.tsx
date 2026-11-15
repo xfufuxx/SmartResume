@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState, useCallback, useRef, useMemo } from 'react'
 import {
-  Button, Upload, Card, Typography, Spin, message,
+  Button, Upload, Card, Typography, Spin, message, Progress,
   Tag, Space, List, Input, Modal, Empty, Switch, Select, Skeleton,
 } from 'antd'
 import {
@@ -21,6 +21,7 @@ import {
 import { getToken } from '@/lib/auth'
 import { useApiData } from '@/lib/useApi'
 import { formatDate } from '@/lib/utils'
+import { useResumeUpload, uploadPhaseText } from '@/hooks/useResumeUpload'
 import AppLayout from '@/components/AppLayout'
 import { TEMPLATE_OPTIONS, DEFAULT_TEMPLATE } from '@/lib/templates'
 import { TemplateRegistry } from '@/lib/templates-register'
@@ -73,7 +74,14 @@ export default function Home() {
   const [resumeData, setResumeData] = useState<ResumeParseResult | null>(null)
   const [resumeFileUrl, setResumeFileUrl] = useState<string | null>(null)
   const [resumeFileType, setResumeFileType] = useState<string | null>(null)
-  const [resumeLoading, setResumeLoading] = useState(false)
+  // 上传分两阶段：请求体上传（真实百分比）→ 后端 OCR/LLM 解析（诚实显示等待时长）
+  const {
+    phase: resumePhase, percent: resumePercent, elapsed: resumeElapsed,
+    fileName: resumeFileName, busy: uploadBusy, upload: uploadResumeFile,
+  } = useResumeUpload()
+  // 从简历库挑选已有简历时复用同一个遮罩，但与上传阶段互不影响
+  const [resumeSelecting, setResumeSelecting] = useState(false)
+  const resumeLoading = uploadBusy || resumeSelecting
   const [resumeSelectModalOpen, setResumeSelectModalOpen] = useState(false)
   const [resumeListLoading, setResumeListLoading] = useState(false)
   const [resumeList, setResumeList] = useState<ResumeRecord[]>([])
@@ -172,13 +180,12 @@ export default function Home() {
   // ══════════ 上传 / 选择 ══════════
 
   const handleResumeUpload = useCallback(async (file: File) => {
-    setResumeLoading(true)
     try {
-      const res = await resumes.upload(file)
-      setResumeId(res.data.id)
-      setResumeData(res.data.parsed_json)
-      setResumeFileUrl(res.data.original_file_url || null)
-      setResumeFileType(res.data.file_type || null)
+      const res = await uploadResumeFile(file)
+      setResumeId(res.id)
+      setResumeData(res.parsed_json)
+      setResumeFileUrl(res.original_file_url || null)
+      setResumeFileType(res.file_type || null)
       setResult(null)
       setAppliedSuggestions({})
       setResumeCount((c) => c + 1)
@@ -186,12 +193,20 @@ export default function Home() {
     } catch (err: unknown) {
       const axiosErr = err as { response?: { status?: number; data?: { detail?: string } }; message?: string }
       let msg = axiosErr?.response?.data?.detail || axiosErr?.message || '上传失败'
-      if (!axiosErr?.response) msg = '网络错误，无法连接到服务器。请确认后端已启动（http://localhost:8000）'
-      else if (axiosErr.response.status === 401) msg = '登录已过期，请重新登录'
-      else if (axiosErr.response.status === 413) msg = '文件过大，请选择 20MB 以内的文件'
+      if (!axiosErr?.response) {
+        msg = '网络错误，无法连接到服务器。请确认后端已启动（http://localhost:8000）'
+      } else {
+        const st = axiosErr.response.status ?? 0
+        if (st === 401) msg = '登录已过期，请重新登录'
+        else if (st === 413) msg = '文件过大，请选择 20MB 以内的文件'
+        else if (st >= 500 && !axiosErr?.response?.data?.detail) {
+          // 有响应但无 detail（如 500 HTML 错误页），透出状态码便于排查
+          msg = `服务器内部错误（${st}），请稍后重试或联系管理员`
+        }
+      }
       message.error({ content: `简历解析失败: ${msg}`, key: 'resume-upload' })
-    } finally { setResumeLoading(false) }
-  }, [])
+    }
+  }, [uploadResumeFile])
 
   const handleOpenResumeLibrary = useCallback(async () => {
     setResumeSelectModalOpen(true); setResumeListLoading(true)
@@ -201,7 +216,7 @@ export default function Home() {
   }, [])
 
   const handleSelectResume = useCallback(async (record: ResumeRecord) => {
-    setResumeSelectModalOpen(false); setResumeLoading(true)
+    setResumeSelectModalOpen(false); setResumeSelecting(true)
     try {
       const res = await resumes.get(record.id)
       setResumeId(res.data.id); setResumeData(res.data.parsed_json)
@@ -209,7 +224,7 @@ export default function Home() {
       setResult(null); setAppliedSuggestions({})
       message.success({ content: `已选择简历：${res.data.title || '未命名'}`, key: 'resume-upload' })
     } catch { message.error('获取简历详情失败') }
-    finally { setResumeLoading(false) }
+    finally { setResumeSelecting(false) }
   }, [])
 
   const handleOpenJobLibrary = useCallback(async () => {
@@ -627,7 +642,7 @@ export default function Home() {
                 extra={<Tag className="opt-soft-tag">修改前</Tag>}
                 onPaste={(e) => handlePaste(e, 'resume')}
               >
-                <Spin spinning={resumeLoading} tip="正在解析简历...">
+                <Spin spinning={resumeLoading} tip={resumeSelecting ? '正在加载简历…' : uploadPhaseText(resumePhase, resumePercent, resumeFileName, resumeElapsed)}>
                   <ResumePreview
                     data={resumeData}
                     variant="original"
@@ -751,8 +766,23 @@ export default function Home() {
                   disabled={resumeLoading}
                   className="opt-dragger"
                 >
-                  {resumeLoading ? (
-                    <Spin tip="正在解析简历..."><div style={{ minHeight: 80 }} /></Spin>
+                  {uploadBusy ? (
+                    <div
+                      data-testid="resume-upload-progress"
+                      style={{ minHeight: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 12px' }}
+                    >
+                      <Spin size="small" />
+                      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
+                        {uploadPhaseText(resumePhase, resumePercent, resumeFileName, resumeElapsed)}
+                      </span>
+                      {resumePhase === 'uploading' ? (
+                        <Progress percent={resumePercent} size="small" style={{ width: '80%', margin: 0 }} />
+                      ) : (
+                        <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
+                          扫描件 / 图片首次解析可能需 1–2 分钟，请勿关闭页面
+                        </span>
+                      )}
+                    </div>
                   ) : (
                     <>
                       <p className="ant-upload-drag-icon"><UploadOutlined /></p>

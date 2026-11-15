@@ -14,10 +14,11 @@ import {
   ApartmentOutlined,
 } from '@ant-design/icons'
 import { useRouter } from 'next/navigation'
-import { resumes, toBackendUrl } from '@/lib/api'
+import { resumes, toBackendUrl, RESUMES_CHANGED_EVENT } from '@/lib/api'
 import { getToken } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
 import { formatDate } from '@/lib/utils'
+import { useResumeUpload, uploadPhaseText } from '@/hooks/useResumeUpload'
 import type { ResumeRecord, ResumeStats, ResumeVersionTree, VersionNode } from '@/types'
 import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
@@ -48,6 +49,97 @@ const SUGGESTIONS = [
   { icon: <FireOutlined />, title: '补充量化成果数据', desc: '包含具体数字可提升简历说服力' },
   { icon: <ThunderboltOutlined />, title: '优化技能关键词', desc: '增加与目标职位匹配的关键词' },
 ]
+
+// 「更多操作」菜单的单字母快捷键（仅在菜单展开时生效）。
+// d 专供「删除」(Delete)；下载用 w 取自 doWnload，避免与 d 冲突。
+const MENU_SHORTCUTS = {
+  preview: 'p',   // Preview
+  download: 'w',  // doWnload
+  primary: 's',   // Set default
+  copy: 'c',      // Copy
+  tree: 't',      // Tree
+  edit: 'r',      // Rename
+  delete: 'd',    // Delete
+  restore: 'r',   // Restore（回收站菜单）
+} as const
+
+/** 菜单项 label：文字 + 右侧键盘徽标，让快捷键可见可发现 */
+function menuLabel(text: string, key: string, isDark: boolean, danger = false) {
+  return (
+    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'space-between', gap: 24, minWidth: 116 }}>
+      <span>{text}</span>
+      <kbd
+        aria-hidden
+        style={{
+          fontFamily: 'inherit', fontSize: 11, lineHeight: '16px', height: 16, minWidth: 18,
+          padding: '0 4px', borderRadius: 4, textAlign: 'center',
+          border: `1px solid ${isDark ? 'rgba(255,255,255,0.22)' : '#CBD5E1'}`,
+          background: isDark ? 'rgba(255,255,255,0.06)' : '#F8FAFC',
+          color: danger
+            ? (isDark ? '#FF7B72' : '#EF4444')
+            : (isDark ? 'rgba(235,235,245,0.65)' : '#64748B'),
+        }}
+      >
+        {key.toUpperCase()}
+      </kbd>
+    </span>
+  )
+}
+
+/** 原文件无法在线预览时的降级视图：明确说明原因 + 展示已解析内容（或原文）。
+ *  解决「demo/历史简历只写了原件 URL 但文件已不在磁盘」时预览空白的问题。 */
+function ParsedResumeView({ resume, reason }: {
+  resume: ResumeRecord
+  reason: 'docx' | 'missing' | 'unsupported'
+}) {
+  const banner = reason === 'missing'
+    ? '原始文件不存在或已被删除，无法在线预览。以下展示已解析的简历内容；如需查看原件请重新上传。'
+    : reason === 'docx'
+      ? 'Word 文档无法直接在浏览器中预览，以下是解析后的内容'
+      : `${(resume.file_type || '').toUpperCase()} 格式不支持在线预览，以下是解析后的内容`
+
+  const pj = resume.parsed_json
+  const hasParsed = !!pj && Object.keys(pj).length > 0
+
+  return (
+    <div style={{ padding: 16 }}>
+      <Alert type={reason === 'missing' ? 'warning' : 'info'} message={banner} showIcon style={{ marginBottom: 16 }} />
+      {hasParsed && pj ? (
+        <div>
+          <Descriptions size="small" column={1} bordered>
+            <Descriptions.Item label="姓名">{pj.personal_info?.name || '-'}</Descriptions.Item>
+            <Descriptions.Item label="邮箱">{pj.personal_info?.email || '-'}</Descriptions.Item>
+            <Descriptions.Item label="电话">{pj.personal_info?.phone || '-'}</Descriptions.Item>
+          </Descriptions>
+          <Divider />
+          <Title level={5}>个人总结</Title>
+          <Typography.Paragraph>{pj.summary || '-'}</Typography.Paragraph>
+          <Divider />
+          <Title level={5}>工作经历</Title>
+          {(pj.experience || []).length > 0 ? (pj.experience || []).map((exp, i) => (
+            <Card size="small" key={i} style={{ marginBottom: 8 }}>
+              <Text strong>{exp.title} @ {exp.company}</Text>
+              <div style={{ color: '#94A3B8', fontSize: 12 }}>{exp.start} - {exp.end}</div>
+              <ul style={{ paddingLeft: 20, marginTop: 4 }}>
+                {(exp.points || []).map((p, j) => <li key={j} style={{ fontSize: 13 }}>{p}</li>)}
+              </ul>
+            </Card>
+          )) : <Text type="secondary">暂无工作经历</Text>}
+          <Divider />
+          <Title level={5}>技能</Title>
+          <Space wrap>{(pj.skills || []).map((s) => <Tag key={s} style={{ color: 'var(--text-secondary)', background: 'var(--gray-100)', border: 'none' }}>{s}</Tag>)}</Space>
+        </div>
+      ) : resume.raw_text ? (
+        <div>
+          <Title level={5}>简历原文</Title>
+          <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--gray-50)', padding: 12, borderRadius: 8 }}>{resume.raw_text}</pre>
+        </div>
+      ) : (
+        <Empty description="该简历暂无解析内容，请重新上传以生成" />
+      )}
+    </div>
+  )
+}
 
 export default function ResumeLibrary() {
   const router = useRouter()
@@ -82,7 +174,16 @@ export default function ResumeLibrary() {
   const [previewResume, setPreviewResume] = useState<ResumeRecord | null>(null)
   const [previewBlobUrl, setPreviewBlobUrl] = useState<string | null>(null)
   const [previewLoading, setPreviewLoading] = useState(false)
+  // 原件不可在线渲染的原因；非 null 时预览弹窗降级展示已解析内容，
+  // 而不是误导用户「刷新重试」（文件缺失时刷新也没用）。
+  const [previewReason, setPreviewReason] = useState<'docx' | 'missing' | 'unsupported' | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
+
+  // 上传分两阶段：请求体上传（真实百分比）→ 后端 OCR/LLM 解析（诚实显示等待时长）
+  const {
+    phase: uploadPhase, percent: uploadPercent, elapsed: uploadElapsed,
+    fileName: uploadingFileName, busy: uploading, upload: uploadResumeFile,
+  } = useResumeUpload()
 
   // 回收站
   const [trashList, setTrashList] = useState<ResumeRecord[]>([])
@@ -92,6 +193,9 @@ export default function ResumeLibrary() {
   const [selectMode, setSelectMode] = useState(false)
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [batchDeleting, setBatchDeleting] = useState(false)
+
+  // 「更多操作」菜单：记录当前展开的简历卡片，供菜单内字母快捷键定位目标
+  const [openMenuId, setOpenMenuId] = useState<string | null>(null)
 
   useEffect(() => {
     const t = getToken()
@@ -129,6 +233,20 @@ export default function ResumeLibrary() {
     if (!token) return
     loadList()
     loadStats()
+  }, [token, loadList, loadStats])
+
+  // 跨页面 / 跨标签同步：首页上传成功后广播该事件；从别的标签页切回来也刷新，
+  // 避免「上传成功但列表不变，必须按 F5 才看到新简历」。
+  useEffect(() => {
+    if (!token) return
+    const refresh = () => { loadList(); loadStats() }
+    const onVisible = () => { if (document.visibilityState === 'visible') refresh() }
+    window.addEventListener(RESUMES_CHANGED_EVENT, refresh)
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      window.removeEventListener(RESUMES_CHANGED_EVENT, refresh)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
   }, [token, loadList, loadStats])
 
   // 切到回收站 Tab 时加载软删除列表
@@ -350,38 +468,56 @@ export default function ResumeLibrary() {
 
   const handleUpload = useCallback(async (file: File) => {
     try {
-      await resumes.upload(file)
+      await uploadResumeFile(file)
       message.success('简历上传成功')
+      // 新简历可能被当前 Tab / 搜索词 / 类型状态筛选 / 分页挡住，
+      // 重置到「全部」第 1 页，保证上传完立刻可见，而不是让用户以为没成功。
+      setActiveTab('all')
+      setSearchKeyword('')
+      setTypeFilter('all')
+      setStatusFilter('all')
+      setPage(1)
       loadList()
       loadStats()
     } catch (err: any) {
-      message.error(err?.response?.data?.detail || '上传失败')
+      const detail = err?.response?.data?.detail
+      const msg = detail || (String(err?.message || '').includes('timeout')
+        ? '处理超时，请稍后重试或改用 Word（.docx）格式'
+        : '上传失败')
+      message.error(msg)
     }
-  }, [loadList, loadStats])
+  }, [loadList, loadStats, uploadResumeFile])
 
   const handlePreview = useCallback(async (resume: ResumeRecord) => {
     const url = toBackendUrl(resume.original_file_url)
     const type = (resume.file_type || '').toLowerCase()
-    // 浏览器无法直接渲染 Word，展示解析内容
-    if (type === 'docx' || !url) {
-      setPreviewResume(resume)
+    const visualTypes = ['pdf', 'png', 'jpg', 'jpeg', 'webp']
+
+    setPreviewResume(resume)
+    setPreviewBlobUrl(null)
+
+    // Word 无法在浏览器内渲染、原件缺失或格式不支持：统一降级展示已解析内容。
+    // 尤其原件 404 时，旧逻辑提示「刷新页面后重试」是误导（刷新也变不出文件）。
+    if (!url || type === 'docx' || !visualTypes.includes(type)) {
+      setPreviewReason(!url ? 'missing' : type === 'docx' ? 'docx' : 'unsupported')
+      setPreviewLoading(false)
       setPreviewModalOpen(true)
       return
     }
-    // PDF / 图片：页面内弹窗展示。fetch blob 后用 <embed>/<img> 内嵌渲染，
-    // 不做文件导航——避免被浏览器「下载 PDF 而非打开」设置处理成自动下载
-    setPreviewResume(resume)
-    setPreviewBlobUrl(null)
+
+    // PDF / 图片：fetch blob 后用 <embed>/<img> 内嵌渲染（不触发下载）
+    setPreviewReason(null)
     setPreviewModalOpen(true)
     setPreviewLoading(true)
     try {
-      const resp = await fetch(url)
+      // no-store：签名 URL 在有效期内不变，浏览器会按 ETag 启发式缓存旧副本，
+      // 导致原件被替换/删除后仍显示旧 PDF。每次预览都真实校验文件是否存在。
+      const resp = await fetch(url, { cache: 'no-store' })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       setPreviewBlobUrl(URL.createObjectURL(await resp.blob()))
     } catch {
-      message.error('文件加载失败，链接可能已过期，请刷新页面后重试')
-      setPreviewModalOpen(false)
-      setPreviewResume(null)
+      // 原文件不存在 / 链接失效 → 保留弹窗，降级展示解析内容
+      setPreviewReason('missing')
     } finally {
       setPreviewLoading(false)
     }
@@ -390,6 +526,7 @@ export default function ResumeLibrary() {
   const closePreview = useCallback(() => {
     setPreviewModalOpen(false)
     setPreviewResume(null)
+    setPreviewReason(null)
     if (previewBlobUrl) {
       URL.revokeObjectURL(previewBlobUrl)
       setPreviewBlobUrl(null)
@@ -405,7 +542,8 @@ export default function ResumeLibrary() {
     setDownloadingId(resume.id)
     try {
       // 直接下载签名 URL 的内容并以简历标题命名（跨域直链的 download 属性无效，故走 blob）
-      const resp = await fetch(url)
+      // no-store：避免浏览器按 ETag 缓存，下载到已被替换的旧版本
+      const resp = await fetch(url, { cache: 'no-store' })
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
       const blob = await resp.blob()
       const ext = (resume.file_type || 'pdf').toLowerCase()
@@ -461,6 +599,54 @@ export default function ResumeLibrary() {
       setBatchDeleting(false)
     }
   }, [selectedIds, loadList, loadStats])
+
+  /* ── 「更多操作」菜单的字母快捷键 ──────────────────────────────
+   * 只在菜单展开期间挂 document keydown；按修饰键、输入法组合中、
+   * 焦点在输入控件、或有弹窗打开时一律不响应，避免误触发（尤其是删除）。
+   * 快捷键与点击菜单项完全等价：删除仍是移入回收站，可恢复。 */
+  const shortcutActions = useMemo<Record<string, () => void> | null>(() => {
+    if (!openMenuId) return null
+    const inTrash = activeTab === 'recycle'
+    const resume = (inTrash ? trashList : list).find((r) => r.id === openMenuId)
+    if (!resume) return null
+    const actions: Record<string, () => void> = inTrash
+      ? {
+          [MENU_SHORTCUTS.preview]: () => handlePreview(resume),
+          [MENU_SHORTCUTS.download]: () => handleDownload(resume),
+          [MENU_SHORTCUTS.restore]: () => handleRestore(resume.id),
+        }
+      : {
+          [MENU_SHORTCUTS.preview]: () => handlePreview(resume),
+          [MENU_SHORTCUTS.download]: () => handleDownload(resume),
+          [MENU_SHORTCUTS.primary]: () => handleSetPrimary(resume.id),
+          [MENU_SHORTCUTS.copy]: () => handleCopy(resume.id),
+          [MENU_SHORTCUTS.tree]: () => handleOpenVersionTree(resume),
+          [MENU_SHORTCUTS.edit]: () => handleEdit(resume.id, resume.title || ''),
+          [MENU_SHORTCUTS.delete]: () => handleDelete(resume.id),
+        }
+    return actions
+  }, [
+    openMenuId, activeTab, list, trashList,
+    handlePreview, handleDownload, handleSetPrimary, handleCopy,
+    handleOpenVersionTree, handleEdit, handleDelete, handleRestore,
+  ])
+
+  useEffect(() => {
+    if (!openMenuId || !shortcutActions) return
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.ctrlKey || e.altKey || e.metaKey || e.shiftKey || e.isComposing) return
+      if (createModalOpen || editModalOpen || previewModalOpen || treeOpen) return
+      const target = e.target as HTMLElement | null
+      if (target?.closest?.('input, textarea, select, [contenteditable="true"]')) return
+      const action = shortcutActions[e.key.toLowerCase()]
+      if (!action) return
+      e.preventDefault()
+      setOpenMenuId(null)
+      action()
+    }
+    document.addEventListener('keydown', onKeyDown)
+    return () => document.removeEventListener('keydown', onKeyDown)
+  }, [openMenuId, shortcutActions, createModalOpen, editModalOpen, previewModalOpen, treeOpen])
 
   if (!token) return <AuthGate activeKey="resumes" />
 
@@ -616,27 +802,35 @@ export default function ResumeLibrary() {
                 />
               )}
               <Dropdown
+                open={openMenuId === resume.id}
+                onOpenChange={(open) => setOpenMenuId(open ? resume.id : null)}
                 menu={{
                   items: isTrash
                     ? [
-                        { key: 'preview', label: '预览', icon: <EyeOutlined />, onClick: () => handlePreview(resume) },
-                        { key: 'download', label: '下载', icon: <DownloadOutlined />, onClick: () => handleDownload(resume) },
-                        { key: 'restore', label: '恢复', icon: <RollbackOutlined />, onClick: () => handleRestore(resume.id) },
+                        { key: 'preview', label: menuLabel('预览', MENU_SHORTCUTS.preview, isDark), icon: <EyeOutlined />, onClick: () => handlePreview(resume) },
+                        { key: 'download', label: menuLabel('下载', MENU_SHORTCUTS.download, isDark), icon: <DownloadOutlined />, onClick: () => handleDownload(resume) },
+                        { key: 'restore', label: menuLabel('恢复', MENU_SHORTCUTS.restore, isDark), icon: <RollbackOutlined />, onClick: () => handleRestore(resume.id) },
                       ]
                     : [
-                        { key: 'preview', label: '预览', icon: <EyeOutlined />, onClick: () => handlePreview(resume) },
-                        { key: 'download', label: '下载', icon: <DownloadOutlined />, onClick: () => handleDownload(resume) },
-                        { key: 'primary', label: '设为默认', icon: <CrownOutlined />, onClick: () => handleSetPrimary(resume.id) },
-                        { key: 'copy', label: '复制', icon: <CopyOutlined />, onClick: () => handleCopy(resume.id) },
-                        { key: 'tree', label: '版本树', icon: <ApartmentOutlined />, onClick: () => handleOpenVersionTree(resume) },
-                        { key: 'edit', label: '重命名', icon: <EditOutlined />, onClick: () => handleEdit(resume.id, resume.title || '') },
+                        { key: 'preview', label: menuLabel('预览', MENU_SHORTCUTS.preview, isDark), icon: <EyeOutlined />, onClick: () => handlePreview(resume) },
+                        { key: 'download', label: menuLabel('下载', MENU_SHORTCUTS.download, isDark), icon: <DownloadOutlined />, onClick: () => handleDownload(resume) },
+                        { key: 'primary', label: menuLabel('设为默认', MENU_SHORTCUTS.primary, isDark), icon: <CrownOutlined />, onClick: () => handleSetPrimary(resume.id) },
+                        { key: 'copy', label: menuLabel('复制', MENU_SHORTCUTS.copy, isDark), icon: <CopyOutlined />, onClick: () => handleCopy(resume.id) },
+                        { key: 'tree', label: menuLabel('版本树', MENU_SHORTCUTS.tree, isDark), icon: <ApartmentOutlined />, onClick: () => handleOpenVersionTree(resume) },
+                        { key: 'edit', label: menuLabel('重命名', MENU_SHORTCUTS.edit, isDark), icon: <EditOutlined />, onClick: () => handleEdit(resume.id, resume.title || '') },
                         { type: 'divider' },
-                        { key: 'delete', label: '删除', danger: true, icon: <DeleteOutlined />, onClick: () => handleDelete(resume.id) },
+                        { key: 'delete', label: menuLabel('删除', MENU_SHORTCUTS.delete, isDark, true), danger: true, icon: <DeleteOutlined />, onClick: () => handleDelete(resume.id) },
                       ],
                 }}
                 trigger={['click']}
               >
-                <Button type="text" size="small" icon={<MoreOutlined style={{ color: '#94A3B8' }} />} />
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<MoreOutlined style={{ color: '#94A3B8' }} />}
+                  data-testid={`resume-more-${resume.id}`}
+                  title="更多操作（展开后可按字母键快速执行）"
+                />
               </Dropdown>
             </div>
           </div>
@@ -736,7 +930,7 @@ export default function ResumeLibrary() {
               style={{ display: 'none' }}
               onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = '' }}
             />
-            <Button type="primary" icon={<PlusOutlined />} onClick={() => document.getElementById('upload-resume')?.click()}>
+            <Button type="primary" icon={<PlusOutlined />} loading={uploading} onClick={() => document.getElementById('upload-resume')?.click()}>
               创建简历
             </Button>
           </Space>
@@ -745,6 +939,34 @@ export default function ResumeLibrary() {
         <div className="resume-layout" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           {/* 左侧主内容 */}
           <div style={{ flex: 1, minWidth: 0 }}>
+            {/* 上传进度：上传中显示真实百分比，解析中诚实显示已等待时长 */}
+            {uploading && (
+              <div
+                data-testid="resume-upload-progress"
+                style={{
+                  marginBottom: 12, padding: '12px 16px', borderRadius: 10,
+                  background: isDark ? 'rgba(10,132,255,0.10)' : '#EFF6FF',
+                  border: `1px solid ${isDark ? 'rgba(10,132,255,0.25)' : '#BFDBFE'}`,
+                }}
+              >
+                <Space direction="vertical" style={{ width: '100%' }} size={6}>
+                  <Space size={8}>
+                    <Spin size="small" />
+                    <Text strong style={{ fontSize: 13 }}>
+                      {uploadPhaseText(uploadPhase, uploadPercent, uploadingFileName, uploadElapsed)}
+                    </Text>
+                  </Space>
+                  {uploadPhase === 'uploading' ? (
+                    <Progress percent={uploadPercent} size="small" />
+                  ) : (
+                    <Text type="secondary" style={{ fontSize: 12 }}>
+                      正在识别文字并结构化，扫描件 / 图片首次解析可能需 1–2 分钟，请勿关闭页面
+                    </Text>
+                  )}
+                </Space>
+              </div>
+            )}
+
             {/* 筛选标签页 */}
             <div style={{ marginBottom: 12 }}>
               <Segmented
@@ -809,7 +1031,7 @@ export default function ResumeLibrary() {
                     onChange={(e) => { const f = e.target.files?.[0]; if (f) handleUpload(f); e.target.value = '' }} />
                 )}
                 {activeTab !== 'recycle' && !searchKeyword && (
-                  <Button type="primary" onClick={() => document.getElementById('upload-resume-empty')?.click()}>
+                  <Button type="primary" disabled={uploading} onClick={() => document.getElementById('upload-resume-empty')?.click()}>
                     <PlusOutlined /> 上传简历
                   </Button>
                 )}
@@ -835,7 +1057,7 @@ export default function ResumeLibrary() {
                     <Col xs={24} md={24} lg={12} xxl={8}>
                       <Card
                         style={{ borderRadius: 12, height: '100%', borderStyle: 'dashed', cursor: 'pointer' }}
-                        onClick={() => document.getElementById('upload-resume')?.click()}
+                        onClick={() => { if (!uploading) document.getElementById('upload-resume')?.click() }}
                         styles={{ body: { height: '100%', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', minHeight: 220 } }}
                       >
                         <PlusOutlined style={{ fontSize: 32, color: '#94A3B8', marginBottom: 12 }} />
@@ -1034,7 +1256,7 @@ export default function ResumeLibrary() {
           open={previewModalOpen}
           onCancel={closePreview}
           footer={
-            previewResume ? (
+            previewResume && previewReason !== 'missing' ? (
               <Button
                 icon={<DownloadOutlined />}
                 loading={downloadingId === previewResume.id}
@@ -1047,7 +1269,7 @@ export default function ResumeLibrary() {
           width={900}
           style={{ top: 20 }}
         >
-          {previewResume && ['pdf', 'png', 'jpg', 'jpeg', 'webp'].includes((previewResume.file_type || '').toLowerCase()) ? (
+          {previewResume && previewReason === null ? (
             <div style={{ minHeight: 320, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               {previewLoading ? (
                 <Spin size="large" />
@@ -1061,48 +1283,8 @@ export default function ResumeLibrary() {
                 <img src={previewBlobUrl} alt="简历预览" style={{ maxWidth: '100%', borderRadius: 8 }} />
               ) : null}
             </div>
-          ) : previewResume && previewResume.file_type === 'docx' ? (
-            <div style={{ padding: 16 }}>
-              <Alert type="info" message="Word 文档无法直接在浏览器中预览，以下是解析后的内容" showIcon style={{ marginBottom: 16 }} />
-              {previewResume.parsed_json ? (
-                <div>
-                  <Descriptions size="small" column={1} bordered>
-                    <Descriptions.Item label="姓名">{previewResume.parsed_json.personal_info?.name || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="邮箱">{previewResume.parsed_json.personal_info?.email || '-'}</Descriptions.Item>
-                    <Descriptions.Item label="电话">{previewResume.parsed_json.personal_info?.phone || '-'}</Descriptions.Item>
-                  </Descriptions>
-                  <Divider />
-                  <Title level={5}>个人总结</Title>
-                  <Typography.Paragraph>{previewResume.parsed_json.summary || '-'}</Typography.Paragraph>
-                  <Divider />
-                  <Title level={5}>工作经历</Title>
-                  {(previewResume.parsed_json.experience || []).map((exp, i) => (
-                    <Card size="small" key={i} style={{ marginBottom: 8 }}>
-                      <Text strong>{exp.title} @ {exp.company}</Text>
-                      <div style={{ color: '#94A3B8', fontSize: 12 }}>{exp.start} - {exp.end}</div>
-                      <ul style={{ paddingLeft: 20, marginTop: 4 }}>
-                        {(exp.points || []).map((p, j) => <li key={j} style={{ fontSize: 13 }}>{p}</li>)}
-                      </ul>
-                    </Card>
-                  ))}
-                  <Divider />
-                  <Title level={5}>技能</Title>
-                  <Space wrap>{(previewResume.parsed_json.skills || []).map((s) => <Tag key={s} style={{ color: 'var(--text-secondary)', background: 'var(--gray-100)', border: 'none' }}>{s}</Tag>)}</Space>
-                </div>
-              ) : <Empty description="暂无解析内容" />}
-            </div>
-          ) : previewResume ? (
-            <div style={{ padding: 16 }}>
-              <Alert type="info" message={`${previewResume.file_type.toUpperCase()} 格式不支持在线预览`} showIcon />
-              {previewResume.parsed_json && (
-                <div style={{ marginTop: 16 }}>
-                  <Title level={5}>解析后的内容</Title>
-                  <pre style={{ whiteSpace: 'pre-wrap', background: 'var(--gray-50)', padding: 12, borderRadius: 8 }}>
-                    {JSON.stringify(previewResume.parsed_json, null, 2)}
-                  </pre>
-                </div>
-              )}
-            </div>
+          ) : previewResume && previewReason ? (
+            <ParsedResumeView resume={previewResume} reason={previewReason} />
           ) : null}
         </Modal>
       </div>

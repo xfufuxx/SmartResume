@@ -90,6 +90,18 @@ def test_validate_pdf_magic_rejects_exe():
     assert exc.value.status_code == 400
 
 
+def test_validate_pdf_magic_accepts_binary_preamble():
+    """合法 PDF 允许开头有二进制注释行（如 %âãÏÓ），%PDF 位于前 1024 字节内。
+    只比对前 5 字节会误杀大量真实 PDF（扫描件/部分导出工具），导致上传被拒。"""
+    preamble = b"%\xe2\xe3\xcf\xd3\n%PDF-1.4 some content after binary header"
+    validate_file_magic(preamble, "pdf")  # 不应抛异常
+
+    # 整段前 1024 字节内找不到 %PDF 仍应拒绝（真·非 PDF）
+    with pytest.raises(HTTPException) as exc:
+        validate_file_magic(b"A" * 2048, "pdf")
+    assert exc.value.status_code == 400
+
+
 def test_validate_docx_magic_ok():
     validate_file_magic(b"PK\x03\x04zipcontent", "docx")
 

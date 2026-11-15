@@ -20,6 +20,15 @@ export function toBackendUrl(url: string | undefined | null): string {
   return `${API_BASE}/${url}`
 }
 
+/** 简历数据发生变更（上传/删除/恢复等）时广播，列表页据此即时刷新，无需手动 F5。
+ *  首页与「我的简历」是两个独立路由，各自持有列表 state，靠这个事件保持同步。 */
+export const RESUMES_CHANGED_EVENT = 'resumes:changed'
+export function notifyResumesChanged() {
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new Event(RESUMES_CHANGED_EVENT))
+  }
+}
+
 // 单飞刷新：多个并发 401 只触发一次 /api/auth/refresh
 let refreshPromise: Promise<boolean> | null = null
 
@@ -344,10 +353,22 @@ export const admin = {
 }
 
 export const resumes = {
-  upload: (file: File) => {
+  /**
+   * 上传并解析简历。后端要跑 OCR + LLM 结构化（扫描件可能 1 分钟以上），
+   * 全局 20s 超时会让前端提前 abort，而后端其实已成功入库——表现为
+   * 「提示上传失败，但刷新后简历又出现了」。故此处单独放宽超时。
+   * onProgress 回调 0-100 为请求体上传进度；之后的解析阶段无进度事件。
+   */
+  upload: (file: File, onProgress?: (percent: number) => void) => {
     const form = new FormData()
     form.append('file', file)
-    return api.post('/api/resumes/upload', form)
+    return api.post('/api/resumes/upload', form, {
+      timeout: 180000,
+      onUploadProgress: (e) => {
+        if (!onProgress || !e.total) return
+        onProgress(Math.round((e.loaded / e.total) * 100))
+      },
+    })
   },
   list: () => api.get('/api/resumes/'),
   stats: () => api.get('/api/resumes/stats'),

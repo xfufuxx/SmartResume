@@ -627,6 +627,102 @@ with open(OUT_SEED, "w", encoding="utf-8") as f:
 with open(OUT_CLEAN, "w", encoding="utf-8") as f:
     f.write(clean_sql)
 
+# ─────────────────────── 附：补齐 demo 简历原件 ───────────────────────
+# SQL 引用了 uploads/resumes/demo/*.pdf|docx，但 uploads/ 被 .gitignore 忽略、
+# 不随仓库分发。只导入 SQL 而不生成原件会让「预览」拿到 404（曾导致张伟的
+# 简历无法预览）。此处按同一份解析数据补齐缺失原件；已存在则跳过，不覆盖。
+def ensure_demo_assets():
+    import os
+    import textwrap
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    out_dir = os.path.join(root, "backend", "uploads", "resumes", "demo")
+    font_path = os.path.join(root, "backend", "app", "fonts", "NotoSansSC-Regular.ttf")
+    try:
+        from reportlab.pdfgen import canvas as pdf_canvas
+        from reportlab.lib.pagesizes import A4
+        from reportlab.pdfbase import pdfmetrics
+        from reportlab.pdfbase.ttfonts import TTFont
+        from docx import Document
+    except ImportError as exc:
+        print("[跳过] demo 原件生成缺少依赖(%s)，请用 backend/.venv/Scripts/python.exe 运行" % exc.name)
+        return
+    if not os.path.isfile(font_path):
+        print("[跳过] 未找到中文字体 %s" % font_path)
+        return
+
+    os.makedirs(out_dir, exist_ok=True)
+    pdfmetrics.registerFont(TTFont("DemoSC", font_path))
+
+    def content_lines(data):
+        info = data.get("personal_info") or {}
+        lines = [("h1", info.get("name") or "个人简历")]
+        for k in ("title", "phone", "email"):
+            if info.get(k):
+                lines.append(("p", str(info[k])))
+        if data.get("summary"):
+            lines.append(("h2", "个人总结"))
+            lines += [("p", s) for s in textwrap.wrap(str(data["summary"]), 44)]
+        for label, key, fields in (
+            ("工作经历", "experience", ("company", "title", "start", "end")),
+            ("项目经历", "projects", ("name", "role", "start", "end")),
+            ("教育背景", "education", ("school", "degree", "major", "start", "end")),
+        ):
+            rows = data.get(key) or []
+            if not rows:
+                continue
+            lines.append(("h2", label))
+            for row in rows:
+                lines.append(("p", "  ".join(str(row.get(f) or "") for f in fields).strip()))
+                for pt in (row.get("points") or []):
+                    lines += [("p", "· " + s) for s in textwrap.wrap(str(pt), 44)]
+        if data.get("skills"):
+            lines.append(("h2", "技能"))
+            lines.append(("p", " / ".join(str(s) for s in data["skills"])))
+        return lines or [("p", "（演示简历）")]
+
+    def write_pdf(path, data):
+        c = pdf_canvas.Canvas(path, pagesize=A4)
+        _, height = A4
+        y = height - 56
+        for kind, text in content_lines(data):
+            size = 18 if kind == "h1" else 12 if kind == "h2" else 10
+            c.setFont("DemoSC", size)
+            if y < 50:
+                c.showPage()
+                y = height - 56
+                c.setFont("DemoSC", size)
+            c.drawString(50, y, text)
+            y -= size + 8
+        c.save()
+
+    def write_docx(path, data):
+        doc = Document()
+        for kind, text in content_lines(data):
+            if kind == "h1":
+                doc.add_heading(text, level=0)
+            elif kind == "h2":
+                doc.add_heading(text, level=1)
+            else:
+                doc.add_paragraph(text)
+        doc.save(path)
+
+    assets = [
+        ("zhangwei.pdf", "pdf", r1_json),
+        ("lina.pdf", "pdf", r2_json),
+        ("wangqiang.docx", "docx", r3_json),
+        ("chenjing.pdf", "pdf", r4_json),
+        ("zhaomin.pdf", "pdf", r5_json),
+    ]
+    for name, kind, data in assets:
+        path = os.path.join(out_dir, name)
+        if os.path.isfile(path):
+            continue  # 已存在则不覆盖，避免破坏用户自行替换的原件
+        (write_pdf if kind == "pdf" else write_docx)(path, data)
+        print("已生成 demo 原件: backend/uploads/resumes/demo/%s" % name)
+
+
+ensure_demo_assets()
+
 print("已生成: %s (%d 字符)" % (OUT_SEED, len(seed_sql)))
 print("已生成: %s (%d 字符)" % (OUT_CLEAN, len(clean_sql)))
 print("演示账号: %s / %s" % (DEMO_EMAIL, DEMO_PASSWORD))

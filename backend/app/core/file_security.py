@@ -24,6 +24,11 @@ def _head_matches(content: bytes, ext: str) -> bool:
     sigs = _MAGIC_SIGNATURES.get(ext)
     if not sigs:
         return True  # 未知类型不拦截（由调用方白名单控制）
+    if ext == "pdf":
+        # PDF 规范允许文件开头有一行二进制注释（如 %âãÏÓ），真正的
+        # `%PDF-` 标识位于前 1024 字节内。只比对前 5 字节会误杀大量真实 PDF
+        #（扫描件、部分导出工具产物），导致合法简历上传被拒。
+        return b"%PDF" in content[:1024]
     for sig in sigs:
         if content[: len(sig)] == sig:
             if ext == "webp":
