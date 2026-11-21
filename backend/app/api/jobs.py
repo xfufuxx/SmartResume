@@ -1,4 +1,5 @@
 import uuid
+import asyncio
 import logging
 from datetime import datetime, timedelta, timezone
 from fastapi import APIRouter, Depends, UploadFile, File, HTTPException, Query
@@ -19,6 +20,7 @@ from app.schemas.job import (
     JobCreateRequest, JobBatchCreateRequest,
 )
 from app.services.job_parser import parse_job_from_bytes
+from app.services.job_completeness import merge_parsed_jobs, check_completeness
 from app.services.storage import storage
 from app.services.text_formatter import format_job_text
 
@@ -29,6 +31,8 @@ TZ_UTC8 = timezone(timedelta(hours=8))
 
 CATEGORIES = ["产品", "开发", "运营", "设计", "市场", "销售", "其他"]
 JOB_STATUSES = ["投递中", "面试中", "已录用", "已拒绝"]
+ALLOWED_IMAGE_EXTS = ("png", "jpg", "jpeg", "webp")
+MAX_MERGE_IMAGES = 6  # 单次多图综合识别的图片上限
 
 
 def _guess_category(title: str) -> str:
@@ -277,6 +281,148 @@ async def parse_job_image(
         "category": category,
         "parsed_job_json": parsed,
         "ocr_text": result.get("ocr_text"),
+    }
+
+
+@router.post("/parse-images")
+async def parse_job_images_merged(
+    files: list[UploadFile] = File(...),
+    use_ocr: bool = Query(False, description="Force OCR fallback"),
+    user: User = Depends(get_current_user),
+):
+    """多图综合识别：解析全部图片 → 信息汇总合并 → 必填模块完整性校验。
+
+    - 校验不通过：本次上传失败（不落任何数据，清理已上传文件），返回缺失模块清单；
+    - 校验通过：返回合并后的结构化岗位数据，供前端预览确认后批量导入；
+    - 兼容原有单图 /parse-image 与 /upload 流程，二者不受影响。
+    """
+    if not files:
+        raise HTTPException(status_code=400, detail="请至少上传一张图片")
+    if len(files) > MAX_MERGE_IMAGES:
+        raise HTTPException(status_code=400, detail=f"单次最多上传 {MAX_MERGE_IMAGES} 张图片")
+
+    # ── 1. 逐个文件基础校验（格式 / 大小 / 真实文件类型），无效文件跳过并记录 ──
+    valid: list[tuple[str, bytes, str]] = []  # (filename, content, ext)
+    file_errors: list[str] = []
+    for f in files:
+        name = f.filename or "未命名图片"
+        ext = name.split(".")[-1].lower() if f.filename and "." in f.filename else "unknown"
+        if ext not in ALLOWED_IMAGE_EXTS:
+            file_errors.append(f"{name}：不支持的图片格式")
+            continue
+        content = await f.read()
+        if len(content) > settings.MAX_UPLOAD_SIZE:
+            file_errors.append(f"{name}：文件超过大小限制")
+            continue
+        try:
+            validate_file_magic(content, ext)
+        except Exception as e:
+            logger.warning(f"岗位图片文件类型校验失败 {name}: {e}")
+            file_errors.append(f"{name}：文件内容与扩展名不符或已损坏")
+            continue
+        valid.append((name, content, ext))
+
+    if not valid:
+        raise HTTPException(
+            status_code=400,
+            detail={"message": "没有有效的图片文件，上传已取消", "missing_modules": [], "per_image_errors": file_errors},
+        )
+
+    # ── 2. 先上传存储（校验通过后挂到岗位记录；失败则统一清理） ──
+    stored_urls: list[str] = []
+    try:
+        for name, content, ext in valid:
+            key = f"job-images/{user.id}/{uuid.uuid4()}.{ext}"
+            stored_urls.append(await storage.upload_bytes(content, key))
+    except Exception as e:
+        logger.error(f"岗位图片存储失败: {e}", exc_info=True)
+        for url in stored_urls:
+            try:
+                await storage.delete(url)
+            except Exception:
+                pass
+        raise HTTPException(status_code=500, detail="图片存储失败，请稍后重试")
+
+    async def _cleanup_storage():
+        for url in stored_urls:
+            try:
+                await storage.delete(url)
+            except Exception:
+                pass
+
+    # ── 3. 并发解析各张图片（单张失败不拖垮整体，只要有一张成功即可继续） ──
+    async def _parse_one(content: bytes, filename: str):
+        return await parse_job_from_bytes(content, filename, use_ocr_fallback=use_ocr)
+
+    try:
+        results = await asyncio.gather(
+            *[_parse_one(c, n) for n, c, _ in valid], return_exceptions=True
+        )
+    except Exception as e:  # gather(return_exceptions=True) 一般不抛，兜底防御
+        logger.error(f"岗位多图解析异常: {e}", exc_info=True)
+        await _cleanup_storage()
+        raise HTTPException(status_code=500, detail="图片解析服务异常，请稍后重试")
+
+    parsed_parts: list[dict] = []
+    ocr_texts: list[str] = []
+    parse_errors: list[str] = list(file_errors)
+    for (name, _, _), r in zip(valid, results):
+        if isinstance(r, Exception):
+            logger.error(f"岗位图片 {name} 解析失败: {r}")
+            parse_errors.append(f"{name}：识别失败")
+            continue
+        parsed = r.get("parsed_job_json") or {}
+        if isinstance(parsed, dict) and parsed:
+            parsed_parts.append(parsed)
+        else:
+            parse_errors.append(f"{name}：未识别到有效岗位信息")
+        ocr = r.get("ocr_text")
+        if ocr:
+            ocr_texts.append(str(ocr))
+
+    if not parsed_parts:
+        await _cleanup_storage()
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "所有图片均未识别到有效岗位信息，本次上传失败",
+                "missing_modules": [],
+                "per_image_errors": parse_errors,
+            },
+        )
+
+    # ── 4. 信息汇总合并 + 必填模块完整性校验 ──
+    merged = merge_parsed_jobs(parsed_parts)
+    report = check_completeness(merged)
+
+    if not report["passed"]:
+        await _cleanup_storage()
+        logger.info(
+            f"岗位上传完整性校验未通过: missing={report['missing_modules']} user={user.id}"
+        )
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "message": "岗位信息不完整，本次上传未通过完整性校验",
+                "missing_modules": report["missing_modules"],
+                "recognized_modules": report["recognized_modules"],
+                "filled_count": report["filled_count"],
+                "total": report["total"],
+                "parsed_preview": merged,
+                "per_image_errors": parse_errors,
+            },
+        )
+
+    return {
+        "image_url": stored_urls[0],
+        "image_urls": stored_urls,
+        "title": merged.get("title") or None,
+        "company": merged.get("company") or None,
+        "category": _guess_category(merged.get("title") or ""),
+        "parsed_job_json": merged,
+        "ocr_text": "\n─────\n".join(ocr_texts) or None,
+        "completeness": report,
+        "per_image_errors": parse_errors,
     }
 
 

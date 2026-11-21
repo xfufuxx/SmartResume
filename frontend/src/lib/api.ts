@@ -410,6 +410,12 @@ export const jobs = {
     form.append('file', file)
     return api.post(`/api/jobs/parse-image?use_ocr=${useOcr}`, form)
   },
+  /** 多图综合识别：解析全部图片→信息汇总→必填模块完整性校验；不通过返回 422 + 缺失模块清单 */
+  parseImages: (files: File[], useOcr = false) => {
+    const form = new FormData()
+    files.forEach((f) => form.append('files', f))
+    return api.post(`/api/jobs/parse-images?use_ocr=${useOcr}`, form)
+  },
   /** 批量创建职位（导入确认后落库） */
   batchCreate: (jobs: Array<{
     title: string

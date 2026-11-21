@@ -47,7 +47,16 @@ interface JobRecord {
   created_at: string
 }
 
-/** 导入职位：单张图片识别后的待确认条目（可编辑） */
+/** 完整性校验报告（后端 /parse-images 返回） */
+interface CompletenessReport {
+  passed: boolean
+  missing_modules: string[]
+  recognized_modules: string[]
+  filled_count: number
+  total: number
+}
+
+/** 导入职位：多图综合识别后的待确认条目（可编辑） */
 interface ImportJobItem {
   uid: string
   image_url?: string
@@ -61,6 +70,10 @@ interface ImportJobItem {
   parsed_job_json?: Record<string, unknown>
   status: 'parsing' | 'done' | 'error'
   error?: string
+  /** 校验失败时缺失的必填信息模块（中文名） */
+  missing_modules?: string[]
+  /** 校验通过时的完整性报告 */
+  completeness?: CompletenessReport
 }
 
 /* 分类图标与配色（职位信息列左侧彩色图标） */
@@ -449,43 +462,58 @@ export default function JobLibrary() {
     }
   }, [addForm, loadData])
 
-  /* ── 导入职位：图片识别 → 预览编辑 → 批量创建 ── */
+  /* ── 导入职位：多图综合识别（信息汇总 + 完整性校验） → 预览编辑 → 确认导入 ── */
   const handleImportFiles = useCallback(async (files: FileList | null) => {
     if (!files || files.length === 0) return
     setImportParsing(true)
-    const tasks = Array.from(files).map((file) => {
-      const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
-      setImportList((prev) => [
-        ...prev,
-        { uid, title: '', company: '', category: '', salary_range: '', location: '', industry: '', responsibilities: '', status: 'parsing' },
-      ])
-      return jobs.parseImage(file)
-        .then((res) => {
-          const data = res.data || {}
-          const pj = (data.parsed_job_json || {}) as Record<string, unknown>
-          const item: ImportJobItem = {
-            uid,
-            image_url: data.image_url,
-            title: data.title || '',
-            company: data.company || '',
-            category: data.category || '',
-            salary_range: (pj.salary_range as string) || '',
-            location: (pj.location as string) || '',
-            industry: (pj.industry as string) || '',
-            responsibilities: ((pj.responsibilities as string[]) || []).join('\n'),
-            parsed_job_json: pj,
-            status: 'done',
-          }
-          setImportList((prev) => prev.map((it) => (it.uid === uid ? item : it)))
-        })
-        .catch((err: unknown) => {
-          const errorMsg = err instanceof Error ? err.message :
-            (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail || '识别失败'
-          setImportList((prev) => prev.map((it) => (it.uid === uid ? { ...it, status: 'error', error: errorMsg } : it)))
-        })
-    })
-    await Promise.all(tasks)
-    setImportParsing(false)
+    // 本次选择的所有图片合并为同一个岗位进行识别与校验
+    const uid = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
+    const fileCount = files.length
+    setImportList((prev) => [
+      ...prev,
+      { uid, title: '', company: '', category: '', salary_range: '', location: '', industry: '', responsibilities: '', status: 'parsing' },
+    ])
+    try {
+      const res = await jobs.parseImages(Array.from(files))
+      const data = res.data || {}
+      const pj = (data.parsed_job_json || {}) as Record<string, unknown>
+      const item: ImportJobItem = {
+        uid,
+        image_url: data.image_url,
+        title: data.title || '',
+        company: data.company || '',
+        category: data.category || '',
+        salary_range: (pj.salary_range as string) || '',
+        location: (pj.location as string) || '',
+        industry: (pj.industry as string) || '',
+        responsibilities: ((pj.responsibilities as string[]) || []).join('\n'),
+        parsed_job_json: pj,
+        status: 'done',
+        completeness: (data.completeness || undefined) as CompletenessReport | undefined,
+      }
+      setImportList((prev) => prev.map((it) => (it.uid === uid ? item : it)))
+      message.success(`已综合识别 ${fileCount} 张图片，完整性校验通过`)
+    } catch (err: unknown) {
+      // 后端 422 会返回结构化 detail：{message, missing_modules, per_image_errors}
+      const respDetail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail
+      let errorMsg = err instanceof Error ? err.message : '识别失败'
+      let missing: string[] = []
+      if (respDetail && typeof respDetail === 'object') {
+        const d = respDetail as { message?: string; missing_modules?: string[]; per_image_errors?: string[] }
+        errorMsg = d.message || errorMsg
+        missing = Array.isArray(d.missing_modules) ? d.missing_modules : []
+        if (missing.length) {
+          errorMsg += `：缺少「${missing.join('、')}」`
+        }
+      } else if (typeof respDetail === 'string') {
+        errorMsg = respDetail
+      }
+      setImportList((prev) =>
+        prev.map((it) => (it.uid === uid ? { ...it, status: 'error', error: errorMsg, missing_modules: missing } : it)),
+      )
+    } finally {
+      setImportParsing(false)
+    }
   }, [])
 
   const updateImportItem = useCallback((uid: string, patch: Partial<ImportJobItem>) => {
@@ -1264,11 +1292,16 @@ export default function JobLibrary() {
             <div className="job-import-drop">
               <UploadOutlined style={{ fontSize: 40, color: 'var(--primary-600)' }} />
               <div style={{ marginTop: 10 }}>
-                <Typography.Text>上传职位截图，系统自动识别并批量导入</Typography.Text>
+                <Typography.Text>上传职位截图，系统综合识别并汇总信息</Typography.Text>
               </div>
               <div style={{ marginTop: 6 }}>
                 <Typography.Text type="secondary" style={{ fontSize: 12 }}>
-                  支持 PNG / JPG / JPEG / WebP，可一次选择多张；单张含多个岗位也可识别
+                  支持 PNG / JPG / JPEG / WebP；多张截图（如长招聘信息分段截图）将合并为同一岗位识别
+                </Typography.Text>
+              </div>
+              <div style={{ marginTop: 4 }}>
+                <Typography.Text type="secondary" style={{ fontSize: 12 }}>
+                  必填信息：职位名称、公司名称、薪资范围、工作地点、岗位职责、任职要求；信息不完整时上传将被拦截并提示缺什么
                 </Typography.Text>
               </div>
               <input
@@ -1293,16 +1326,23 @@ export default function JobLibrary() {
             {importList.length > 0 && (
               <div className="job-import-list">
                 <div className="job-import-list-head">
-                  已识别 {importList.filter((it) => it.status === 'done').length} 个职位（可编辑后导入）
+                  已综合识别 {importList.filter((it) => it.status === 'done').length} 个职位（可编辑后导入）
                 </div>
                 {importList.map((it) => (
                   <div className="job-import-item" key={it.uid}>
                     {it.status === 'parsing' && (
-                      <div className="job-import-item-parsing"><Spin size="small" /> 识别中...</div>
+                      <div className="job-import-item-parsing"><Spin size="small" /> 正在综合识别图片并校验信息完整性...</div>
                     )}
                     {it.status === 'error' && (
                       <div className="job-import-item-error">
-                        <span>识别失败：{it.error}</span>
+                        <div className="job-import-item-error-body">
+                          <div className="job-import-item-error-title">{it.error || '识别失败'}</div>
+                          {it.missing_modules && it.missing_modules.length > 0 && (
+                            <div className="job-import-item-missing">
+                              缺少必填信息模块：{it.missing_modules.join('、')}。请补充对应内容的截图后重新上传（多张截图会自动合并补全）。
+                            </div>
+                          )}
+                        </div>
                         <Button size="small" type="text" danger onClick={() => removeImportItem(it.uid)}>移除</Button>
                       </div>
                     )}
@@ -1341,6 +1381,11 @@ export default function JobLibrary() {
                           value={it.industry}
                           onChange={(e) => updateImportItem(it.uid, { industry: e.target.value })}
                         />
+                        {it.completeness && (
+                          <div className="job-import-item-ok">
+                            ✓ 完整性校验通过：必填信息模块 {it.completeness.filled_count}/{it.completeness.total} 齐备
+                          </div>
+                        )}
                         <Button size="small" type="text" danger style={{ gridColumn: '1 / -1' }} onClick={() => removeImportItem(it.uid)}>
                           移除该职位
                         </Button>
