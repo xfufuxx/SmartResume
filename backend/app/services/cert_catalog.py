@@ -8,7 +8,7 @@ CertCatalogItem = dict  # {category, name, issuer, type, link, desc}
 
 CERT_CATALOG: list[CertCatalogItem] = [
     # ── IT互联网 / 云计算 / 开发运维 ──
-    {"category": "IT互联网/云计算/开发运维", "name": "华为认证 HCIA/HCIP/HCIE（数通/云/鸿蒙）", "issuer": "华为", "type": "certificate", "link": "https://e.huawei.com/cn/talent", "desc": "网络与云方向厂商认证体系，ICT 岗位通用加分"},
+    {"category": "IT互联网/云计算/开发运维", "name": "华为认证 HCIA/HCIP/HCIE（数通/云/鸿蒙）", "issuer": "华为", "type": "certificate", "link": "https://e.huawei.com/cn/talentcert", "desc": "网络与云方向厂商认证体系，ICT 岗位通用加分"},
     {"category": "IT互联网/云计算/开发运维", "name": "阿里云 ACA/ACP/ACE 认证", "issuer": "阿里云", "type": "certificate", "link": "https://edu.aliyun.com/certification", "desc": "云计算厂商认证，国内互联网企业认可度高"},
     {"category": "IT互联网/云计算/开发运维", "name": "腾讯云 TCA/TCP/TCE 认证", "issuer": "腾讯云", "type": "certificate", "link": "https://cloud.tencent.com/edu/training", "desc": "云开发、小程序、音视频方向厂商认证"},
     {"category": "IT互联网/云计算/开发运维", "name": "AWS Certification（CLF/DVA/SAA 等）", "issuer": "AWS", "type": "certificate", "link": "https://aws.amazon.com/certification/", "desc": "亚马逊云认证体系，外企、出海项目岗位加分"},
@@ -17,7 +17,7 @@ CERT_CATALOG: list[CertCatalogItem] = [
     {"category": "IT互联网/云计算/开发运维", "name": "Google Professional Cloud 认证", "issuer": "Google Cloud", "type": "certificate", "link": "https://www.cloudskillsboost.google/", "desc": "GCP 云开发方向，配套 Skills Boost 学习路径"},
     {"category": "IT互联网/云计算/开发运维", "name": "CKA（Kubernetes 管理员）", "issuer": "CNCF/Linux 基金会", "type": "certificate", "link": "https://training.linuxfoundation.org/certification/certified-kubernetes-administrator-cka/", "desc": "云原生容器运维核心认证"},
     {"category": "IT互联网/云计算/开发运维", "name": "CNCF 认证体系（KCNA/CKAD/CKS）", "issuer": "CNCF", "type": "certificate", "link": "https://www.cncf.io/training/certification/", "desc": "云原生认证家族，覆盖入门到安全专家"},
-    {"category": "IT互联网/云计算/开发运维", "name": "RHCE 红帽认证工程师", "issuer": "Red Hat", "type": "certificate", "link": "https://www.redhat.com/en/services/training", "desc": "Linux 运维方向经典厂商认证"},
+    {"category": "IT互联网/云计算/开发运维", "name": "RHCE 红帽认证工程师", "issuer": "Red Hat", "type": "certificate", "link": "https://www.redhat.com/en/services/certifications", "desc": "Linux 运维方向经典厂商认证（红帽认证列表直达）"},
     {"category": "IT互联网/云计算/开发运维", "name": "CCNA/CCNP 认证", "issuer": "Cisco", "type": "certificate", "link": "https://learningnetwork.cisco.com/", "desc": "网络工程方向厂商认证"},
     {"category": "IT互联网/云计算/开发运维", "name": "Oracle 认证（OCP/Java）", "issuer": "Oracle", "type": "certificate", "link": "https://education.oracle.com/", "desc": "DBA 与 Java 后端方向厂商认证"},
     {"category": "IT互联网/云计算/开发运维", "name": "软考（软件设计师/系统架构设计师/信息系统项目管理师）", "issuer": "人社部+工信部", "type": "certificate", "link": "https://www.ruankao.org.cn/", "desc": "国企/事业单位职称、部分城市落户加分"},
@@ -27,11 +27,11 @@ CERT_CATALOG: list[CertCatalogItem] = [
     {"category": "IT互联网/云计算/开发运维", "name": "Postman Academy 官方课程", "issuer": "Postman", "type": "course", "link": "https://academy.postman.com/", "desc": "接口自动化测试官方学习资源"},
 
     # ── 数据 / AI / 算法 ──
-    {"category": "数据/AI/算法", "name": "HCIA/HCIP-AI 华为人工智能认证", "issuer": "华为", "type": "certificate", "link": "https://e.huawei.com/cn/talent", "desc": "AI 应用开发方向入门到进阶厂商认证"},
+    {"category": "数据/AI/算法", "name": "HCIA/HCIP-AI 华为人工智能认证", "issuer": "华为", "type": "certificate", "link": "https://e.huawei.com/cn/talentcert", "desc": "AI 应用开发方向入门到进阶厂商认证"},
     {"category": "数据/AI/算法", "name": "HCIP-Big Data 华为大数据高级工程师", "issuer": "华为云", "type": "certificate", "link": "https://edu.huaweicloud.com/certificationindex", "desc": "Hive、Spark 生态能力考核"},
     {"category": "数据/AI/算法", "name": "阿里云大数据分析师（ACP-BigData）", "issuer": "阿里云", "type": "certificate", "link": "https://edu.aliyun.com/certification", "desc": "大数据方向厂商认证"},
     {"category": "数据/AI/算法", "name": "TensorFlow 开发者专项课程（DeepLearning.AI）", "issuer": "DeepLearning.AI × Coursera", "type": "course", "link": "https://www.coursera.org/professional-certificates/tensorflow-in-practice", "desc": "官方开发者认证项目已停办，改学这套官方指定课程体系"},
-    {"category": "数据/AI/算法", "name": "AWS Machine Learning Specialty", "issuer": "AWS", "type": "certificate", "link": "https://aws.amazon.com/certification/", "desc": "机器学习方向专业级厂商认证"},
+    {"category": "数据/AI/算法", "name": "AWS Machine Learning Specialty", "issuer": "AWS", "type": "certificate", "link": "https://aws.amazon.com/certification/certified-machine-learning-specialty/", "desc": "机器学习方向专业级厂商认证"},
     {"category": "数据/AI/算法", "name": "CDA 数据分析师（Level Ⅰ/Ⅱ/Ⅲ）", "issuer": "CDA Institute", "type": "certificate", "link": "https://www.cdaglobal.com/", "desc": "国内商业数据分析主流行业认证（课程网校 edu.cda.cn）"},
     {"category": "数据/AI/算法", "name": "Tableau Certified Data Analyst", "issuer": "Tableau", "type": "certificate", "link": "https://www.tableau.com/learn/certification", "desc": "BI 可视化数据分析厂商认证"},
     {"category": "数据/AI/算法", "name": "吴恩达机器学习/深度学习专项课程", "issuer": "DeepLearning.AI × Coursera", "type": "course", "link": "https://www.coursera.org/specializations/machine-learning-introduction", "desc": "数据科学/算法岗经典入门课程"},
@@ -39,25 +39,25 @@ CERT_CATALOG: list[CertCatalogItem] = [
     {"category": "数据/AI/算法", "name": "华为云开发者学堂云原生系列课程", "issuer": "华为云", "type": "course", "link": "https://edu.huaweicloud.com/courses", "desc": "K8s 容器技术官方学习路径"},
 
     # ── 项目管理 / 产品 ──
-    {"category": "项目管理/产品", "name": "PMP 项目管理专业人士认证", "issuer": "PMI", "type": "certificate", "link": "https://www.pmi.org/", "desc": "项目管理通用认证（大陆中文报名 exam.chinapmp.cn）"},
-    {"category": "项目管理/产品", "name": "ACP（PMI 敏捷管理）", "issuer": "PMI", "type": "certificate", "link": "https://www.pmi.org/", "desc": "敏捷开发管理方向认证"},
+    {"category": "项目管理/产品", "name": "PMP 项目管理专业人士认证", "issuer": "PMI", "type": "certificate", "link": "https://www.pmi.org/certifications/project-management-pmp", "desc": "项目管理通用认证（大陆中文报名 exam.chinapmp.cn）"},
+    {"category": "项目管理/产品", "name": "ACP（PMI 敏捷管理）", "issuer": "PMI", "type": "certificate", "link": "https://www.pmi.org/certifications/agile-acp", "desc": "敏捷开发管理方向认证"},
     {"category": "项目管理/产品", "name": "软考高级·信息系统项目管理师", "issuer": "人社部+工信部", "type": "certificate", "link": "https://www.ruankao.org.cn/", "desc": "国家级项目管理职称认证"},
-    {"category": "项目管理/产品", "name": "NPDP 产品经理国际资格认证", "issuer": "PDMA", "type": "certificate", "link": "https://www.pdma.org/", "desc": "产品经理方向国际认证"},
-    {"category": "项目管理/产品", "name": "PRINCE2 项目管理认证", "issuer": "PeopleCert", "type": "certificate", "link": "https://www.peoplecert.org/", "desc": "欧洲体系项目管理方法论认证"},
-    {"category": "项目管理/产品", "name": "Scrum.org PSM I", "issuer": "Scrum.org", "type": "certificate", "link": "https://www.scrum.org/", "desc": "Scrum 敏捷实践认证，性价比高"},
+    {"category": "项目管理/产品", "name": "NPDP 产品经理国际资格认证", "issuer": "中国国际人才交流基金会 × PDMA", "type": "certificate", "link": "https://chinanpdp.cn/", "desc": "产品经理方向国际认证（国内官方考试报名与证书查询入口）"},
+    {"category": "项目管理/产品", "name": "PRINCE2 项目管理认证", "issuer": "PeopleCert", "type": "certificate", "link": "https://www.prince2.com/", "desc": "欧洲体系项目管理方法论认证（官方考试报名站）"},
+    {"category": "项目管理/产品", "name": "Scrum.org PSM I", "issuer": "Scrum.org", "type": "certificate", "link": "https://www.scrum.org/professional-scrum-certifications", "desc": "Scrum 敏捷实践认证，性价比高"},
     {"category": "项目管理/产品", "name": "Google Project Management 职业证书", "issuer": "Google × Coursera", "type": "course", "link": "https://www.coursera.org/professional-certificates/google-project-management", "desc": "零基础项目管理入门课程"},
 
     # ── 金融 / 财会 ──
-    {"category": "金融/财会", "name": "CFA 特许金融分析师", "issuer": "CFA Institute", "type": "certificate", "link": "https://www.cfainstitute.org/", "desc": "金融分析与投资管理高含金量国际认证"},
+    {"category": "金融/财会", "name": "CFA 特许金融分析师", "issuer": "CFA Institute", "type": "certificate", "link": "https://www.cfainstitute.org/programs/cfa-program", "desc": "金融分析与投资管理高含金量国际认证"},
     {"category": "金融/财会", "name": "CPA 注册会计师", "issuer": "中注协", "type": "certificate", "link": "https://cpaexam.cicpa.org.cn/", "desc": "财会领域高含金量证书，审计/财务高级岗位"},
     {"category": "金融/财会", "name": "ACCA 国际注册会计师", "issuer": "ACCA", "type": "certificate", "link": "https://www.accaglobal.com/", "desc": "国际化财会认证，外企/出海方向"},
     {"category": "金融/财会", "name": "初级/中级会计专业技术资格", "issuer": "财政部会计资格评价中心", "type": "certificate", "link": "https://kzp.mof.gov.cn/", "desc": "财会入门国家职称与中级职称"},
     {"category": "金融/财会", "name": "CMA 美国注册管理会计师", "issuer": "IMA（中国）", "type": "certificate", "link": "https://www.imachina.org.cn/", "desc": "管理会计方向：财务分析、预算管理"},
     {"category": "金融/财会", "name": "税务师证书", "issuer": "中税协", "type": "certificate", "link": "https://ksbm.ecctaa.cn/", "desc": "税务方向专业证书，企业财税岗加分"},
-    {"category": "金融/财会", "name": "证券从业资格", "issuer": "中国证券业协会", "type": "certificate", "link": "https://www.sac.net.cn/", "desc": "证券行业准入类证书"},
-    {"category": "金融/财会", "name": "基金从业资格", "issuer": "中国证券投资基金业协会", "type": "certificate", "link": "https://www.amac.org.cn/", "desc": "基金行业准入类证书"},
-    {"category": "金融/财会", "name": "银行从业资格", "issuer": "中国银行业协会", "type": "certificate", "link": "https://www.china-cba.net/", "desc": "银行业准入类证书"},
-    {"category": "金融/财会", "name": "FRM 金融风险管理师", "issuer": "GARP", "type": "certificate", "link": "https://www.garp.org/", "desc": "金融风险管理国际认证，风控岗位加分"},
+    {"category": "金融/财会", "name": "证券从业资格", "issuer": "中国证券业协会", "type": "certificate", "link": "https://ks.sac.net.cn/", "desc": "证券行业水平评价测试网上报名平台（报名时间表/准考证/成绩查询直达）"},
+    {"category": "金融/财会", "name": "基金从业资格", "issuer": "中国证券投资基金业协会", "type": "certificate", "link": "https://baoming.amac.org.cn/", "desc": "基金从业人员资格考试报名系统直达"},
+    {"category": "金融/财会", "name": "银行从业资格", "issuer": "中国银行业协会", "type": "certificate", "link": "https://ccbp.org.cn/", "desc": "银行业专业人员职业资格考试服务平台（报名/准考证直达）"},
+    {"category": "金融/财会", "name": "FRM 金融风险管理师", "issuer": "GARP", "type": "certificate", "link": "https://www.garp.org/china/frm", "desc": "金融风险管理国际认证，风控岗位加分（GARP 中文考生站，2025 年 11 月起可选中文考试）"},
 
     # ── 语言 / 外贸 ──
     {"category": "语言/外贸", "name": "大学英语四六级（CET-4/6）", "issuer": "教育部教育考试院", "type": "certificate", "link": "https://cet-bm.neea.edu.cn/", "desc": "国内企业通用英语能力凭证"},
@@ -83,14 +83,14 @@ CERT_CATALOG: list[CertCatalogItem] = [
     {"category": "市场/运营/电商", "name": "Meta Social Media Marketing 职业证书", "issuer": "Meta × Coursera", "type": "course", "link": "https://www.coursera.org/professional-certificates/facebook-social-media-marketing", "desc": "海外社媒营销方向"},
 
     # ── 人力资源 / 行政 ──
-    {"category": "人力资源/行政", "name": "企业人力资源管理师（四级~一级）", "issuer": "人社部备案评价机构", "type": "certificate", "link": "https://www.mohrss.gov.cn/", "desc": "HR 招聘/绩效/薪酬岗位通用职业技能等级证书"},
+    {"category": "人力资源/行政", "name": "企业人力资源管理师（四级~一级）", "issuer": "人社部备案评价机构", "type": "certificate", "link": "https://www.osta.org.cn/", "desc": "HR 岗位通用职业技能等级证书（技能人才评价工作网：评价机构查询/证书查询）"},
     {"category": "人力资源/行政", "name": "钉钉官方数字化课程", "issuer": "钉钉", "type": "course", "link": "https://www.dingtalk.com/", "desc": "人事、考勤、组织数字化官方产品与课程入口（原钉钉课堂已下线）"},
 
     # ── 教育 / 法律 / 体制内 ──
     {"category": "教育/法律/体制内", "name": "中小学教师资格证（NTCE）", "issuer": "教育部教育考试院", "type": "certificate", "link": "https://ntce.neea.edu.cn/", "desc": "教师岗位准入证书"},
     {"category": "教育/法律/体制内", "name": "法律职业资格考试（法考）", "issuer": "司法部", "type": "certificate", "link": "https://www.moj.gov.cn/", "desc": "法律职业准入证书"},
     {"category": "教育/法律/体制内", "name": "医师资格考试", "issuer": "国家医学考试中心", "type": "certificate", "link": "https://www.nmec.org.cn/", "desc": "执业医师/助理医师准入"},
-    {"category": "教育/法律/体制内", "name": "普通话水平测试", "issuer": "国家语委", "type": "certificate", "link": "https://www.cltt.org/", "desc": "教师/播音等岗位语言要求"},
+    {"category": "语言/外贸", "name": "普通话水平测试", "issuer": "国家语委", "type": "certificate", "link": "https://bm.cltt.org/", "desc": "教师/播音等岗位语言要求（普通话水平测试官方报名系统直达）"},
     {"category": "教育/法律/体制内", "name": "中国大学 MOOC", "issuer": "网易/高教社", "type": "course", "link": "https://www.icourse163.org/", "desc": "浙大/北大等高校公开课，覆盖计算机/经管/统计"},
     {"category": "教育/法律/体制内", "name": "国家高等教育智慧教育平台", "issuer": "教育部", "type": "course", "link": "https://higher.smartedu.cn/", "desc": "国内高校课程官方汇总平台"},
     {"category": "教育/法律/体制内", "name": "哈佛 CS50 计算机导论", "issuer": "Harvard × edX", "type": "course", "link": "https://www.edx.org/course/cs50s-introduction-to-computer-science", "desc": "全球最受欢迎的计算机入门课（免费旁听）"},
@@ -98,9 +98,9 @@ CERT_CATALOG: list[CertCatalogItem] = [
     # ── 工程 / 建筑 / 制造 ──
     {"category": "工程/建筑/制造", "name": "一级/二级建造师", "issuer": "住建部（各省人事考试网）", "type": "certificate", "link": "https://www.cpta.com.cn/", "desc": "建筑施工注册证书，项目经理岗位必备"},
     {"category": "工程/建筑/制造", "name": "一级造价工程师", "issuer": "住建部", "type": "certificate", "link": "https://www.cpta.com.cn/", "desc": "工程造价注册证书，造价咨询高认可"},
-    {"category": "工程/建筑/制造", "name": "华为 HCIP-5G / 通信认证", "issuer": "华为", "type": "certificate", "link": "https://e.huawei.com/cn/talent", "desc": "5G 与通信工程方向厂商认证"},
+    {"category": "工程/建筑/制造", "name": "华为 HCIP-5G / 通信认证", "issuer": "华为", "type": "certificate", "link": "https://e.huawei.com/cn/talentcert", "desc": "5G 与通信工程方向厂商认证"},
     {"category": "工程/建筑/制造", "name": "西门子 SCE 工业自动化认证", "issuer": "西门子", "type": "certificate", "link": "https://www.siemens.com/sce", "desc": "PLC、工业自动化厂商认证，智能制造岗位（SCE 教育合作计划官方页面）"},
-    {"category": "工程/建筑/制造", "name": "工业机器人操作与运维职业技能等级证", "issuer": "人社部备案评价机构", "type": "certificate", "link": "https://www.mohrss.gov.cn/", "desc": "工业机器人调试运维岗位技能证书"},
+    {"category": "工程/建筑/制造", "name": "工业机器人操作与运维职业技能等级证", "issuer": "人社部备案评价机构", "type": "certificate", "link": "https://www.osta.org.cn/", "desc": "工业机器人调试运维岗位技能证书（技能人才评价工作网直达）"},
 
     # ── 网络安全 ──
     {"category": "网络安全", "name": "HCIA-Security 华为网络安全助理认证", "issuer": "华为", "type": "certificate", "link": "https://edu.huaweicloud.com/certificationindex", "desc": "网络安全入门厂商认证，安全运维岗位"},
@@ -116,7 +116,7 @@ CERT_CATALOG: list[CertCatalogItem] = [
 
     # ── 医药 / 生物 ──
     {"category": "医药/生物", "name": "执业药师", "issuer": "人社部/药监局", "type": "certificate", "link": "https://www.cpta.com.cn/", "desc": "医药零售、药企合规岗位必备执业证书"},
-    {"category": "医药/生物", "name": "GMP 内审员证书", "issuer": "重庆药协体系", "type": "certificate", "link": "https://www.nmpa.gov.cn/", "desc": "制药企业质量合规岗位行业认证（国家药品监督管理局官方站）"},
+    {"category": "医药/生物", "name": "GMP 内审员证书", "issuer": "国家药监局高级研修学院", "type": "course", "link": "https://www.nmpaied.org.cn/", "desc": "制药企业质量合规岗位（药监局高研院：内审员/GMP 培训班报名直达，结业发证）"},
 ]
 
 CATEGORIES: list[str] = []

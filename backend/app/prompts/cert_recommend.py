@@ -32,7 +32,9 @@ CERT_RECOMMEND_SYSTEM_PROMPT = """你是一名资深职业发展顾问与职业�
   www.mohrss.gov.cn / www.cpta.com.cn / www.cltt.org / www.moj.gov.cn / www.nmec.org.cn /
   www.icourse163.org / higher.smartedu.cn / www.coursera.org / www.edx.org / www.udacity.com /
   time.geekbang.org / edu.lagou.com / leetcode.cn / www.tensorflow.org / www.kaggle.com /
-  www.cncf.io / training.linuxfoundation.org（/.cn）/ www.pdma.org / www.peoplecert.org /
+  www.cncf.io / training.linuxfoundation.org（/.cn）/ chinanpdp.cn / www.prince2.com /
+  ks.sac.net.cn / baoming.amac.org.cn / ccbp.org.cn / bm.cltt.org / www.osta.org.cn /
+  www.nmpaied.org.cn / www.pdma.org / www.peoplecert.org /
   www.scrum.org / www.cdaglobal.com / edu.cda.cn / www.cda.cn / www.tableau.com /
   www.adobe.com / www.adobeacp.com / www.figma.com / www.gogoup.com / alicert.taobao.com /
   study.163.com / www.dingtalk.com / www.siemens.com/sce / www.itsec.gov.cn / www.isc2.org /
