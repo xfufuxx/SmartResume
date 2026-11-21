@@ -10,7 +10,7 @@ CERT_CATALOG: list[CertCatalogItem] = [
     # ── IT互联网 / 云计算 / 开发运维 ──
     {"category": "IT互联网/云计算/开发运维", "name": "华为认证 HCIA/HCIP/HCIE（数通/云/鸿蒙）", "issuer": "华为", "type": "certificate", "link": "https://e.huawei.com/cn/talent", "desc": "网络与云方向厂商认证体系，ICT 岗位通用加分"},
     {"category": "IT互联网/云计算/开发运维", "name": "阿里云 ACA/ACP/ACE 认证", "issuer": "阿里云", "type": "certificate", "link": "https://edu.aliyun.com/certification", "desc": "云计算厂商认证，国内互联网企业认可度高"},
-    {"category": "IT互联网/云计算/开发运维", "name": "腾讯云 TCA/TCP/TCE 认证", "issuer": "腾讯云", "type": "certificate", "link": "https://cloud.tencent.com/edu/certification", "desc": "云开发、小程序、音视频方向厂商认证"},
+    {"category": "IT互联网/云计算/开发运维", "name": "腾讯云 TCA/TCP/TCE 认证", "issuer": "腾讯云", "type": "certificate", "link": "https://cloud.tencent.com/edu/training", "desc": "云开发、小程序、音视频方向厂商认证"},
     {"category": "IT互联网/云计算/开发运维", "name": "AWS Certification（CLF/DVA/SAA 等）", "issuer": "AWS", "type": "certificate", "link": "https://aws.amazon.com/certification/", "desc": "亚马逊云认证体系，外企、出海项目岗位加分"},
     {"category": "IT互联网/云计算/开发运维", "name": "AWS Skill Builder 备考课程", "issuer": "AWS", "type": "course", "link": "https://skillbuilder.aws/", "desc": "AWS 官方备考课程与动手实验"},
     {"category": "IT互联网/云计算/开发运维", "name": "Microsoft Azure 认证（AZ-204/AZ-400/AI-102 等）", "issuer": "Microsoft", "type": "certificate", "link": "https://learn.microsoft.com/credentials/", "desc": "云原生、DevOps、AI 工程师方向"},
@@ -24,19 +24,19 @@ CERT_CATALOG: list[CertCatalogItem] = [
     {"category": "IT互联网/云计算/开发运维", "name": "LeetCode 刷题 / 剑指 Offer", "issuer": "—", "type": "course", "link": "https://leetcode.cn/", "desc": "算法面试备战，研发岗求职刚需"},
     {"category": "IT互联网/云计算/开发运维", "name": "极客时间工程类专栏", "issuer": "极客时间", "type": "course", "link": "https://time.geekbang.org/", "desc": "工程能力进阶课程"},
     {"category": "IT互联网/云计算/开发运维", "name": "拉勾教育岗位进阶课", "issuer": "拉勾", "type": "course", "link": "https://edu.lagou.com/", "desc": "面向求职的岗位技能进阶课程"},
-    {"category": "IT互联网/云计算/开发运维", "name": "Postman 官方 API 测试课程", "issuer": "Postman", "type": "course", "link": "https://www.postman.com/training/", "desc": "接口自动化测试官方学习资源"},
+    {"category": "IT互联网/云计算/开发运维", "name": "Postman Academy 官方课程", "issuer": "Postman", "type": "course", "link": "https://academy.postman.com/", "desc": "接口自动化测试官方学习资源"},
 
     # ── 数据 / AI / 算法 ──
     {"category": "数据/AI/算法", "name": "HCIA/HCIP-AI 华为人工智能认证", "issuer": "华为", "type": "certificate", "link": "https://e.huawei.com/cn/talent", "desc": "AI 应用开发方向入门到进阶厂商认证"},
-    {"category": "数据/AI/算法", "name": "HCIP-Big Data 华为大数据高级工程师", "issuer": "华为云", "type": "certificate", "link": "https://edu.huaweicloud.com/certificationindex.html", "desc": "Hive、Spark 生态能力考核"},
+    {"category": "数据/AI/算法", "name": "HCIP-Big Data 华为大数据高级工程师", "issuer": "华为云", "type": "certificate", "link": "https://edu.huaweicloud.com/certificationindex", "desc": "Hive、Spark 生态能力考核"},
     {"category": "数据/AI/算法", "name": "阿里云大数据分析师（ACP-BigData）", "issuer": "阿里云", "type": "certificate", "link": "https://edu.aliyun.com/certification", "desc": "大数据方向厂商认证"},
-    {"category": "数据/AI/算法", "name": "TensorFlow Developer Certificate", "issuer": "Google/TensorFlow", "type": "certificate", "link": "https://www.tensorflow.org/certificate", "desc": "深度学习框架官方开发者认证"},
+    {"category": "数据/AI/算法", "name": "TensorFlow 开发者专项课程（DeepLearning.AI）", "issuer": "DeepLearning.AI × Coursera", "type": "course", "link": "https://www.coursera.org/professional-certificates/tensorflow-in-practice", "desc": "官方开发者认证项目已停办，改学这套官方指定课程体系"},
     {"category": "数据/AI/算法", "name": "AWS Machine Learning Specialty", "issuer": "AWS", "type": "certificate", "link": "https://aws.amazon.com/certification/", "desc": "机器学习方向专业级厂商认证"},
     {"category": "数据/AI/算法", "name": "CDA 数据分析师（Level Ⅰ/Ⅱ/Ⅲ）", "issuer": "CDA Institute", "type": "certificate", "link": "https://www.cdaglobal.com/", "desc": "国内商业数据分析主流行业认证（课程网校 edu.cda.cn）"},
-    {"category": "数据/AI/算法", "name": "Tableau Certified Data Analyst", "issuer": "Tableau", "type": "certificate", "link": "https://www.tableau.com/zh-cn/training/certification", "desc": "BI 可视化数据分析厂商认证"},
+    {"category": "数据/AI/算法", "name": "Tableau Certified Data Analyst", "issuer": "Tableau", "type": "certificate", "link": "https://www.tableau.com/learn/certification", "desc": "BI 可视化数据分析厂商认证"},
     {"category": "数据/AI/算法", "name": "吴恩达机器学习/深度学习专项课程", "issuer": "DeepLearning.AI × Coursera", "type": "course", "link": "https://www.coursera.org/specializations/machine-learning-introduction", "desc": "数据科学/算法岗经典入门课程"},
     {"category": "数据/AI/算法", "name": "Kaggle Learn / 竞赛", "issuer": "Google（Kaggle）", "type": "course", "link": "https://www.kaggle.com/learn", "desc": "免费微课程与实战竞赛，数据岗作品集利器"},
-    {"category": "数据/AI/算法", "name": "华为云开发者学堂云原生系列课程", "issuer": "华为云", "type": "course", "link": "https://edu.huaweicloud.com/learningpath", "desc": "K8s 容器技术官方学习路径"},
+    {"category": "数据/AI/算法", "name": "华为云开发者学堂云原生系列课程", "issuer": "华为云", "type": "course", "link": "https://edu.huaweicloud.com/courses", "desc": "K8s 容器技术官方学习路径"},
 
     # ── 项目管理 / 产品 ──
     {"category": "项目管理/产品", "name": "PMP 项目管理专业人士认证", "issuer": "PMI", "type": "certificate", "link": "https://www.pmi.org/", "desc": "项目管理通用认证（大陆中文报名 exam.chinapmp.cn）"},
@@ -69,22 +69,22 @@ CERT_CATALOG: list[CertCatalogItem] = [
     {"category": "语言/外贸", "name": "韩语 TOPIK", "issuer": "教育部考试院", "type": "certificate", "link": "https://topik.neea.edu.cn/", "desc": "韩语能力认证，韩企方向"},
 
     # ── 设计 / 创意 ──
-    {"category": "设计/创意", "name": "Adobe Certified Professional（PS/AI 等）", "issuer": "Adobe", "type": "certificate", "link": "https://www.adobe.com/certification.html", "desc": "视觉设计方向官方认证"},
-    {"category": "设计/创意", "name": "Figma Certified Professional", "issuer": "Figma", "type": "certificate", "link": "https://www.figma.com/certification/", "desc": "UI 交互设计官方专业认证"},
+    {"category": "设计/创意", "name": "Adobe Certified Professional（PS/AI 等）", "issuer": "Adobe", "type": "certificate", "link": "https://www.adobeacp.com/", "desc": "视觉设计方向官方认证（Adobe 国际认证中文官网报名入口）"},
+    {"category": "设计/创意", "name": "Figma 官方资源库与最佳实践", "issuer": "Figma", "type": "course", "link": "https://www.figma.com/resource-library/", "desc": "UI 交互设计官方资源库（Figma 官方认证项目已停办）"},
     {"category": "设计/创意", "name": "站酷高高手 UI 全链路课程", "issuer": "站酷", "type": "course", "link": "https://www.gogoup.com/", "desc": "国内 UI 交互商业实战线上课程"},
     {"category": "设计/创意", "name": "Google UX Design 职业证书", "issuer": "Google × Coursera", "type": "course", "link": "https://www.coursera.org/professional-certificates/google-ux-design", "desc": "交互/体验设计系统化入门"},
     {"category": "设计/创意", "name": "Autodesk / SolidWorks 认证", "issuer": "Autodesk/Dassault", "type": "certificate", "link": "https://www.autodesk.com/certification", "desc": "CAD/工业设计软件官方认证"},
 
     # ── 市场 / 运营 / 电商 ──
     {"category": "市场/运营/电商", "name": "阿里巴巴电商运营认证", "issuer": "阿里巴巴", "type": "certificate", "link": "https://alicert.taobao.com/", "desc": "淘宝天猫运营官方认证"},
-    {"category": "市场/运营/电商", "name": "腾讯课堂短视频运营实战课程", "issuer": "腾讯课堂", "type": "course", "link": "https://ke.qq.com/", "desc": "短视频、新媒体运营体系化课程"},
+    {"category": "市场/运营/电商", "name": "网易云课堂新媒体运营课程", "issuer": "网易云课堂", "type": "course", "link": "https://study.163.com/", "desc": "短视频、新媒体运营体系化课程（原腾讯课堂已停运，改推荐网易云课堂）"},
     {"category": "市场/运营/电商", "name": "Google Digital Marketing & E-commerce 职业证书", "issuer": "Google × Coursera", "type": "course", "link": "https://www.coursera.org/professional-certificates/google-digital-marketing-ecommerce", "desc": "数字营销与电商运营入门"},
     {"category": "市场/运营/电商", "name": "Google Data Analytics 职业证书", "issuer": "Google × Coursera", "type": "course", "link": "https://www.coursera.org/professional-certificates/google-data-analytics", "desc": "数据分析思维与工具入门"},
     {"category": "市场/运营/电商", "name": "Meta Social Media Marketing 职业证书", "issuer": "Meta × Coursera", "type": "course", "link": "https://www.coursera.org/professional-certificates/facebook-social-media-marketing", "desc": "海外社媒营销方向"},
 
     # ── 人力资源 / 行政 ──
     {"category": "人力资源/行政", "name": "企业人力资源管理师（四级~一级）", "issuer": "人社部备案评价机构", "type": "certificate", "link": "https://www.mohrss.gov.cn/", "desc": "HR 招聘/绩效/薪酬岗位通用职业技能等级证书"},
-    {"category": "人力资源/行政", "name": "钉钉 HR 数字化官方课程", "issuer": "钉钉", "type": "course", "link": "https://ke.dingtalk.com/", "desc": "HR 数字化、人事系统实操课程"},
+    {"category": "人力资源/行政", "name": "钉钉官方数字化课程", "issuer": "钉钉", "type": "course", "link": "https://www.dingtalk.com/", "desc": "人事、考勤、组织数字化官方产品与课程入口（原钉钉课堂已下线）"},
 
     # ── 教育 / 法律 / 体制内 ──
     {"category": "教育/法律/体制内", "name": "中小学教师资格证（NTCE）", "issuer": "教育部教育考试院", "type": "certificate", "link": "https://ntce.neea.edu.cn/", "desc": "教师岗位准入证书"},
@@ -99,12 +99,12 @@ CERT_CATALOG: list[CertCatalogItem] = [
     {"category": "工程/建筑/制造", "name": "一级/二级建造师", "issuer": "住建部（各省人事考试网）", "type": "certificate", "link": "https://www.cpta.com.cn/", "desc": "建筑施工注册证书，项目经理岗位必备"},
     {"category": "工程/建筑/制造", "name": "一级造价工程师", "issuer": "住建部", "type": "certificate", "link": "https://www.cpta.com.cn/", "desc": "工程造价注册证书，造价咨询高认可"},
     {"category": "工程/建筑/制造", "name": "华为 HCIP-5G / 通信认证", "issuer": "华为", "type": "certificate", "link": "https://e.huawei.com/cn/talent", "desc": "5G 与通信工程方向厂商认证"},
-    {"category": "工程/建筑/制造", "name": "西门子 SCE 工业自动化认证", "issuer": "西门子", "type": "certificate", "link": "https://sce.siemens.com.cn/", "desc": "PLC、工业自动化厂商认证，智能制造岗位"},
+    {"category": "工程/建筑/制造", "name": "西门子 SCE 工业自动化认证", "issuer": "西门子", "type": "certificate", "link": "https://www.siemens.com/sce", "desc": "PLC、工业自动化厂商认证，智能制造岗位（SCE 教育合作计划官方页面）"},
     {"category": "工程/建筑/制造", "name": "工业机器人操作与运维职业技能等级证", "issuer": "人社部备案评价机构", "type": "certificate", "link": "https://www.mohrss.gov.cn/", "desc": "工业机器人调试运维岗位技能证书"},
 
     # ── 网络安全 ──
-    {"category": "网络安全", "name": "HCIA-Security 华为网络安全助理认证", "issuer": "华为", "type": "certificate", "link": "https://edu.huaweicloud.com/certificationindex.html", "desc": "网络安全入门厂商认证，安全运维岗位"},
-    {"category": "网络安全", "name": "CISP 注册信息安全专业人员", "issuer": "中国信息安全测评中心", "type": "certificate", "link": "https://www.cisp.org.cn/", "desc": "国内政企安全岗位主流行业认证"},
+    {"category": "网络安全", "name": "HCIA-Security 华为网络安全助理认证", "issuer": "华为", "type": "certificate", "link": "https://edu.huaweicloud.com/certificationindex", "desc": "网络安全入门厂商认证，安全运维岗位"},
+    {"category": "网络安全", "name": "CISP 注册信息安全专业人员", "issuer": "中国信息安全测评中心", "type": "certificate", "link": "https://www.itsec.gov.cn/ryzc", "desc": "国内政企安全岗位主流行业认证（中国信息安全测评中心人员注册官方入口）"},
     {"category": "网络安全", "name": "CISSP 国际注册信息安全专家", "issuer": "ISC2", "type": "certificate", "link": "https://www.isc2.org/Certifications/CISSP", "desc": "信息安全高端国际认证（另：ISC2 CC 入门免费）"},
 
     # ── 测试 / 软件质量 ──
@@ -112,11 +112,11 @@ CERT_CATALOG: list[CertCatalogItem] = [
 
     # ── 物流 / 供应链 ──
     {"category": "物流/供应链", "name": "CPLM 物流职业经理证书", "issuer": "中物联", "type": "certificate", "link": "http://www.cplm.org.cn/", "desc": "国内物流供应链行业认证"},
-    {"category": "物流/供应链", "name": "注册供应链管理师", "issuer": "中国物流与采购联合会体系", "type": "certificate", "link": "https://www.chinascm.org.cn/", "desc": "供应链计划、采购方向职业认证"},
+    {"category": "物流/供应链", "name": "注册供应链管理师", "issuer": "中国物流与采购联合会体系", "type": "certificate", "link": "https://www.chinawuliu.com.cn/", "desc": "供应链计划、采购方向职业认证（中国物流与采购联合会官网）"},
 
     # ── 医药 / 生物 ──
     {"category": "医药/生物", "name": "执业药师", "issuer": "人社部/药监局", "type": "certificate", "link": "https://www.cpta.com.cn/", "desc": "医药零售、药企合规岗位必备执业证书"},
-    {"category": "医药/生物", "name": "GMP 内审员证书", "issuer": "重庆药协体系", "type": "certificate", "link": "https://www.cqpa.org.cn/", "desc": "制药企业质量合规岗位行业认证"},
+    {"category": "医药/生物", "name": "GMP 内审员证书", "issuer": "重庆药协体系", "type": "certificate", "link": "https://www.nmpa.gov.cn/", "desc": "制药企业质量合规岗位行业认证（国家药品监督管理局官方站）"},
 ]
 
 CATEGORIES: list[str] = []

@@ -34,9 +34,9 @@ CERT_RECOMMEND_SYSTEM_PROMPT = """你是一名资深职业发展顾问与职业�
   time.geekbang.org / edu.lagou.com / leetcode.cn / www.tensorflow.org / www.kaggle.com /
   www.cncf.io / training.linuxfoundation.org（/.cn）/ www.pdma.org / www.peoplecert.org /
   www.scrum.org / www.cdaglobal.com / edu.cda.cn / www.cda.cn / www.tableau.com /
-  www.adobe.com / www.figma.com / www.gogoup.com / alicert.taobao.com / ke.qq.com /
-  ke.dingtalk.com / sce.siemens.com.cn / www.cisp.org.cn / www.isc2.org /
-  www.istqb.org.cn / www.postman.com / www.chinascm.org.cn / www.cqpa.org.cn /
+  www.adobe.com / www.adobeacp.com / www.figma.com / www.gogoup.com / alicert.taobao.com /
+  study.163.com / www.dingtalk.com / www.siemens.com/sce / www.itsec.gov.cn / www.isc2.org /
+  www.istqb.org.cn / academy.postman.com / www.chinawuliu.com.cn / www.nmpa.gov.cn /
   home.pearsonvue.com/huawei
 - 若某项的官网入口不确定，link 字段填 null，并在 why 中注明"请自行搜索官方报名入口"。
 - 不得使用白名单以外的任何域名。
