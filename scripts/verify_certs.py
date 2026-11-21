@@ -244,31 +244,80 @@ def main() -> int:
         active = (page.locator(".wb-navitem.active").first.text_content() or "").strip()
         check("侧边栏高亮「证书推荐」", "证书推荐" in active, f"actual={active}")
 
-        # ── 4.5 已持有证书：常见证书复选下拉 + 自由输入 ──
+        # ── 4.5 已持有证书：弹窗式选择器（分类 Tab / 搜索 / 无结果新增）──
+        chips_sel = '[data-testid="certs-existing-select"] [data-testid="certs-chip"]'
         exist = page.locator('[data-testid="certs-existing-select"]')
-        check("已持有证书复选下拉就位", exist.count() == 1)
+        check("证书选择触发框就位", exist.count() == 1)
         exist.click()
-        opt = page.locator(
-            ".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option",
-            has_text="大学英语四级",
-        )
-        opt.first.click()
+        modal = page.locator(".certs-picker-inner")
+        modal.wait_for(state="visible", timeout=6000)
+        check("点击触发框弹出选择弹窗", modal.is_visible())
+
+        tabs = modal.locator('[data-testid="certs-cert-tabs"] button')
+        check("分类 Tab 齐全（全部 + 5 行业）", tabs.count() == 6, f"count={tabs.count()}")
+
+        # 分类切换：财会/金融 → CPA 项可见；切回全部
+        modal.locator('[data-testid="certs-cert-tabs"] button', has_text="财会").click()
         page.wait_for_timeout(300)
-        chips = page.locator('[data-testid="certs-existing-select"] .ant-select-selection-item')
-        check("勾选常见证书生成标签", chips.count() >= 1, f"count={chips.count()}")
-        # 自由输入清单外证书（tags 模式）
-        page.keyboard.type("无人机驾驶执照")
-        page.keyboard.press("Enter")
+        cpa = modal.locator('[data-testid="certs-cert-item"]', has_text="CPA 注册会计师")
+        check("分类切换生效（财会/金融 → CPA 可见）", cpa.count() == 1, f"count={cpa.count()}")
+        status_txt = (modal.locator(".certs-picker-status").text_content() or "").strip()
+        check("状态行明示当前分类口径", "财会" in status_txt, status_txt)
+        modal.locator('[data-testid="certs-cert-tabs"] button', has_text="全部").click()
+
+        # 搜索：关键词命中 → 勾选生成标签
+        modal.get_by_placeholder("搜索证书关键词").fill("大学英语四级")
+        page.wait_for_timeout(400)
+        item = modal.locator('[data-testid="certs-cert-item"]', has_text="大学英语四级")
+        check("关键词搜索命中证书项", item.count() == 1, f"count={item.count()}")
+        item.first.click()
         page.wait_for_timeout(300)
-        check("自由输入清单外证书生效", chips.count() >= 2, f"count={chips.count()}")
-        page.keyboard.press("Escape")
-        page.locator(".ant-select-dropdown.ant-select-dropdown-hidden").first.wait_for(
-            state="attached", timeout=5000)
-        # 清掉手动勾选，避免影响后续真实 LLM 推荐口径
-        exist.hover()
-        page.locator('[data-testid="certs-existing-select"] .ant-select-clear').click()
+        check("勾选后条目呈选中态", "is-selected" in (item.first.get_attribute("class") or ""))
+
+        # 无结果 → 空态给出新增入口 → 直接新增自定义证书
+        modal.get_by_placeholder("搜索证书关键词").fill("量子计算工程师执照")
+        page.wait_for_timeout(400)
+        empty = modal.locator('[data-testid="certs-cert-empty"]')
+        empty.wait_for(state="visible", timeout=4000)
+        check("搜索无结果展示空态与新增入口", empty.is_visible())
+        empty.locator('[data-testid="certs-cert-add"]').click()
+        page.wait_for_timeout(400)
+        custom_item = modal.locator('[data-testid="certs-cert-item-custom"]', has_text="量子计算工程师执照")
+        check("新增后自定义证书入列且自动勾选",
+              custom_item.count() == 1 and "is-selected" in (custom_item.first.get_attribute("class") or ""))
+        check("新增后搜索词已清空（衔接回列表态）",
+              (modal.get_by_placeholder("搜索证书关键词").input_value() or "") == "")
+        check("状态行恢复为分类浏览口径", "搜索" not in (modal.locator(".certs-picker-status").text_content() or ""))
+
+        # 跨分类衔接：特定分类下搜索无结果 → 提供「在全部分类中查找」一键切换
+        modal.locator('[data-testid="certs-cert-tabs"] button', has_text="财会").click()
+        modal.get_by_placeholder("搜索证书关键词").fill("华为")
+        page.wait_for_timeout(400)
+        empty2 = modal.locator('[data-testid="certs-cert-empty"]')
+        empty2.wait_for(state="visible", timeout=4000)
+        sall = empty2.locator('[data-testid="certs-cert-search-all"]')
+        check("特定分类无结果提供跨分类查找入口",
+              sall.count() == 1 and "华为" in (sall.text_content() or ""),
+              (sall.text_content() or "").strip())
+        sall.click()
+        page.wait_for_timeout(400)
+        hw = modal.locator('[data-testid="certs-cert-item"]', has_text="华为")
+        check("一键切回全部分类后展示跨分类结果", hw.count() >= 2, f"count={hw.count()}")
+
+        # 关闭弹窗 → 触发框出现 2 个标签
+        modal.locator("button", has_text=re.compile(r"确\s*定")).click()
+        page.wait_for_timeout(400)
+        chips = page.locator(chips_sel)
+        check("关闭弹窗后触发框展示 2 个证书标签", chips.count() == 2, f"count={chips.count()}")
+
+        # 重开弹窗 → 清空按钮 → 0 标签（衔接干净，不影响后续 LLM 口径）
+        exist.click()
+        modal.wait_for(state="visible", timeout=5000)
+        modal.locator('[data-testid="certs-cert-clear"]').click()
         page.wait_for_timeout(300)
-        check("一键清空已选证书", page.locator('[data-testid="certs-existing-select"] .ant-select-selection-item').count() == 0)
+        check("弹窗内一键清空已选", page.locator(chips_sel).count() == 0)
+        modal.locator("button", has_text=re.compile(r"确\s*定")).click()
+        page.wait_for_timeout(300)
 
         # ── 4.6 简历自动带出证书（route 模拟新解析器的 certificates 字段）──
         ctx2 = browser.new_context(viewport={"width": 1440, "height": 800})
@@ -303,7 +352,7 @@ def main() -> int:
         hint.wait_for(state="visible", timeout=20000)
         check("简历自动带出证书提示（识别 2 项）",
               "自动识别 2" in (hint.text_content() or ""), (hint.text_content() or "").strip())
-        auto_tags = page2.locator('[data-testid="certs-existing-select"] .ant-select-selection-item')
+        auto_tags = page2.locator(chips_sel)
         check("自动勾选 2 项证书标签", auto_tags.count() == 2, f"count={auto_tags.count()}")
         ctx2.close()
 
@@ -338,7 +387,7 @@ def main() -> int:
         cat_sel.click()
         page.locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option").first.click()
         page.wait_for_timeout(500)
-        search = page.get_by_placeholder("搜索证书")
+        search = page.get_by_placeholder("搜索证书 / 机构 / 关键词，如：华为、会计、PMP")
         search.fill("华为")
         page.wait_for_timeout(600)
         rows = page.locator(".certs-catalog-item")

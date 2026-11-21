@@ -13,9 +13,10 @@ import {
 import { useRouter } from 'next/navigation'
 import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
+import CertPicker from '@/components/certs/CertPicker'
 import { certs, jobs, resumes } from '@/lib/api'
 import { getToken } from '@/lib/auth'
-import { COMMON_CERT_GROUPS, extractCertsFromResume } from '@/lib/cert-options'
+import { extractCertsFromResume } from '@/lib/cert-options'
 import type { CertCatalogItem, CertCatalogResult, CertRecommendResult, ResumeRecord } from '@/types'
 
 interface JobOption {
@@ -283,23 +284,7 @@ export default function CertRecommendPage() {
               </Col>
               <Col xs={24}>
                 <FieldLabel icon={<BookOutlined />}>已持有的证书（可选）</FieldLabel>
-                <Select
-                  mode="tags"
-                  style={{ width: '100%' }}
-                  size="large"
-                  allowClear
-                  maxCount={15}
-                  placeholder="点击勾选常见证书，或直接输入清单外的证书名"
-                  value={certTags}
-                  onChange={setCertTags}
-                  tokenSeparators={[',', '，']}
-                  options={COMMON_CERT_GROUPS.map((g) => ({
-                    label: g.title,
-                    title: g.title,
-                    options: g.options,
-                  }))}
-                  data-testid="certs-existing-select"
-                />
+                <CertPicker value={certTags} onChange={setCertTags} />
                 {autoCertsFromResume > 0 ? (
                   <div className="certs-auto-hint" data-testid="certs-auto-hint">
                     <CheckCircleFilled /> 已从所选简历自动识别 {autoCertsFromResume} 项证书，可继续勾选或删除
