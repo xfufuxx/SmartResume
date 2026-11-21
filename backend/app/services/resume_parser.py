@@ -400,6 +400,7 @@ _MOCK_RESUME_JSON = {
     ],
     "education": [{"school": "华中科技大学", "degree": "本科", "major": "计算机科学与技术", "start": "2015-09", "end": "2019-06"}],
     "skills": ["Python", "FastAPI", "PostgreSQL", "Redis", "Docker", "Kubernetes", "Git"],
+    "certificates": ["CET-6", "软考中级·软件设计师"],
     "projects": [
         {"name": "智能简历优化平台", "role": "核心开发", "start": "2023-03", "end": "2023-12", "points": ["基于 FastAPI + React 构建简历解析与优化系统，支持 PDF 生成", "接入视觉模型实现简历版面识别，解析准确率达 95%"]},
     ],

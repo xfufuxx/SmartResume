@@ -9,6 +9,7 @@ class ResumeParseResult(BaseModel):
     experience: list[dict] = []
     education: list[dict] = []
     skills: list[str] = []
+    certificates: list[str] = []
     projects: list[dict] = []
 
 

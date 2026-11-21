@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import json
+import re
 import sys
 import urllib.error
 import urllib.request
@@ -243,12 +244,77 @@ def main() -> int:
         active = (page.locator(".wb-navitem.active").first.text_content() or "").strip()
         check("侧边栏高亮「证书推荐」", "证书推荐" in active, f"actual={active}")
 
+        # ── 4.5 已持有证书：常见证书复选下拉 + 自由输入 ──
+        exist = page.locator('[data-testid="certs-existing-select"]')
+        check("已持有证书复选下拉就位", exist.count() == 1)
+        exist.click()
+        opt = page.locator(
+            ".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option",
+            has_text="大学英语四级",
+        )
+        opt.first.click()
+        page.wait_for_timeout(300)
+        chips = page.locator('[data-testid="certs-existing-select"] .ant-select-selection-item')
+        check("勾选常见证书生成标签", chips.count() >= 1, f"count={chips.count()}")
+        # 自由输入清单外证书（tags 模式）
+        page.keyboard.type("无人机驾驶执照")
+        page.keyboard.press("Enter")
+        page.wait_for_timeout(300)
+        check("自由输入清单外证书生效", chips.count() >= 2, f"count={chips.count()}")
+        page.keyboard.press("Escape")
+        page.locator(".ant-select-dropdown.ant-select-dropdown-hidden").first.wait_for(
+            state="attached", timeout=5000)
+        # 清掉手动勾选，避免影响后续真实 LLM 推荐口径
+        exist.hover()
+        page.locator('[data-testid="certs-existing-select"] .ant-select-clear').click()
+        page.wait_for_timeout(300)
+        check("一键清空已选证书", page.locator('[data-testid="certs-existing-select"] .ant-select-selection-item').count() == 0)
+
+        # ── 4.6 简历自动带出证书（route 模拟新解析器的 certificates 字段）──
+        ctx2 = browser.new_context(viewport={"width": 1440, "height": 800})
+        ctx2.add_init_script(
+            "(() => { const kv = %s; localStorage.clear();"
+            " for (const [k, v] of Object.entries(kv)) { if (v != null) localStorage.setItem(k, v); } })()"
+            % json.dumps(kv)
+        )
+        ctx2.add_cookies([
+            {"name": "sr-token", "value": token, "url": BASE},
+            {"name": "sr-refresh", "value": refresh, "url": BASE},
+        ])
+        page2 = ctx2.new_page()
+        mock_resume = {
+            "id": "mock-r1", "user_id": "u", "title": "李雷的简历",
+            "original_file_url": None, "file_type": "pdf",
+            "parsed_json": {
+                "personal_info": {"name": "李雷"}, "skills": [],
+                "certificates": ["CET-6", "软考中级·软件设计师"],
+            },
+            "raw_text": None, "is_primary": True,
+        }
+
+        def fake_resumes(route):
+            # 后端 /api/resumes/ 返回裸数组（非 {data: [...]} 包装）
+            route.fulfill(status=200, content_type="application/json",
+                          body=json.dumps([mock_resume]))
+
+        page2.route(re.compile(r".*/api/resumes.*"), fake_resumes)
+        page2.goto(f"{BASE}/certs", wait_until="domcontentloaded")
+        hint = page2.locator('[data-testid="certs-auto-hint"]')
+        hint.wait_for(state="visible", timeout=20000)
+        check("简历自动带出证书提示（识别 2 项）",
+              "自动识别 2" in (hint.text_content() or ""), (hint.text_content() or "").strip())
+        auto_tags = page2.locator('[data-testid="certs-existing-select"] .ant-select-selection-item')
+        check("自动勾选 2 项证书标签", auto_tags.count() == 2, f"count={auto_tags.count()}")
+        ctx2.close()
+
         # 打开两个下拉，各选第一项（antd 多个 Select 共享 dropdown DOM，必须限定"当前未隐藏"的 dropdown）
         page.locator('[data-testid="certs-resume-select"]').click()
-        page.locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option").first.click()
+        page.wait_for_timeout(500)
+        page.locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option").first.click(force=True)
         page.locator(".ant-select-dropdown.ant-select-dropdown-hidden").first.wait_for(state="attached", timeout=5000)
         page.locator('[data-testid="certs-job-select"]').click()
-        page.locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option").first.click()
+        page.wait_for_timeout(500)
+        page.locator(".ant-select-dropdown:not(.ant-select-dropdown-hidden) .ant-select-item-option").first.click(force=True)
         page.locator(".ant-select-dropdown.ant-select-dropdown-hidden").first.wait_for(state="attached", timeout=5000)
         page.locator('[data-testid="certs-generate-btn"]').click()
 

@@ -15,6 +15,7 @@ import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
 import { certs, jobs, resumes } from '@/lib/api'
 import { getToken } from '@/lib/auth'
+import { COMMON_CERT_GROUPS, extractCertsFromResume } from '@/lib/cert-options'
 import type { CertCatalogItem, CertCatalogResult, CertRecommendResult, ResumeRecord } from '@/types'
 
 interface JobOption {
@@ -82,7 +83,8 @@ export default function CertRecommendPage() {
   const [jobList, setJobList] = useState<JobOption[]>([])
   const [resumeId, setResumeId] = useState<string>('')
   const [jobId, setJobId] = useState<string>('')
-  const [existingCerts, setExistingCerts] = useState('')
+  const [certTags, setCertTags] = useState<string[]>([])
+  const [autoCertsFromResume, setAutoCertsFromResume] = useState(0)
   const [timeBudget, setTimeBudget] = useState<string | undefined>(undefined)
   const [budget, setBudget] = useState<string | undefined>(undefined)
   const [loading, setLoading] = useState(false)
@@ -128,6 +130,22 @@ export default function CertRecommendPage() {
       .catch(() => setCatalog({ categories: [], items: [] }))
   }, [token])
 
+  // 换简历时自动带出其证书：新版解析器的 certificates 字段优先，
+  // 旧数据用 raw_text / summary / skills 启发式兜底识别。
+  // 只依赖 resumeId：用户手动增删的勾选不会被列表刷新覆盖。
+  useEffect(() => {
+    if (!resumeId) { setCertTags([]); setAutoCertsFromResume(0); return }
+    const r = resumeList.find((x) => x.id === resumeId)
+    if (!r) return
+    const found = extractCertsFromResume(
+      (r.parsed_json ?? null) as unknown as Record<string, unknown> | null,
+      r.raw_text,
+    )
+    setCertTags(found)
+    setAutoCertsFromResume(found.length)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [resumeId])
+
   const generate = async () => {
     if (!resumeId) { message.warning('请先选择一份已解析的简历'); return }
     if (!jobId) { message.warning('请先选择一个已解析的目标岗位'); return }
@@ -138,7 +156,7 @@ export default function CertRecommendPage() {
       const res = await certs.recommend({
         resume_id: resumeId,
         job_id: jobId,
-        existing_certifications: existingCerts.trim() || undefined,
+        existing_certifications: certTags.length ? certTags.join('、') : undefined,
         time_budget: timeBudget,
         budget,
       })
@@ -265,14 +283,32 @@ export default function CertRecommendPage() {
               </Col>
               <Col xs={24}>
                 <FieldLabel icon={<BookOutlined />}>已持有的证书（可选）</FieldLabel>
-                <Input
-                  allowClear
+                <Select
+                  mode="tags"
+                  style={{ width: '100%' }}
                   size="large"
-                  maxLength={500}
-                  placeholder="例如：CET-6、软考中级、阿里云 ACA —— 填写后可避免重复推荐"
-                  value={existingCerts}
-                  onChange={(e) => setExistingCerts(e.target.value)}
+                  allowClear
+                  maxCount={15}
+                  placeholder="点击勾选常见证书，或直接输入清单外的证书名"
+                  value={certTags}
+                  onChange={setCertTags}
+                  tokenSeparators={[',', '，']}
+                  options={COMMON_CERT_GROUPS.map((g) => ({
+                    label: g.title,
+                    title: g.title,
+                    options: g.options,
+                  }))}
+                  data-testid="certs-existing-select"
                 />
+                {autoCertsFromResume > 0 ? (
+                  <div className="certs-auto-hint" data-testid="certs-auto-hint">
+                    <CheckCircleFilled /> 已从所选简历自动识别 {autoCertsFromResume} 项证书，可继续勾选或删除
+                  </div>
+                ) : (
+                  <div className="certs-auto-hint is-muted">
+                    填写后 AI 会避免重复推荐你已持有的证书
+                  </div>
+                )}
               </Col>
               <Col xs={12} md={8}>
                 <FieldLabel icon={<ClockCircleOutlined />}>学习时间投入</FieldLabel>
@@ -618,6 +654,13 @@ export default function CertRecommendPage() {
           box-shadow: 0 6px 16px rgba(0, 122, 255, 0.24);
         }
         .certs-alert { margin-top: 14px; }
+        .certs-auto-hint {
+          display: flex; align-items: center; gap: 6px;
+          margin-top: 7px; font-size: 12px;
+          color: #248A3D;
+        }
+        .certs-auto-hint.is-muted { color: var(--text-tertiary); }
+        [data-theme='dark'] .certs-auto-hint:not(.is-muted) { color: #5BE07E; }
 
         /* ── 加载 ── */
         .certs-loading { text-align: center; padding: 46px 24px; }

@@ -343,6 +343,8 @@ export interface ResumeParseResult {
     end?: string
   }>
   skills: string[]
+  /** 证书 / 资格 / 语言等级（新版解析器提取；旧数据无此字段） */
+  certificates?: string[]
   projects: Array<{
     name: string
     /** 与 experience 同构的真实形状（解析/优化输出） */
