@@ -1,13 +1,13 @@
 'use client';
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { Alert, Button, Card, Col, Empty, List, Row, Skeleton, Space, Tag, Typography, message } from 'antd';
+import { Alert, Button, Card, Col, Empty, List, Modal, Row, Skeleton, Space, Spin, Tag, Typography, message } from 'antd';
 import { FileTextOutlined, QrcodeOutlined } from '@ant-design/icons';
 
 import AppLayout from '@/components/AppLayout';
 import AuthGate from '@/components/AuthGate';
-import QrCodeCard, { type QrLink } from '@/components/QrCodeCard';
-import { optimize } from '@/lib/api';
+import QrCodeCard, { type QrLink, type ResumeQr } from '@/components/QrCodeCard';
+import { editor, optimize } from '@/lib/api';
 import { collectResumeLinks } from '@/lib/qrcode';
 import { getToken } from '@/lib/auth';
 
@@ -74,7 +74,7 @@ function loadRecent(): RecentItem[] {
  */
 export default function QrCodePage() {
   const [token, setToken] = useState<string | null>(null);
-  const [records, setRecords] = useState<Array<{ id: string; title: string; time: string }>>([]);
+  const [records, setRecords] = useState<Array<{ id: string; title: string; time: string; hasQr: boolean }>>([]);
   const [recordsLoading, setRecordsLoading] = useState(false);
   // 加载失败的原因与重试入口：内联展示，避免只在 toast 闪一下就消失
   const [recordsError, setRecordsError] = useState<string | null>(null);
@@ -84,6 +84,11 @@ export default function QrCodePage() {
   // 受控二维码输入：「最近生成」再次使用时回填
   const [activeUrl, setActiveUrl] = useState('');
   const [activeLabel, setActiveLabel] = useState('');
+  // 「添加到简历」弹窗：pendingQr 是待写入的二维码，applyTarget 是用户选中的目标简历
+  const [addModalOpen, setAddModalOpen] = useState(false);
+  const [pendingQr, setPendingQr] = useState<ResumeQr | null>(null);
+  const [applyTarget, setApplyTarget] = useState('');
+  const [applying, setApplying] = useState(false);
 
   const loadRecords = useCallback(async () => {
     setRecordsLoading(true);
@@ -92,11 +97,15 @@ export default function QrCodePage() {
       // optimize.list() 返回 AxiosResponse，简历数组在 .data 里（漏了会 map 报错）
       const res = await optimize.list();
       const list = ((res.data || []) as unknown as Array<Record<string, unknown>>);
-      const mapped = list.map((r) => ({
-        id: String(r.id),
-        title: recordTitle(r),
-        time: recordTime(r),
-      }));
+      const mapped = list.map((r) => {
+        const oj = (r.optimized_json || {}) as { qr_code?: unknown };
+        return {
+          id: String(r.id),
+          title: recordTitle(r),
+          time: recordTime(r),
+          hasQr: !!oj?.qr_code,
+        };
+      });
       setRecords(mapped);
     } catch (err) {
       setRecordsError(errText(err));
@@ -149,6 +158,39 @@ export default function QrCodePage() {
     setActiveLabel(item.label);
   }, []);
 
+  /* ── 生成后添加到简历：弹窗选简历 → 写入底部并重导出 PDF ── */
+
+  /** 卡片「添加到简历」入口：暂存二维码并打开选简历弹窗 */
+  const handleCardAddToResume = useCallback((qr: ResumeQr | null) => {
+    if (!qr) return; // 工具页没有单一简历上下文，忽略移除语义
+    setPendingQr(qr);
+    setApplyTarget('');
+    setAddModalOpen(true);
+  }, []);
+
+  /** 确认写入：与简历详情页同源（editor.setQrCode），落库即重导出 PDF */
+  const handleConfirmAddToResume = useCallback(async () => {
+    if (!pendingQr || !applyTarget) return;
+    setApplying(true);
+    try {
+      const res = await editor.setQrCode(applyTarget, {
+        image: pendingQr.image,
+        label: pendingQr.label,
+        url: pendingQr.url,
+      });
+      const target = records.find((r) => r.id === applyTarget);
+      message.success(`二维码已添加到「${target?.title || '所选简历'}」底部，PDF 已重新生成`);
+      // 本地同步 hasQr 标记，避免重开弹窗时标记滞后
+      setRecords((prev) => prev.map((r) => (r.id === applyTarget ? { ...r, hasQr: true } : r)));
+      setAddModalOpen(false);
+      setPendingQr(null);
+    } catch (err) {
+      message.error(`添加失败：${errText(err)}`);
+    } finally {
+      setApplying(false);
+    }
+  }, [pendingQr, applyTarget, records]);
+
   if (!token) return <AuthGate activeKey="qrcode" />;
 
   return (
@@ -170,6 +212,9 @@ export default function QrCodePage() {
               onLabelChange={setActiveLabel}
               suggestions={links}
               onGenerated={handleGenerated}
+              onAddToResume={handleCardAddToResume}
+              adding={applying}
+              addButtonText="添加到简历…"
             />
 
             <Card size="small" style={{ marginTop: 16 }} title="最近生成">
@@ -261,6 +306,75 @@ export default function QrCodePage() {
             </Card>
           </Col>
         </Row>
+
+        {/* ── 添加到简历：选择目标简历弹窗 ── */}
+        <Modal
+          title="添加二维码到简历"
+          open={addModalOpen}
+          onCancel={() => { setAddModalOpen(false); setPendingQr(null) }}
+          width={560}
+          destroyOnHidden
+          footer={[
+            <Button key="cancel" onClick={() => { setAddModalOpen(false); setPendingQr(null) }}>取消</Button>,
+            <Button
+              key="confirm"
+              type="primary"
+              loading={applying}
+              disabled={!applyTarget}
+              onClick={handleConfirmAddToResume}
+            >
+              添加到所选简历底部
+            </Button>,
+          ]}
+        >
+          <Space direction="vertical" style={{ width: '100%' }} size="middle">
+            {pendingQr && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <QrcodeOutlined style={{ fontSize: 22, color: 'var(--primary-600)' }} />
+                <Text style={{ fontSize: 13, wordBreak: 'break-all', minWidth: 0 }}>
+                  {pendingQr.label ? <Tag color="blue">{pendingQr.label}</Tag> : null}
+                  {pendingQr.url}
+                </Text>
+              </div>
+            )}
+            <Paragraph type="secondary" style={{ fontSize: 12, marginBottom: 0 }}>
+              选择一份简历，二维码将添加到其底部并自动重新生成 PDF（已有二维码会被覆盖）。
+            </Paragraph>
+            {recordsLoading ? (
+              <div style={{ textAlign: 'center', padding: 24 }}><Spin /></div>
+            ) : records.length === 0 ? (
+              <Empty description="暂无简历，请先优化一份简历" />
+            ) : (
+              <div style={{ maxHeight: 360, overflow: 'auto' }}>
+                {records.map((r) => (
+                  <div
+                    key={r.id}
+                    onClick={() => setApplyTarget(r.id)}
+                    data-testid={`qr-target-${r.id}`}
+                    style={{
+                      cursor: 'pointer',
+                      background: applyTarget === r.id ? '#f0f5ff' : undefined,
+                      border: applyTarget === r.id ? '1px solid var(--primary-500, #6366f1)' : '1px solid transparent',
+                      borderRadius: 6,
+                      padding: '8px 10px',
+                      marginBottom: 6,
+                    }}
+                  >
+                    <Space size={6}>
+                      <FileTextOutlined />
+                      <Text ellipsis style={{ maxWidth: 300 }}>{r.title}</Text>
+                      {r.hasQr ? <Tag color="orange">已有二维码</Tag> : null}
+                      {applyTarget === r.id ? <Tag color="blue">已选择</Tag> : null}
+                    </Space>
+                    <div>
+                      {r.time ? <Text type="secondary" style={{ fontSize: 12 }}>{r.time}</Text> : null}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </Space>
+        </Modal>
       </div>
     </AppLayout>
   );
