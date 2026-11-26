@@ -11,7 +11,12 @@ from app.prompts.interview_prep import INTERVIEW_PREP_SYSTEM_PROMPT
 logger = logging.getLogger(__name__)
 
 MAX_RETRIES = 3
-VALID_CATEGORIES = {"技术能力", "项目深挖", "行为面试", "岗位匹配", "职业规划"}
+# 前五类是快速押题的原生分类；后三类由对话式模拟的真实面试环节产生
+# （自我介绍 / 薪资到岗 / 反问），扩进来避免被兜底成「职业规划」而误导用户。
+VALID_CATEGORIES = {
+    "技术能力", "项目深挖", "行为面试", "岗位匹配", "职业规划",
+    "自我介绍", "薪资期望", "反问环节",
+}
 
 
 def _get_client() -> AsyncOpenAI:
@@ -52,16 +57,23 @@ async def _call_with_retry(client, **kwargs):
     raise last_err or RuntimeError("LLM 调用失败")
 
 
-def sanitize_question(item: dict, order_index: int = 0) -> dict | None:
-    """校验并规范化单道题；题面为空返回 None（两套链路共用）。"""
+def sanitize_question(
+    item: dict, order_index: int = 0, default_category: str = "职业规划"
+) -> dict | None:
+    """校验并规范化单道题；题面为空返回 None（两套链路共用）。
+
+    default_category 用于模型没给分类或给了未知分类时兜底：
+    对话式模拟会传入当前面试环节对应的分类，快速押题沿用「职业规划」。
+    """
     if not isinstance(item, dict):
         return None
     question = (item.get("question") or "").strip()
     if not question:
         return None
-    category = (item.get("category") or "职业规划").strip()
+    fallback = default_category if default_category in VALID_CATEGORIES else "职业规划"
+    category = (item.get("category") or fallback).strip()
     if category not in VALID_CATEGORIES:
-        category = "职业规划"
+        category = fallback
     outline = item.get("answer_outline") or []
     if isinstance(outline, str):
         outline = [outline]

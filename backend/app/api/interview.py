@@ -1,17 +1,19 @@
 """模拟押题 / AI 面试预测 API。
 
 两条链路共存：
-1. chat（主入口）：创建会话 → SSE 对话（开场 → 出题 → 作答 → 点评 → 复盘）
+1. chat（主入口）：创建会话 → SSE 对话，按真实面试流程推进
+   开场播报 → 自我介绍 → 简历深挖 → 专业能力 → 行为面试 → 求职动机 → 薪资到岗 → 反问 → 复盘
    - POST /sessions                 创建模拟会话（选简历/岗位 + 目标题数）
    - POST /sessions/{id}/chat       发送一轮对话，SSE 流式返回
-   - GET  /sessions/{id}            会话详情（消息流水 + 题目清单 + 复盘）
+   - GET  /sessions/{id}            会话详情（消息流水 + 题目清单 + 环节计划 + 复盘）
+   环节顺序与配额由 services/interview_flow.py 决定，模型只负责当前环节出题。
 2. quick（旧版，保留兼容）：POST /generate 后台生成整套押题，前端轮询会话。
    - 旧会话不迁移数据，详情接口按需合成只读消息，前端标注「快速押题」。
 
 SSE 事件协议（data 为 JSON）：
-- {"type": "meta", "stage", "turn", "asked_count", "target_count"}
+- {"type": "meta", "stage", "stage_key", "stage_label", "remaining", "plan", "turn", "asked_count", "target_count"}
 - {"type": "delta", "text": "..."}        正文增量（已由前端过滤结构化块）
-- {"type": "turn", "message": {...}, ...} 本轮完整消息（含 question/feedback/summary payload）
+- {"type": "turn", "message": {...}, ...} 本轮完整消息（含 question/feedback/summary payload 与环节）
 - {"type": "done", "quota_used": n}
 - {"type": "error", "message": "..."}     失败（额度已退还）
 
@@ -22,6 +24,7 @@ import asyncio
 import json
 import logging
 from datetime import datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 from fastapi.responses import StreamingResponse
@@ -39,7 +42,7 @@ from app.models.user import User
 from app.models.resume import Resume
 from app.models.job_image import JobImage
 from app.models.interview import InterviewSession, InterviewQuestion, InterviewMessage
-from app.services import interview_chat
+from app.services import interview_chat, interview_flow
 from app.services.interview_prep import generate_interview_questions
 
 logger = logging.getLogger(__name__)
@@ -56,14 +59,15 @@ MAX_MESSAGE_CHARS = 4000
 LOCK_SECONDS = 120
 
 CHAT_INTENTS = {"start", "answer", "next", "hint", "skip", "followup", "finish"}
-# 控制意图不落库为用户消息，只作为本轮指令拼进上下文（保持对话流水干净）
+# 控制意图不落库为用户消息，只作为本轮指令拼进上下文（保持对话流水干净）。
+# 环节推进由后端计划决定，这里只描述「这一轮该输出什么」，不改变环节配额。
 _INTENT_PROMPTS = {
-    "start": "（现在开始：请先简短定位岗位与简历的匹配点，然后直接问第 1 题。）",
-    "next": "（请直接出下一题，不需要点评。）",
+    "start": "（现在开始：请按环节表的第一个环节提问，先播报流程，再请候选人做自我介绍。）",
+    "next": "（请直接出下一题，不需要点评；本环节题数已用完就进入下一环节。）",
     "hint": "（我只想要提示：请只给答题要点，不要给完整参考答案，也不要出下一题。）",
-    "skip": "（这题我跳过：请一句话点评后，直接出下一题。）",
+    "skip": "（这题我跳过：请一句话点评后出下一题；本环节题数已用完就进入下一环节。）",
     "followup": "（请就刚才这道题再追问一层，不要换新题。）",
-    "finish": "（结束本次模拟：请输出复盘，不要再出题。）",
+    "finish": "（结束本次模拟：请输出复盘与收尾，不要再出题。）",
 }
 
 
@@ -167,6 +171,10 @@ def _session_to_dict(s: InterviewSession, *, with_messages: bool = True) -> dict
             messages = [_message_to_dict(m) for m in s.messages]
         elif s.mode == "quick":
             messages = _legacy_messages(s)
+    # 环节计划与当前环节都是纯函数现算：追问不占题数，所以「已出几题」就唯一决定环节，
+    # 无需额外落库，也不会有计划与消息不一致的历史数据问题。
+    plan = interview_flow.build_plan(s.target_count)
+    asked = s.question_count or 0
     return {
         "id": s.id,
         "resume_id": s.resume_id,
@@ -176,6 +184,8 @@ def _session_to_dict(s: InterviewSession, *, with_messages: bool = True) -> dict
         "title": s.title,
         "mode": s.mode or "quick",
         "stage": s.stage,
+        "stage_key": interview_flow.answering_stage_key(plan, asked),
+        "plan": plan,
         "status": s.status,
         "error_message": s.error_message,
         "overall_advice": s.overall_advice,
@@ -268,7 +278,10 @@ async def _next_order(db: AsyncSession, session_id: str) -> int:
 
 
 def _quota_key(user_id: str) -> str:
-    return f"interview:count:{user_id}:{_now().strftime('%Y%m%d')}"
+    # 额度按中国自然日分桶。直接用 UTC 日期会让额度在北京时间早上 8 点才重置，
+    # 用户看到的「明天再试」与实际日期对不上。
+    day = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+    return f"interview:count:{user_id}:{day}"
 
 
 async def _check_and_consume_quota(redis: Redis, user_id: str) -> tuple[bool, int]:
@@ -411,11 +424,14 @@ async def create_chat_session(
     await db.flush()
     await db.commit()
 
+    plan = interview_flow.build_plan(session.target_count)
     return {
         "id": session.id,
         "session_id": session.id,
         "title": session.title,
         "stage": session.stage,
+        "stage_key": interview_flow.stage_key_at(plan, 0),
+        "plan": plan,
         "target_count": session.target_count,
     }
 
@@ -519,6 +535,11 @@ async def chat_turn(
     if intent in _INTENT_PROMPTS:
         history.append({"role": "user", "content": _INTENT_PROMPTS[intent]})
 
+    # 面试进度用 question_count（正式题数，追问不计），环节按它推进
+    progress = session.question_count or 0
+    plan = interview_flow.build_plan(target)
+    current = interview_flow.current_stage(plan, progress)
+    stage_key = str(current.get("key") or interview_flow.SKILL)
     prompt_stage = "finished" if intent == "finish" else ("briefing" if not questions else "asking")
     resume_json, job_json = await _load_chat_context(db, user, session)
     system_prompt = interview_chat.build_system_prompt(
@@ -526,6 +547,8 @@ async def chat_turn(
         target_count=target,
         asked_questions=asked,
         stage=prompt_stage,
+        plan=plan,
+        asked_count=progress,
     )
 
     async def event_gen():
@@ -534,8 +557,12 @@ async def chat_turn(
             yield _sse({
                 "type": "meta",
                 "stage": prompt_stage,
+                "stage_key": stage_key,
+                "stage_label": current.get("label"),
+                "remaining": interview_flow.remaining_in_stage(plan, progress),
+                "plan": plan,
                 "turn": session.turn_index,
-                "asked_count": len(questions),
+                "asked_count": progress,
                 "target_count": target,
             })
             async for delta in interview_chat.stream_reply(history, system_prompt):
@@ -543,10 +570,16 @@ async def chat_turn(
                 yield _sse({"type": "delta", "text": delta})
 
             raw_blocks = interview_chat.parse_blocks(full)
-            turn = interview_chat.sanitize_turn(raw_blocks)
+            turn = interview_chat.sanitize_turn(
+                raw_blocks, interview_chat.stage_default_category(stage_key)
+            )
             display = interview_chat.strip_blocks(full)
             if not display and not any(turn.values()):
                 raise ValueError("AI 未返回有效内容，请重试（额度已退还）")
+
+            # 开场轮（此前还没有任何题目）候选人没答题，任何点评都是模型编出来的
+            # （实测会写「候选人尚未作答」并给 3 分）。点评只在有作答时才有意义，直接丢弃。
+            interview_chat.drop_opening_feedback(turn, bool(questions))
 
             # 复盘兜底：模型偶尔只写文字、不给 summary 块。
             # 此时用「本次实际出题的分类计数」补一个最小复盘，保证结束一定有结构化结果；
@@ -563,9 +596,18 @@ async def chat_turn(
                     "actions": [],
                     "fallback": True,
                 }
+            if turn["summary"]:
+                # 环节覆盖由后端确定性算出，不信模型自报，保证复盘一定有这一栏
+                turn["summary"]["flow"] = interview_flow.asked_by_stage(plan, progress)
             if intent == "finish":
                 # 结束时即使模型多给了一道题也不落库，避免复盘后面挂一道无头题
                 turn["question"] = None
+
+            # 追问不占目标题数：模型在 question 块里自报 followup=true 才算追问；
+            # 模型漏标就退化成普通题（宁可多算一题，也不要进度卡住）
+            is_followup = bool(turn.pop("followup", False)) or intent == "followup"
+            if is_followup and not questions:
+                is_followup = False
 
             question_obj: InterviewQuestion | None = None
             if turn["question"]:
@@ -580,11 +622,23 @@ async def chat_turn(
                 db.add(question_obj)
                 await db.flush()
 
-            payload: dict = {}
+            # 本轮的「当前环节」跟着新题走：追问留在原环节，新题可能已跨到下一环节
+            new_progress = progress + (1 if (question_obj is not None and not is_followup) else 0)
+            turn_stage = interview_flow.answering_stage(plan, new_progress)
+            try:
+                turn_remaining = max(0, int(turn_stage["end"]) - new_progress)
+            except (KeyError, TypeError):
+                turn_remaining = 0
+
+            payload: dict = {
+                "stage_key": turn_stage.get("key"),
+                "stage_label": turn_stage.get("label"),
+            }
             if turn["feedback"]:
                 payload["feedback"] = turn["feedback"]
             if question_obj is not None:
                 payload["question"] = _question_to_dict(question_obj)
+                payload["followup"] = is_followup
             if turn["summary"]:
                 payload["summary"] = turn["summary"]
 
@@ -610,7 +664,7 @@ async def chat_turn(
             db.add(assistant_msg)
             await db.flush()
 
-            session.question_count = len(questions) + (1 if question_obj is not None else 0)
+            session.question_count = new_progress
             if turn["summary"] or intent == "finish":
                 session.stage = "finished"
                 session.finished_at = _now()
@@ -627,7 +681,11 @@ async def chat_turn(
                 "type": "turn",
                 "message": _message_to_dict(assistant_msg),
                 "stage": session.stage,
-                "asked_count": session.question_count,
+                "stage_key": turn_stage.get("key"),
+                "stage_label": turn_stage.get("label"),
+                "remaining": turn_remaining,
+                "plan": plan,
+                "asked_count": new_progress,
                 "target_count": target,
             })
             yield _sse({"type": "done", "quota_used": used})

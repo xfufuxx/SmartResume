@@ -18,6 +18,7 @@ from typing import AsyncIterator
 
 from app.config import settings
 from app.prompts.interview_chat import INTERVIEW_CHAT_SYSTEM_PROMPT
+from app.services import interview_flow as flow
 from app.services.interview_prep import sanitize_question
 
 logger = logging.getLogger(__name__)
@@ -26,11 +27,44 @@ MAX_RESUME_CHARS = 3000
 MAX_JOB_CHARS = 2000
 MAX_HISTORY_MESSAGES = 16
 
-STAGE_LABELS = {
-    "briefing": "刚开场：先简短定位（岗位最关键要求 × 简历最强证据），再问第 1 题",
-    "asking": "出题/点评中：点评上一答后，追问一层或出下一题",
-    "finished": "已结束：只输出复盘，不再出题",
+# 每个环节的当轮指令：告诉模型「这一题该问什么、什么时候必须换环节」。
+# 环节顺序与配额由 interview_flow 决定，这里只描述该环节的提问方式。
+_STAGE_RULES: dict[str, str] = {
+    flow.OPENING: (
+        "这是开场第一题：先用 2 句播报流程（今天大概几个问题、聊 10~15 分钟、最后留时间给候选人提问），"
+        "再请候选人做自我介绍。本轮不要问技术细节。"
+    ),
+    flow.RESUME: (
+        "在「简历深挖」里问：挑简历中最贴近岗位的一段经历，问具体动作、量化结果、难点取舍与个人贡献。"
+        "本环节题数用完就换下一环节，不要在这里多问。"
+    ),
+    flow.SKILL: (
+        "在「专业能力」里问：对照岗位要求的硬技能逐条验证，可出场景题或原理题；"
+        "优先问 JD 明确列出、且简历有对应证据的技能。"
+    ),
+    flow.BEHAVIOR: (
+        "在「行为面试」里问：用 STAR 挖冲突处理、失败复盘、跨团队协作或高压交付；"
+        "追问真实行为细节（当时谁说了什么、你具体做了什么），不接受抽象总结。"
+    ),
+    flow.MOTIVATION: (
+        "在「求职动机」里问：离职/转岗原因、为什么选这家公司、3 年职业规划；"
+        "对「想挑战自己」这类空话追问真实考量。"
+    ),
+    flow.SALARY: (
+        "在「薪资与到岗」里问：期望薪资区间与依据、手上是否有其它 offer、最快到岗时间；"
+        "口吻务实，不替候选人砍价，也不做录用承诺。"
+    ),
+    flow.REVERSE: (
+        "这是最后的反问环节：先问「你有什么想问我的吗？」。候选人提问后，"
+        "以面试官身份直接回答（给具体信息：团队、汇报关系、考核、当前最大挑战），"
+        "不要反问、不要点评问题本身，也不要再出下一题。"
+    ),
 }
+
+_FINISHED_RULE = (
+    "本次模拟已结束：输出复盘（覆盖度、强项、短板、3 条行动建议）与一句真实收尾"
+    "（后续流程、多久给反馈），不要再输出 question 块。"
+)
 
 _BLOCK_RE = re.compile(r"```(question|feedback|summary)\s*\n(.*?)```", re.DOTALL)
 
@@ -54,18 +88,42 @@ def build_system_prompt(
     *,
     target_count: int,
     asked_questions: list[str],
-    stage: str,
+    stage: str = "asking",
+    plan: list[dict] | None = None,
+    asked_count: int | None = None,
 ) -> str:
-    """组装系统提示词（含简历/岗位上下文、已出题目、当前阶段）。"""
-    asked = "\n".join(f"- {q}" for q in asked_questions[-30:]) or "（还没有出过题）"
+    """组装系统提示词（简历/岗位上下文 + 环节表 + 当前环节 + 已出题目）。
+
+    stage 是会话生命周期（briefing/asking/finished），只用来判断「是否收尾」；
+    具体处在哪个面试环节，由 plan + 已出题数算出，不让模型自己决定。
+
+    asked_count 传「正式题数」（追问不计）。默认退化为 asked_questions 的长度，
+    但调用方应显式传入：asked_questions 里含追问，直接用长度会让环节超前。
+    """
+    plan = plan or flow.build_plan(target_count)
+    progress = len(asked_questions) if asked_count is None else max(0, int(asked_count))
+    asked = "\n".join(f"{i + 1}. {q}" for i, q in enumerate(asked_questions[-30:])) or "（还没有出过题）"
+    current = flow.current_stage(plan, progress)
+    stage_key = str(current.get("key") or flow.SKILL)
+    rule = _FINISHED_RULE if stage == "finished" else _STAGE_RULES.get(stage_key, _STAGE_RULES[flow.SKILL])
     return INTERVIEW_CHAT_SYSTEM_PROMPT.substitute(
         resume_json=_truncate_json(resume_json, MAX_RESUME_CHARS),
         job_json=_truncate_json(job_json, MAX_JOB_CHARS),
         target_count=target_count,
-        asked_count=len(asked_questions),
-        stage_label=STAGE_LABELS.get(stage, STAGE_LABELS["asking"]),
+        asked_count=progress,
+        flow_table=flow.plan_table(plan, progress),
+        stage_label=current.get("label") or flow.stage_label(stage_key),
+        stage_focus=current.get("focus") or "",
+        stage_left=flow.remaining_in_stage(plan, progress),
+        stage_rule=rule,
         asked_questions=asked,
     )
+
+
+def stage_default_category(stage_key: str | None) -> str:
+    """当前环节对应的默认题目分类（模型没给或给错分类时兜底）。"""
+    stage = flow.STAGE_MAP.get(str(stage_key or ""))
+    return stage.category if stage else "职业规划"
 
 
 def _loads_tolerant(raw: str) -> dict | None:
@@ -170,14 +228,34 @@ def sanitize_summary(raw: dict | None) -> dict | None:
     return {"coverage": coverage, "strong": strong, "weak": weak, "actions": actions}
 
 
-def sanitize_turn(blocks: dict) -> dict:
-    """把解析出的原始块转成可入库/可下发前端的结构。"""
+def sanitize_turn(blocks: dict, default_category: str | None = None) -> dict:
+    """把解析出的原始块转成可入库/可下发前端的结构。
+
+    default_category 传当前面试环节的分类，避免反问环节的题被标成「职业规划」。
+    followup 是模型自报的「这是对上一题的追问」，只有它为真时才不占目标题数，
+    避免追问把 8 题的面试拖成 12 题；模型忘记标注时退化为普通题，不会卡住进度。
+    """
     question_raw = blocks.get("question")
+    followup = bool(question_raw.get("followup")) if isinstance(question_raw, dict) else False
     return {
-        "question": sanitize_question(question_raw, 0) if isinstance(question_raw, dict) else None,
+        "question": sanitize_question(question_raw, 0, default_category or "职业规划")
+        if isinstance(question_raw, dict) else None,
         "feedback": sanitize_feedback(blocks.get("feedback")),
         "summary": sanitize_summary(blocks.get("summary")),
+        "followup": followup,
     }
+
+
+def drop_opening_feedback(turn: dict, has_questions: bool) -> dict:
+    """开场轮（此前还没有任何题目）不该有点评。
+
+    模型被「每轮必须给 feedback」的规则逼着评价一次不存在的回答，
+    实测会写「候选人尚未作答」并给 3 分，前端看起来像答过了。
+    这里统一丢弃，点评只保留给真实作答。
+    """
+    if not has_questions:
+        turn["feedback"] = None
+    return turn
 
 
 async def stream_reply(history: list[dict], system_prompt: str) -> AsyncIterator[str]:

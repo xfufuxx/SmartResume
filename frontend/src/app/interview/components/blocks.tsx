@@ -8,7 +8,10 @@ import {
   ThunderboltOutlined, TrophyOutlined,
 } from '@ant-design/icons'
 
-import type { InterviewFeedback, InterviewQuestion, InterviewSummary } from '@/types'
+import { questionActionLabels } from '@/lib/interview-chat'
+import type {
+  InterviewFeedback, InterviewPlanItem, InterviewQuestion, InterviewStageKey, InterviewSummary,
+} from '@/types'
 
 const CATEGORY_COLOR: Record<string, string> = {
   技术能力: 'blue',
@@ -16,6 +19,9 @@ const CATEGORY_COLOR: Record<string, string> = {
   行为面试: 'orange',
   岗位匹配: 'green',
   职业规划: 'cyan',
+  自我介绍: 'geekblue',
+  薪资期望: 'volcano',
+  反问环节: 'magenta',
 }
 
 const DIFFICULTY_COLOR: Record<string, string> = {
@@ -27,21 +33,29 @@ const DIFFICULTY_COLOR: Record<string, string> = {
 export function QuestionBlock({
   item,
   index,
+  stageKey,
+  followup,
   onBookmark,
 }: {
   item: InterviewQuestion
   index: number
+  stageKey?: InterviewStageKey | null
+  /** 这条是追问：不占目标题数，卡片上标出来 */
+  followup?: boolean
   onBookmark?: (q: InterviewQuestion) => void
 }) {
   const [showOutline, setShowOutline] = useState(false)
   const [showSample, setShowSample] = useState(false)
+  const labels = questionActionLabels(stageKey)
 
   return (
-    <div className="mock-q" data-testid="mock-question-card">
+    <div className="mock-q" data-testid="mock-question-card" data-stage={stageKey || undefined}>
       <div className="mock-q-head">
-        <span className="mock-q-no">{index}</span>
+        <span className="mock-q-no">{followup ? '追问' : index}</span>
         {item.category && <Tag color={CATEGORY_COLOR[item.category] || 'default'}>{item.category}</Tag>}
-        {item.difficulty && <Tag color={DIFFICULTY_COLOR[item.difficulty] || 'default'}>{item.difficulty}</Tag>}
+        {item.difficulty && stageKey !== 'reverse' && (
+          <Tag color={DIFFICULTY_COLOR[item.difficulty] || 'default'}>{item.difficulty}</Tag>
+        )}
         {onBookmark && (
           <Tooltip title={item.is_bookmarked ? '取消收藏' : '收藏这道题'}>
             <Button
@@ -66,7 +80,7 @@ export function QuestionBlock({
       {!!item.answer_outline?.length && (
         <div className="mock-q-actions">
           <Button type="link" size="small" onClick={() => setShowOutline((v) => !v)}>
-            {showOutline ? '收起答题要点' : '看答题要点'}
+            {showOutline ? '收起' : labels.outline}
           </Button>
         </div>
       )}
@@ -79,7 +93,7 @@ export function QuestionBlock({
         <>
           <div className="mock-q-actions">
             <Button type="link" size="small" onClick={() => setShowSample((v) => !v)}>
-              {showSample ? '收起参考答案' : '看参考答案'}
+              {showSample ? '收起' : labels.sample}
             </Button>
           </div>
           {showSample && <div className="mock-sample">{item.sample_answer}</div>}
@@ -119,12 +133,15 @@ export function FeedbackBlock({ feedback }: { feedback: InterviewFeedback }) {
 
 export function ReportCard({
   summary,
+  plan,
   onRestart,
 }: {
   summary: InterviewSummary
+  plan?: InterviewPlanItem[]
   onRestart?: () => void
 }) {
   const coverage = Object.entries(summary.coverage || {})
+  const flow = summary.flow || {}
   return (
     <div className="mock-report" data-testid="mock-report">
       <div className="mock-report-head">
@@ -134,6 +151,21 @@ export function ReportCard({
       {summary.fallback && (
         <div className="mock-report-fallback">
           本次没有生成结构化建议，以下为 AI 文字复盘与本次出题的覆盖度统计。
+        </div>
+      )}
+      {!!plan?.length && (
+        <div className="mock-report-row">
+          <span className="mock-report-label">环节</span>
+          <span className="mock-report-tags" data-testid="mock-report-flow">
+            {plan.map((item) => {
+              const used = flow[item.label] || 0
+              return (
+                <Tag key={item.key} color={used >= item.count ? 'green' : used > 0 ? 'blue' : 'default'}>
+                  {item.label} {used}/{item.count}
+                </Tag>
+              )
+            })}
+          </span>
         </div>
       )}
       {!!coverage.length && (

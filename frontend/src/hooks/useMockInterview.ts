@@ -15,7 +15,8 @@ import { message as antdMessage } from 'antd'
 import { interview } from '@/lib/api'
 import { mergeTurnMessage } from '@/lib/interview-chat'
 import type {
-  InterviewChatMessage, InterviewIntent, InterviewQuestion, InterviewSessionDetail, InterviewStage,
+  InterviewChatMessage, InterviewIntent, InterviewPlanItem, InterviewQuestion,
+  InterviewSessionDetail, InterviewStage, InterviewStageKey,
 } from '@/types'
 
 export interface MockInterviewConfig {
@@ -102,6 +103,8 @@ export function useMockInterview() {
             setSession((prev) => (prev ? {
               ...prev,
               stage: (info.stage as InterviewStage) || prev.stage,
+              stage_key: (info.stage_key as InterviewStageKey) || prev.stage_key,
+              plan: (info.plan as InterviewPlanItem[]) || prev.plan,
               turn_index: info.turn ?? prev.turn_index,
               question_count: info.asked_count ?? prev.question_count,
               target_count: info.target_count ?? prev.target_count,
@@ -120,6 +123,9 @@ export function useMockInterview() {
               return {
                 ...prev,
                 stage: info.stage,
+                // 环节以服务端为准：追问留在原环节，新题可能已跨到下一环节
+                stage_key: info.stage_key || info.message.payload?.stage_key || prev.stage_key,
+                plan: info.plan || prev.plan,
                 question_count: info.asked_count,
                 target_count: info.target_count,
                 questions,

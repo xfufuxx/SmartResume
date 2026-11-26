@@ -5,13 +5,14 @@ import React, { useState } from 'react'
 import { Button, Input } from 'antd'
 import { SendOutlined, StopOutlined } from '@ant-design/icons'
 
-import { quickReplies } from '@/lib/interview-chat'
-import type { InterviewIntent, InterviewStage } from '@/types'
+import { quickReplies, stageNote } from '@/lib/interview-chat'
+import type { InterviewIntent, InterviewStage, InterviewStageKey } from '@/types'
 
 const { TextArea } = Input
 
 export default function Composer({
   stage,
+  stageKey,
   askedCount,
   streaming,
   disabled,
@@ -20,6 +21,7 @@ export default function Composer({
   onStop,
 }: {
   stage?: InterviewStage | null
+  stageKey?: InterviewStageKey | null
   askedCount: number
   streaming: boolean
   disabled?: boolean
@@ -28,7 +30,7 @@ export default function Composer({
   onStop: () => void
 }) {
   const [text, setText] = useState('')
-  const chips = quickReplies(stage, askedCount)
+  const chips = quickReplies(stage, askedCount, stageKey)
 
   const send = () => {
     const value = text.trim()
@@ -60,7 +62,7 @@ export default function Composer({
       <TextArea
         value={text}
         onChange={(e) => setText(e.target.value)}
-        placeholder={askedCount ? '像面试一样回答；也可以直接说「给我提示」' : '先说说你想从哪类问题开始练'}
+        placeholder={askedCount ? stageNote(stageKey) : '面试官正在开场，点「开始吧」即可'}
         autoSize={{ minRows: 1, maxRows: 4 }}
         maxLength={4000}
         disabled={streaming || disabled}

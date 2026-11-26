@@ -21,6 +21,7 @@ import QuestionsDrawer from './components/QuestionsDrawer'
 import SessionSidebar from './components/SessionSidebar'
 import { interview, jobs, resumes } from '@/lib/api'
 import { getToken } from '@/lib/auth'
+import { stageHeadline, stageKeyLabel } from '@/lib/interview-chat'
 import { useMockInterview } from '@/hooks/useMockInterview'
 import type {
   InterviewQuestion, InterviewSessionItem, InterviewSessionDetail, ResumeRecord,
@@ -179,13 +180,21 @@ export default function MockInterviewPage() {
                 <div className="mock-current-title">{current.title || current.job_title || '模拟面试'}</div>
                 <div className="mock-current-meta">
                   <Tag color={current.stage === 'finished' ? 'default' : 'blue'}>
-                    {current.stage === 'finished' ? '已复盘' : current.stage === 'briefing' ? '刚开场' : '面试中'}
+                    {current.stage === 'finished'
+                      ? '已复盘'
+                      : stageKeyLabel(current.stage_key) || '面试中'}
                   </Tag>
                   {current.mode === 'quick' && <Tag>快速押题 · 只读</Tag>}
                 </div>
                 <div className="mock-current-rows">
                   {current.company && (
                     <div><span>公司</span><b>{current.company}</b></div>
+                  )}
+                  {current.mode !== 'quick' && !!current.plan?.length && (
+                    <div>
+                      <span>环节</span>
+                      <b>{stageHeadline(current.plan, current.stage_key) || '—'}</b>
+                    </div>
                   )}
                   <div>
                     <span>进度</span>
@@ -238,13 +247,15 @@ export default function MockInterviewPage() {
                 <div className="mock-intro-icon"><RobotOutlined /></div>
                 <h2>模拟一场，比背十道题有用</h2>
                 <p>
-                  它会先读你的简历和目标岗位，像真人面试官一样一次问一道题；
-                  你答完，它指出答到的和漏掉的，再追问或换题；最后给一份复盘和押题清单。
+                  它会先读你的简历和目标岗位，再按真实面试的顺序走：
+                  自我介绍 → 简历深挖 → 专业能力 → 行为面试 → 求职动机 → 你反问；
+                  目标题数多时还会问薪资与到岗。
+                  每答完一题先给点评，再追问或换题，最后给一份带环节覆盖的复盘。
                 </p>
                 <div className="mock-intro-steps">
-                  <div><span>1</span><b>选简历和岗位</b><em>越具体，题目越贴近你</em></div>
-                  <div><span>2</span><b>逐题作答</b><em>可以要提示、跳过、随时结束</em></div>
-                  <div><span>3</span><b>拿复盘</b><em>强项、短板、3 条行动建议</em></div>
+                  <div><span>1</span><b>选简历和岗位</b><em>决定问什么，越具体越贴近真实</em></div>
+                  <div><span>2</span><b>走完面试全流程</b><em>一次一题，可要提示、跳过、随时结束</em></div>
+                  <div><span>3</span><b>拿复盘</b><em>环节覆盖、强项短板、3 条行动建议</em></div>
                 </div>
                 <div className="mock-intro-foot">
                   <TeamOutlined /> 题目为 AI 预测，不是真题；不会给出录用结论。

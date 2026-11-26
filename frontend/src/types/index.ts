@@ -606,8 +606,28 @@ export interface InsightOverview {
 
 // ── 模拟押题（对话式）/ 旧版快速押题 ──
 export type InterviewMode = 'quick' | 'chat'
+/** 会话生命周期：开场 / 进行中 / 已复盘 */
 export type InterviewStage = 'briefing' | 'asking' | 'finished'
+/** 真实面试环节（顺序由后端 interview_flow 决定，前端只按返回值渲染） */
+export type InterviewStageKey =
+  | 'opening'
+  | 'resume'
+  | 'skill'
+  | 'behavior'
+  | 'motivation'
+  | 'salary'
+  | 'reverse'
 export type InterviewIntent = 'start' | 'answer' | 'next' | 'hint' | 'skip' | 'followup' | 'finish'
+
+/** 面试环节计划：start/end 是题目序号区间（左闭右开） */
+export interface InterviewPlanItem {
+  key: InterviewStageKey
+  label: string
+  focus: string
+  count: number
+  start: number
+  end: number
+}
 
 export interface InterviewQuestion {
   id: string
@@ -635,6 +655,8 @@ export interface InterviewSummary {
   strong: string[]
   weak: string[]
   actions: string[]
+  /** 环节覆盖（环节名 → 已出题数），后端确定性计算 */
+  flow?: Record<string, number>
   /** 模型未给结构化块时，后端用实际出题分类计数补的最小复盘 */
   fallback?: boolean
 }
@@ -643,6 +665,11 @@ export interface InterviewMessagePayload {
   question?: InterviewQuestion
   feedback?: InterviewFeedback
   summary?: InterviewSummary
+  /** 本轮所处的面试环节（后端按计划算，不取模型自报） */
+  stage_key?: InterviewStageKey
+  stage_label?: string
+  /** 这条题是对上一题的追问（不占目标题数） */
+  followup?: boolean
 }
 
 export interface InterviewChatMessage {
@@ -666,6 +693,10 @@ export interface InterviewSessionItem {
   title?: string | null
   mode?: InterviewMode
   stage?: InterviewStage | null
+  /** 正在作答的那道题所属环节（后端现算，与刷新后一致） */
+  stage_key?: InterviewStageKey | null
+  /** 本场面试环节计划（后端按目标题数生成） */
+  plan?: InterviewPlanItem[]
   status: 'pending' | 'processing' | 'completed' | 'failed'
   error_message?: string | null
   overall_advice?: string | null

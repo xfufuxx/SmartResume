@@ -8,8 +8,9 @@ import {
 } from '@ant-design/icons'
 
 import Composer from './Composer'
+import StageRail from './StageRail'
 import { FeedbackBlock, QuestionBlock, ReportCard } from './blocks'
-import { stageText, stripStreamingBlocks } from '@/lib/interview-chat'
+import { dedupeQuestionText, stageHeadline, stageKeyLabel, stageText, stripStreamingBlocks } from '@/lib/interview-chat'
 import type {
   InterviewChatMessage, InterviewIntent, InterviewQuestion, InterviewSessionDetail,
 } from '@/types'
@@ -46,6 +47,8 @@ export default function ChatStream({
   const finished = session.stage === 'finished'
   const target = session.target_count || 0
   const asked = session.question_count || 0
+  const plan = session.plan || []
+  const stageKey = session.stage_key || null
   const visible = stripStreamingBlocks(streamText)
 
   useEffect(() => {
@@ -62,7 +65,14 @@ export default function ChatStream({
             {readOnly && <Tag style={{ marginLeft: 8 }}>快速押题 · 只读</Tag>}
           </div>
           <div className="mock-chat-sub">
-            <Tag color={finished ? 'default' : 'blue'}>{stageText(session.stage)}</Tag>
+            <Tag color={finished ? 'default' : 'blue'}>
+              {finished ? stageText('finished') : stageKeyLabel(session.stage_key) || stageText(session.stage)}
+            </Tag>
+            {!readOnly && !!plan.length && (
+              <span className="mock-chat-stage" data-testid="mock-stage-headline">
+                {stageHeadline(plan, session.stage_key)}
+              </span>
+            )}
             {session.job_title && <span>{session.job_title}{session.company ? ` @ ${session.company}` : ''}</span>}
             <span>已出 {asked}{target ? ` / 目标 ${target}` : ''} 题</span>
           </div>
@@ -86,31 +96,40 @@ export default function ChatStream({
         </div>
       </div>
 
+      {/* 真实面试的环节进度：只读的旧版快速押题没有环节，不显示 */}
+      {!readOnly && <StageRail plan={plan} stageKey={stageKey} asked={asked} finished={finished} />}
+
       <div className="mock-chat-body" ref={bodyRef} data-testid="mock-messages">
         {loading && !messages.length ? (
           <div style={{ textAlign: 'center', padding: 60 }}><Spin /></div>
         ) : !messages.length && !streaming ? (
           <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有对话内容" />
         ) : (
-          messages.map((m) => (
+          messages.map((m) => {
+            // 题干已经渲染成卡片，正文里重复的那句要剥掉，否则每轮都念两遍
+            const bubble = dedupeQuestionText(m.content || '', m.payload?.question?.question)
+            return (
             <div key={m.id} className={`mock-msg ${m.role}`} data-testid={`mock-msg-${m.role}`}>
               {m.role === 'assistant' && <div className="mock-avatar"><RobotOutlined /></div>}
               <div className="mock-bubble-wrap">
-                {m.content && <div className="mock-bubble">{m.content}</div>}
+                {bubble && <div className="mock-bubble">{bubble}</div>}
                 {m.payload?.feedback && <FeedbackBlock feedback={m.payload.feedback} />}
                 {m.payload?.question && (
                   <QuestionBlock
                     item={m.payload.question}
                     index={(m.payload.question.order_index || 0) + 1}
+                    stageKey={m.payload.stage_key}
+                    followup={!!m.payload.followup}
                     onBookmark={readOnly ? undefined : onBookmark}
                   />
                 )}
                 {m.payload?.summary && (
-                  <ReportCard summary={m.payload.summary} onRestart={onReset} />
+                  <ReportCard summary={m.payload.summary} plan={plan} onRestart={onReset} />
                 )}
               </div>
             </div>
-          ))
+            )
+          })
         )}
 
         {streaming && (
@@ -148,6 +167,7 @@ export default function ChatStream({
       ) : (
         <Composer
           stage={session.stage}
+          stageKey={stageKey}
           askedCount={asked}
           streaming={streaming}
           onSend={onSend}

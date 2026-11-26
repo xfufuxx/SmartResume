@@ -12,8 +12,10 @@ import json
 import pytest
 
 from app.api import interview as interview_api
+from app.services import interview_flow
 from app.services.interview_chat import (
     build_system_prompt,
+    drop_opening_feedback,
     parse_blocks,
     sanitize_feedback,
     sanitize_summary,
@@ -136,6 +138,32 @@ def test_sanitize_turn_drops_question_without_text():
     assert turn["question"] is None
 
 
+def test_sanitize_turn_marks_followup_separately():
+    # followup 是「是否追问」的标记，不能混进题目字段（DB 没有这一列）
+    turn = sanitize_turn({
+        "question": {**QUESTION, "followup": True}, "feedback": None, "summary": None,
+    })
+    assert turn["followup"] is True
+    assert "followup" not in turn["question"]
+
+
+def test_sanitize_turn_default_category_follows_stage():
+    # 反问环节的题目若模型没给分类，不能兜底成「职业规划」
+    turn = sanitize_turn(
+        {"question": {"question": "你有什么想问我的吗？"}, "feedback": None, "summary": None},
+        "反问环节",
+    )
+    assert turn["question"]["category"] == "反问环节"
+
+
+def test_sanitize_turn_keeps_model_category_when_valid():
+    turn = sanitize_turn(
+        {"question": {**QUESTION, "category": "行为面试"}, "feedback": None, "summary": None},
+        "反问环节",
+    )
+    assert turn["question"]["category"] == "行为面试"
+
+
 # ── system prompt ────────────────────────────────────────────────
 
 
@@ -163,6 +191,38 @@ def test_system_prompt_handles_missing_context():
 def test_system_prompt_truncates_long_resume():
     prompt = build_system_prompt({"summary": "很长的经历" * 2000}, None, target_count=8, asked_questions=[], stage="asking")
     assert "内容过长已截断" in prompt
+
+
+def test_system_prompt_covers_real_interview_stages():
+    prompt = build_system_prompt(None, None, target_count=8, asked_questions=[], stage="briefing")
+    for label in ("自我介绍", "简历深挖", "专业能力", "行为面试", "求职动机", "反问环节"):
+        assert label in prompt, f"环节表缺少 {label}"
+    assert "当前环节" in prompt
+    assert "← 当前环节" in prompt
+
+
+def test_system_prompt_opening_briefs_the_flow():
+    prompt = build_system_prompt(None, None, target_count=8, asked_questions=[], stage="briefing")
+    assert "播报流程" in prompt
+    assert "自我介绍" in prompt
+
+
+def test_system_prompt_reverse_stage_asks_for_questions():
+    # 已出 7 题 → 处在反问环节，提示词必须要求面试官问「你有什么想问我的吗」
+    prompt = build_system_prompt(None, None, target_count=8, asked_questions=[f"q{i}" for i in range(7)], stage="asking")
+    assert "你有什么想问我的吗" in prompt
+    assert "以面试官身份直接回答" in prompt
+
+
+def test_system_prompt_finished_stage_blocks_new_questions():
+    prompt = build_system_prompt(None, None, target_count=8, asked_questions=["q"] * 3, stage="finished")
+    assert "不要再输出 question 块" in prompt
+    assert "← 当前环节" in prompt
+
+
+def test_system_prompt_short_interview_skips_salary():
+    prompt = build_system_prompt(None, None, target_count=3, asked_questions=[], stage="briefing")
+    assert "薪资与到岗" not in prompt
 
 
 # ── 额度（fake Redis，与 AI 润色同模式） ─────────────────────────
@@ -214,3 +274,46 @@ async def test_quota_release_swallows_error():
             raise RuntimeError("redis down")
 
     await interview_api._release_quota(_BrokenRedis(), "u1")  # 不抛异常
+
+
+# ── 开场轮不点评 ────────────────────────────────────────────────
+
+def test_drop_opening_feedback_removes_fake_score():
+    """开场轮没有作答，模型编的「候选人尚未作答 / 3 分」必须丢掉。"""
+    turn = {"question": {"question": "请自我介绍"}, "feedback": {"score": 3, "hits": ["候选人尚未作答"]}}
+    out = drop_opening_feedback(dict(turn), has_questions=False)
+    assert out["feedback"] is None
+    assert out["question"] is not None
+
+
+def test_drop_opening_feedback_keeps_answer_feedback():
+    turn = {"question": {"question": "下一题"}, "feedback": {"score": 4, "hits": ["答到瓶颈定位"]}}
+    out = drop_opening_feedback(dict(turn), has_questions=True)
+    assert out["feedback"]["score"] == 4
+
+
+def test_prompt_exempts_opening_from_feedback():
+    prompt = build_system_prompt(None, None, target_count=8, asked_questions=[], stage="briefing")
+    assert "候选人还没答题，不要输出 feedback" in prompt
+
+
+def test_quota_key_uses_china_calendar_day():
+    """额度按中国自然日分桶：用 UTC 日期会晚 8 小时重置。"""
+    from datetime import datetime
+    from zoneinfo import ZoneInfo
+
+    today = datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+    assert interview_api._quota_key("u1") == f"interview:count:u1:{today}"
+
+
+def test_prompt_progress_ignores_followup_rows():
+    """asked_questions 含追问，环节进度必须按 asked_count 算，否则会超前一个环节。"""
+    plan = interview_flow.build_plan(8)
+    questions = [f"第 {i} 题" for i in range(6)]  # 6 条历史里有 4 条是追问
+    prompt = build_system_prompt(
+        None, None, target_count=8, asked_questions=questions,
+        stage="asking", plan=plan, asked_count=2,
+    )
+    assert "已出 2 / 目标 8 题" in prompt
+    assert "本环节还有 1 题" in prompt  # 简历深挖（第 2-3 题）还剩第 3 题
+    assert "【当前环节】简历深挖" in prompt

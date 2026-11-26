@@ -76,6 +76,7 @@ def main() -> int:
             check("模拟押题页渲染（标题 + 配置面板）", True)
             check("空态引导可见", page.get_by_text("模拟一场，比背十道题有用").count() == 1)
             check("历史模拟列表可见", page.get_by_text("历史模拟", exact=True).count() >= 1)
+            check("保留一次性快速押题入口", page.locator('[data-testid="mock-quick"]').count() == 1)
             shot(page, "01-empty-state")
 
             # ── 2. 旧版快速押题：只读回放 ──
@@ -131,6 +132,27 @@ def main() -> int:
                 except Exception:
                     entered = False
                 check("新会话进入对话态", entered)
+                rail = page.locator('[data-testid="mock-stage-rail"]')
+                check("对话态展示面试环节进度条", rail.count() == 1)
+                stages = page.locator('[data-testid^="mock-stage-"][role="listitem"]')
+                stage_n = stages.count()
+                # 环节数随目标题数档位变化（默认 8 题启用 6 个：不含薪资），不能硬断言 7
+                check("环节进度覆盖核心面试流程", stage_n >= 6, f"{stage_n} 个")
+                rail_text = rail.inner_text()
+                missing = [s for s in ("自我介绍", "简历深挖", "专业能力", "行为面试", "求职动机", "反问环节")
+                           if s not in rail_text]
+                check("六类必考环节均出现在流程中", not missing, "缺：" + "、".join(missing) if missing else "")
+                check("反问环节排在流程最后",
+                      stages.last.get_attribute("data-testid") == "mock-stage-reverse")
+                active = page.locator('.mock-rail-item[data-state="active"]')
+                check("同一时刻只有一个进行中环节", active.count() == 1,
+                      active.first.get_attribute("data-testid") if active.count() else "无")
+                check("开场从自我介绍环节起", active.count() == 1 and
+                      active.first.get_attribute("data-testid") == "mock-stage-opening")
+                head = page.locator('[data-testid="mock-stage-headline"]')
+                check("标题栏显示本环节考察目标",
+                      head.count() == 1 and len(head.inner_text().strip()) >= 4,
+                      head.inner_text().strip()[:40] if head.count() else "")
                 got_q = wait_question(page, 180_000)
                 check("开场后拿到第 1 题", got_q,
                       page.locator('[data-testid="mock-error"]').inner_text()[:120]
@@ -140,14 +162,36 @@ def main() -> int:
                     check("题目文本非空", len(first_q.strip()) >= 8, f"{len(first_q)} 字")
                     check("题目卡带分类/难度标签",
                           page.locator('[data-testid="mock-question-card"]').first.locator(".ant-tag").count() >= 1)
+                    bubbles = page.locator('[data-testid="mock-msg-assistant"] .mock-bubble')
+                    dup = [i for i in range(bubbles.count())
+                           if first_q.strip() in bubbles.nth(i).inner_text()]
+                    check("正文不与题卡重复题干", len(dup) == 0, f"{len(dup)} 条重复")
                     shot(page, "04-first-question")
 
                     # 作答
                     page.locator('[data-testid="mock-input"]').fill("我先用压测定位瓶颈，把通知改成异步，接口响应从 800ms 降到 300ms。")
                     page.locator('[data-testid="mock-send"]').click()
-                    page.locator('[data-testid="mock-feedback"]').first.wait_for(timeout=180_000)
-                    check("作答后出现点评卡", True)
+                    try:
+                        page.locator('[data-testid="mock-feedback"]').first.wait_for(timeout=180_000)
+                        check("作答后出现点评卡", True)
+                    except Exception:
+                        err = page.locator('[data-testid="mock-error"]')
+                        check("作答后出现点评卡", False,
+                              err.inner_text()[:120] if err.count() else "未出现点评卡")
                     check("点评给出 1-5 分", page.locator('[data-testid="mock-feedback"] .ant-tag').count() >= 1)
+                    # 点评与下一题在同一轮返回；等这张题卡真正落库渲染，别在流式途中抢跑
+                    try:
+                        page.wait_for_function(
+                            "() => document.querySelectorAll('[data-testid=\"mock-question-card\"]').length >= 2",
+                            timeout=180_000,
+                        )
+                    except Exception:
+                        pass
+                    page.wait_for_function(
+                        "() => { const b = document.querySelector('[data-testid=\"mock-finish\"]');"
+                        " return b && !b.disabled; }",
+                        timeout=60_000,
+                    )
                     q_count = page.locator('[data-testid="mock-question-card"]').count()
                     check("点评后有下一题或追问", q_count >= 2, f"{q_count} 张题卡")
                     shot(page, "05-feedback")
@@ -162,6 +206,14 @@ def main() -> int:
                         check("结束模拟后生成复盘", False,
                               err.inner_text()[:120] if err.count() else "未出现复盘卡")
                     check("复盘后输入区收起", page.locator('[data-testid="mock-input"]').count() == 0)
+                    done_states = page.locator('.mock-rail-item[data-state="done"]').count()
+                    skipped_states = page.locator('.mock-rail-item[data-state="skipped"]').count()
+                    # 只问 2 题就结束，后面的环节没走到，不能全部打勾（复盘也写着 0/2）
+                    check("复盘后未走到的环节标为未进行",
+                          skipped_states >= 1 and done_states < stage_n,
+                          f"完成 {done_states} / 未进行 {skipped_states} / 共 {stage_n}")
+                    check("未进行环节显示「未进行」而非 0/0",
+                          page.locator('.mock-rail-item[data-state="skipped"] .mock-rail-count').first.inner_text() == "未进行")
                     shot(page, "06-report")
 
                     # 记住会话 ID 用于刷新与删除（标题可能重复，ID 唯一）

@@ -1,12 +1,14 @@
 /**
- * 模拟押题的纯函数：流式正文过滤、阶段文案、快捷操作、消息合并。
+ * 模拟押题的纯函数：流式正文过滤、环节文案、快捷操作、消息合并。
  *
  * 单独抽出来的原因：
  * 1. SSE 增量里会夹着 ```question {...}``` 结构化块，直接渲染会出现大段 JSON；
  *    必须边流边剥（块可能被拆在多个 delta 里）；
  * 2. 这些逻辑是纯字符串/数组运算，用 node --test 覆盖成本低、回归价值高。
  */
-import type { InterviewChatMessage, InterviewIntent, InterviewStage } from '@/types'
+import type {
+  InterviewChatMessage, InterviewIntent, InterviewPlanItem, InterviewStage, InterviewStageKey,
+} from '@/types'
 
 const BLOCK_RE = /```(?:question|feedback|summary)\s*\n[\s\S]*?```/g
 
@@ -35,20 +37,114 @@ export function stageText(stage?: InterviewStage | null): string {
   return stage ? STAGE_TEXT[stage] || '面试中' : '面试中'
 }
 
+/** 去重比较用的归一化：忽略空白与标点差异，避免「？」「.」导致匹配失败 */
+function normalizeForCompare(text: string): string {
+  return text.replace(/\s+/g, '').replace(/[「」“”"'’‘：:，,。.？?！!…—\-、；;]/g, '')
+}
+
+/**
+ * 正文与题目块去重：模型常把题干既写进正文、又放进 question 块，
+ * 直接渲染会出现「气泡一句 + 题卡同一句」的重复。
+ *
+ * 做法是逐句比对：归一化后属于题干一部分的句子从正文删掉；
+ * 删完只剩寒暄/反应（如「嗯，这块我记一下」）就保留，删空则整段不再渲染。
+ * 题干过短（<12 字）时不动，避免误删「为什么？」这类常见短句。
+ */
+export function dedupeQuestionText(content: string, question?: string | null): string {
+  const body = (content || '').trim()
+  const q = (question || '').trim()
+  if (!body || !q) return body
+  const qNorm = normalizeForCompare(q)
+  if (qNorm.length < 12) return body
+
+  const sentences = body.match(/[^。！？!?；;\n]+[。！？!?；;\n]?/g) || [body]
+  const kept = sentences.filter((sentence) => {
+    const sNorm = normalizeForCompare(sentence)
+    if (!sNorm) return false
+    // 整句已被题干覆盖，或这句本身就包含题干（模型加了语气词），都算重复
+    const covered = qNorm.includes(sNorm) || sNorm.includes(qNorm)
+    return !(covered && sNorm.length >= 6)
+  })
+  return kept.join('').trim()
+}
+
+/** 环节名的兜底文案：后端 plan 缺失时（旧接口/只读快照）仍能显示人话 */
+export const STAGE_KEY_LABEL: Record<InterviewStageKey, string> = {
+  opening: '自我介绍',
+  resume: '简历深挖',
+  skill: '专业能力',
+  behavior: '行为面试',
+  motivation: '求职动机',
+  salary: '薪资与到岗',
+  reverse: '反问环节',
+}
+
+/** 每个环节给候选人的一句作答提示，贴在输入框上方 */
+const STAGE_NOTE: Record<InterviewStageKey, string> = {
+  opening: '先做一段自我介绍；面试官会顺着你讲的往下挖',
+  resume: '会盯着简历细节问：你个人做了什么、结果怎么量化',
+  skill: '对照岗位要求验证硬技能，用一个具体案例带出原理',
+  behavior: '用 STAR 讲：情境、你的任务、你的动作、结果',
+  motivation: '讲真实动机：为什么走、为什么这家、3 年想做什么',
+  salary: '给区间并说明依据，比只报一个数字更有说服力',
+  reverse: '轮到你了：问团队、考核、这个岗位当前最大的挑战',
+}
+
+export function stageNote(key?: InterviewStageKey | null): string {
+  return (key && STAGE_NOTE[key]) || '像真面试一样回答，面试官会接着你的话往下问'
+}
+
+export function stageKeyLabel(key?: InterviewStageKey | null): string {
+  return (key && STAGE_KEY_LABEL[key]) || ''
+}
+
+/** 当前环节在计划里的位置，用于「第 2 / 6 环节」标题 */
+export function stagePosition(
+  plan: InterviewPlanItem[] | undefined | null,
+  key?: InterviewStageKey | null,
+): { index: number; total: number; item: InterviewPlanItem } | null {
+  if (!plan?.length) return null
+  const index = plan.findIndex((p) => p.key === key)
+  if (index < 0) return null
+  return { index, total: plan.length, item: plan[index] }
+}
+
+export function stageHeadline(
+  plan: InterviewPlanItem[] | undefined | null,
+  key?: InterviewStageKey | null,
+): string {
+  const pos = stagePosition(plan, key)
+  if (!pos) return stageKeyLabel(key)
+  return `第 ${pos.index + 1} / ${pos.total} 环节 · ${pos.item.label}`
+}
+
+/** 某环节已出题数：plan 的区间与总题数算出，避免再存一份计数 */
+export function stageUsed(item: InterviewPlanItem, askedCount: number): number {
+  return Math.min(item.count, Math.max(0, askedCount - item.start))
+}
+
 export interface QuickReply {
   label: string
   /** 控制意图；为空表示把 label 当普通回答发出去 */
   intent?: InterviewIntent
 }
 
-/** 输入框上方的快捷操作：随阶段变化，避免用户不知道能说什么。 */
-export function quickReplies(stage?: InterviewStage | null, askedCount = 0): QuickReply[] {
+/** 输入框上方的快捷操作：随环节变化，避免用户不知道能说什么。 */
+export function quickReplies(
+  stage?: InterviewStage | null,
+  askedCount = 0,
+  stageKey?: InterviewStageKey | null,
+): QuickReply[] {
   if (stage === 'finished') return []
   if (!askedCount) {
+    return [{ label: '开始吧', intent: 'start' }]
+  }
+  // 反问环节用户是提问方，给几个真实面试里值得问的方向，而不是「下一题」
+  if (stageKey === 'reverse') {
     return [
-      { label: '直接开始' },
-      { label: '先练项目深挖' },
-      { label: '先练技术题' },
+      { label: '团队规模和汇报关系是怎样的？' },
+      { label: '这个岗位当前最大的挑战是什么？' },
+      { label: '考核和晋升怎么定？' },
     ]
   }
   return [
@@ -57,6 +153,17 @@ export function quickReplies(stage?: InterviewStage | null, askedCount = 0): Qui
     { label: '跳过这题', intent: 'skip' },
     { label: '结束模拟', intent: 'finish' },
   ]
+}
+
+/** 题目卡上的展开按钮文案：反问环节问的是「该问什么」，不是「该怎么答」 */
+export function questionActionLabels(stageKey?: InterviewStageKey | null): {
+  outline: string
+  sample: string
+} {
+  if (stageKey === 'reverse') {
+    return { outline: '看可问的方向', sample: '看示范提问' }
+  }
+  return { outline: '看答题要点', sample: '看参考答案' }
 }
 
 /**

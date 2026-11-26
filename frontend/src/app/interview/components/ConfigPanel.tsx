@@ -45,7 +45,8 @@ export default function ConfigPanel({
         <PlayCircleOutlined style={{ color: 'var(--primary-600)' }} /> 开一场模拟面试
       </div>
       <div style={{ fontSize: 12, color: 'var(--text-tertiary)', lineHeight: 1.7, marginBottom: 14 }}>
-        AI 面试官按你的简历和岗位逐题发问，你答完它先点评再追问或换题，最后给复盘。
+        按真实面试顺序走：自我介绍 → 简历深挖 → 专业能力 → 行为面试 → 求职动机 → 你反问，
+        题数多时加薪资到岗。一次一题，答完先点评再追问或换题。
       </div>
 
       <div style={{ marginBottom: 14 }}>
@@ -85,7 +86,7 @@ export default function ConfigPanel({
       <div style={{ marginBottom: 14 }}>
         <div className="mock-field-label">
           目标题数：{count} 道
-          <Tooltip title="达到题数后 AI 会主动收尾复盘；中途也可以随时结束">
+          <Tooltip title="3 题只走自我介绍 + 简历深挖 + 反问；题数越多环节越全，10 题以上才会问到薪资到岗。中途也可随时结束">
             <InfoCircleOutlined style={{ marginLeft: 4, color: 'var(--text-quaternary)' }} />
           </Tooltip>
         </div>
@@ -102,7 +103,7 @@ export default function ConfigPanel({
         onClick={onStart}
         data-testid="mock-start"
       >
-        {starting ? '正在开场…' : '开始模拟押题'}
+        {starting ? '正在开场…' : '开始模拟面试'}
       </Button>
       {!canStart && (
         <div style={{ fontSize: 11, color: 'var(--text-quaternary)', marginTop: 8 }}>
@@ -111,6 +112,12 @@ export default function ConfigPanel({
       )}
 
       <div className="mock-quick-entry">
+        <div className="mock-quick-title">
+          <ThunderboltOutlined /> 只要一套题单？
+        </div>
+        <div className="mock-quick-desc">
+          快速押题：一次性出完整套题，不进入对话，只读查看题目、要点和参考答案。
+        </div>
         <Popconfirm
           title="一次性生成整套押题？"
           description="会直接出完所有题并以只读方式查看，适合只想看题、不想对话的时候。"
@@ -118,8 +125,8 @@ export default function ConfigPanel({
           cancelText="取消"
           onConfirm={onQuick}
         >
-          <Button type="link" size="small" icon={<ThunderboltOutlined />} loading={quickGenerating} data-testid="mock-quick">
-            快速押题（一次性出整套）
+          <Button size="small" loading={quickGenerating} data-testid="mock-quick">
+            生成押题题单（{count} 题）
           </Button>
         </Popconfirm>
       </div>

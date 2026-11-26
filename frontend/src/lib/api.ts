@@ -2,7 +2,7 @@ import axios from 'axios'
 
 import type {
   InterviewTrackPayload, ApplicationPayload, CommunicationPayload, AssessmentSubmit,
-  InterviewChatMessage, InterviewStage, InterviewIntent,
+  InterviewChatMessage, InterviewPlanItem, InterviewStage, InterviewStageKey, InterviewIntent,
 } from '@/types'
 import { getToken, setAuthTokens, clearAuth } from '@/lib/auth'
 import { API_BASE_URL } from '@/lib/api-base'
@@ -572,11 +572,24 @@ export const interview = {
     sessionId: string,
     body: { message?: string; intent: InterviewIntent },
     handlers: {
-      onMeta?: (info: { stage?: string; turn?: number; asked_count?: number; target_count?: number }) => void
+      onMeta?: (info: {
+        stage?: string
+        stage_key?: InterviewStageKey
+        stage_label?: string
+        remaining?: number
+        plan?: InterviewPlanItem[]
+        turn?: number
+        asked_count?: number
+        target_count?: number
+      }) => void
       onDelta?: (text: string) => void
       onTurn?: (info: {
         message: InterviewChatMessage
         stage: InterviewStage
+        stage_key?: InterviewStageKey
+        stage_label?: string
+        remaining?: number
+        plan?: InterviewPlanItem[]
         asked_count: number
         target_count: number
       }) => void
