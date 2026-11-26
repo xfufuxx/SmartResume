@@ -80,7 +80,7 @@ export default function ChatStream({
         <div className="mock-chat-tools">
           <Badge count={session.questions?.length || 0} size="small" color="var(--primary-500)">
             <Button size="small" icon={<UnorderedListOutlined />} onClick={onOpenDrawer} data-testid="mock-open-drawer">
-              押题清单
+              {readOnly ? '押题题单' : '本场题目'}
             </Button>
           </Badge>
           {!readOnly && !finished && (

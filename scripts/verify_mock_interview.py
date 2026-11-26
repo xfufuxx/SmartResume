@@ -2,7 +2,7 @@
 
 覆盖：
   1. 页面骨架：标题/配置面板/空态引导/历史列表
-  2. 旧版「快速押题」会话：只读回放、题目卡完整换行、押题清单抽屉
+  2. 旧版「快速押题」会话：只读回放、题目卡完整换行、押题题单抽屉
   3. 新会话全链路：开场 → 出题 → 作答 → 点评 → 结束复盘（真实 LLM，可用 --no-live 跳过）
   4. 刷新恢复：消息流水从后端重放
   5. 删除会话 + 控制台无报错/水合错误
@@ -109,11 +109,13 @@ def main() -> int:
                       "; ".join(f"#{o['i']} {o['sw']}>{o['cw']}" for o in clipped[:3]))
                 shot(page, "02-legacy-readonly")
 
-                # 押题清单抽屉
+                # 题目抽屉（旧版快速押题 → 押题题单）
                 page.locator('[data-testid="mock-open-drawer"]').click()
                 drawer = page.locator('[data-testid="mock-drawer"]')
                 drawer.wait_for(timeout=15_000)
-                check("押题清单抽屉打开", drawer.is_visible())
+                check("押题题单抽屉打开", drawer.is_visible())
+                legacy_title = drawer.locator(".ant-drawer-title").inner_text().strip()
+                check("旧版标题为「押题题单」", legacy_title.startswith("押题题单"), legacy_title)
                 check("抽屉内题目条目渲染", page.locator('[data-testid="mock-drawer-item"]').count() >= 1)
                 shot(page, "03-drawer")
                 page.keyboard.press("Escape")
@@ -167,6 +169,20 @@ def main() -> int:
                            if first_q.strip() in bubbles.nth(i).inner_text()]
                     check("正文不与题卡重复题干", len(dup) == 0, f"{len(dup)} 条重复")
                     shot(page, "04-first-question")
+
+                    # 措辞校验：对话式用到的是「本场题目」，不是押题清单
+                    open_drawer = page.locator('[data-testid="mock-open-drawer"]')
+                    check("对话内题目入口叫「本场题目」",
+                          open_drawer.inner_text().strip() == "本场题目",
+                          open_drawer.inner_text().strip())
+                    open_drawer.click()
+                    dlg = page.locator('[data-testid="mock-drawer"]')
+                    dlg.wait_for(timeout=15_000)
+                    dlg_title = dlg.locator(".ant-drawer-title").inner_text().strip()
+                    check("抽屉标题为「本场题目」", dlg_title.startswith("本场题目"), dlg_title)
+                    check("界面不再出现「押题清单」", page.get_by_text("押题清单").count() == 0)
+                    page.keyboard.press("Escape")
+                    page.wait_for_timeout(400)
 
                     # 作答
                     page.locator('[data-testid="mock-input"]').fill("我先用压测定位瓶颈，把通知改成异步，接口响应从 800ms 降到 300ms。")

@@ -208,7 +208,7 @@ export default function MockInterviewPage() {
                 </div>
                 <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                   <Button block size="small" icon={<FileTextOutlined />} onClick={() => setDrawerOpen(true)}>
-                    押题清单
+                    {current.mode === 'quick' ? '押题题单' : '本场题目'}
                   </Button>
                   <Button block size="small" icon={<CommentOutlined />} onClick={reset}>
                     新开一场
@@ -269,6 +269,7 @@ export default function MockInterviewPage() {
         <QuestionsDrawer
           open={drawerOpen}
           questions={current?.questions || []}
+          mode={current?.mode}
           onClose={() => setDrawerOpen(false)}
           onBookmark={handleBookmark}
           onNoteSaved={handleNoteSaved}

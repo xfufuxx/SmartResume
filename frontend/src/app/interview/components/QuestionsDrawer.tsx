@@ -1,6 +1,10 @@
 'use client'
 
-/** 押题清单抽屉：按考察维度分组，可收藏、记笔记、看要点。 */
+/** 题目抽屉：按考察维度分组，可收藏、记笔记、看要点。
+ *
+ * 标题按会话类型区分——对话式是「本场题目」（真的已经问过的题），
+ * 一次性快速押题才是「押题题单」（还没问、只是预测）。
+ */
 import React, { useEffect, useState } from 'react'
 import { Button, Drawer, Empty, Input, Tag, message } from 'antd'
 import { BulbOutlined, SaveOutlined, StarFilled, StarOutlined } from '@ant-design/icons'
@@ -51,29 +55,32 @@ function NoteEditor({ item, onSaved }: { item: InterviewQuestion; onSaved: (note
 export default function QuestionsDrawer({
   open,
   questions,
+  mode,
   onClose,
   onBookmark,
   onNoteSaved,
 }: {
   open: boolean
   questions: InterviewQuestion[]
+  mode?: 'chat' | 'quick'
   onClose: () => void
   onBookmark: (q: InterviewQuestion) => void
   onNoteSaved: (id: string, note: string) => void
 }) {
   const groups = groupQuestionsByCategory(questions)
   const [expanded, setExpanded] = useState<string | null>(null)
+  const quick = mode === 'quick'
 
   return (
     <Drawer
-      title={`押题清单（${questions.length} 题）`}
+      title={`${quick ? '押题题单' : '本场题目'}（${questions.length} 题）`}
       open={open}
       onClose={onClose}
       width={440}
       data-testid="mock-drawer"
     >
       {!questions.length ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有出题" />
+        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description={quick ? '还没有生成题目' : '这一场还没问到题'} />
       ) : (
         groups.map((group) => (
           <div key={group.category} className="mock-drawer-group">
