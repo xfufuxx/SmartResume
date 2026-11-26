@@ -18,10 +18,11 @@ import { resumes, toBackendUrl, RESUMES_CHANGED_EVENT } from '@/lib/api'
 import { getToken } from '@/lib/auth'
 import { useTheme } from '@/lib/theme'
 import { formatDate } from '@/lib/utils'
-import { useResumeUpload, uploadPhaseText } from '@/hooks/useResumeUpload'
+import { useResumeUpload } from '@/hooks/useResumeUpload'
 import type { ResumeRecord, ResumeStats, ResumeVersionTree, VersionNode } from '@/types'
 import AppLayout from '@/components/AppLayout'
 import AuthGate from '@/components/AuthGate'
+import ResumeUploadProgress from '@/components/ResumeUploadProgress'
 
 const { Text, Title } = Typography
 
@@ -182,7 +183,8 @@ export default function ResumeLibrary() {
   // 上传分两阶段：请求体上传（真实百分比）→ 后端 OCR/LLM 解析（诚实显示等待时长）
   const {
     phase: uploadPhase, percent: uploadPercent, elapsed: uploadElapsed,
-    fileName: uploadingFileName, busy: uploading, upload: uploadResumeFile,
+    fileName: uploadingFileName, errorMsg: uploadErrorMsg, busy: uploading, upload: uploadResumeFile,
+    reset: resetUpload,
   } = useResumeUpload()
 
   // 回收站
@@ -939,32 +941,16 @@ export default function ResumeLibrary() {
         <div className="resume-layout" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           {/* 左侧主内容 */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* 上传进度：上传中显示真实百分比，解析中诚实显示已等待时长 */}
-            {uploading && (
-              <div
-                data-testid="resume-upload-progress"
-                style={{
-                  marginBottom: 12, padding: '12px 16px', borderRadius: 10,
-                  background: isDark ? 'rgba(10,132,255,0.10)' : '#EFF6FF',
-                  border: `1px solid ${isDark ? 'rgba(10,132,255,0.25)' : '#BFDBFE'}`,
-                }}
-              >
-                <Space direction="vertical" style={{ width: '100%' }} size={6}>
-                  <Space size={8}>
-                    <Spin size="small" />
-                    <Text strong style={{ fontSize: 13 }}>
-                      {uploadPhaseText(uploadPhase, uploadPercent, uploadingFileName, uploadElapsed)}
-                    </Text>
-                  </Space>
-                  {uploadPhase === 'uploading' ? (
-                    <Progress percent={uploadPercent} size="small" />
-                  ) : (
-                    <Text type="secondary" style={{ fontSize: 12 }}>
-                      正在识别文字并结构化，扫描件 / 图片首次解析可能需 1–2 分钟，请勿关闭页面
-                    </Text>
-                  )}
-                </Space>
-              </div>
+            {/* 上传进度条：上传中实时百分比 → 解析中（诚实等待时长）→ 成功 / 失败四态 */}
+            {uploadPhase !== 'idle' && (
+              <ResumeUploadProgress
+                phase={uploadPhase}
+                percent={uploadPercent}
+                elapsed={uploadElapsed}
+                fileName={uploadingFileName}
+                errorMsg={uploadErrorMsg}
+                onReset={resetUpload}
+              />
             )}
 
             {/* 筛选标签页 */}

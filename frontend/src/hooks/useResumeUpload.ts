@@ -27,6 +27,8 @@ export function useResumeUpload() {
   const [percent, setPercent] = useState(0)
   const [fileName, setFileName] = useState('')
   const [elapsed, setElapsed] = useState(0)
+  // 失败原因（透传后端 detail），供进度条错误态展示
+  const [errorMsg, setErrorMsg] = useState('')
 
   // 解析阶段每秒累加等待时长（真实耗时，不是伪装的进度）
   useEffect(() => {
@@ -39,6 +41,7 @@ export function useResumeUpload() {
     setFileName(file.name)
     setPercent(0)
     setElapsed(0)
+    setErrorMsg('')
     setPhase('uploading')
 
     // 兜底：少数环境 XHR 不回报 100% 进度，1.2s 后强制进入「解析中」，
@@ -58,6 +61,7 @@ export function useResumeUpload() {
       notifyResumesChanged()
       return res.data as ResumeUploadResult
     } catch (e) {
+      setErrorMsg(extractUploadError(e))
       setPhase('error')
       throw e
     } finally {
@@ -70,11 +74,27 @@ export function useResumeUpload() {
     setPercent(0)
     setElapsed(0)
     setFileName('')
+    setErrorMsg('')
   }, [])
 
   const busy = phase === 'uploading' || phase === 'parsing'
 
-  return { phase, percent, elapsed, fileName, busy, upload, reset }
+  return { phase, percent, elapsed, fileName, errorMsg, busy, upload, reset }
+}
+
+/** 从上传异常中提炼人话（优先后端 detail，网络/超时给原因码），与页面 toast 口径一致 */
+export function extractUploadError(e: unknown): string {
+  const err = e as { response?: { status?: number; data?: { detail?: unknown } }; message?: string; code?: string }
+  const detail = err?.response?.data?.detail
+  if (typeof detail === 'string' && detail.trim()) return detail
+  const st = err?.response?.status
+  if (st === 401) return '登录已过期，请重新登录'
+  if (st === 413) return '文件过大，请选择 20MB 以内的文件'
+  if (st && st >= 500) return `服务器内部错误（${st}），请稍后重试`
+  const msg = err?.message || ''
+  if (msg.includes('timeout') || err?.code === 'ECONNABORTED') return '处理超时，请稍后重试或改用 Word（.docx）格式'
+  if (err?.code === 'ERR_NETWORK') return '网络错误，无法连接到服务器'
+  return msg || '上传失败'
 }
 
 /** 供 UI 复用的阶段文案 */

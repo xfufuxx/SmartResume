@@ -2952,6 +2952,78 @@ body {
   padding: 6px 10px;
 }
 
+/* ── 简历上传四态进度条（首页 Dragger + 我的简历页共用） ── */
+.resume-upload-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 10px;
+  background: var(--primary-50);
+  border: 1px solid var(--primary-100, rgba(0, 122, 255, 0.25));
+  text-align: left;
+}
+
+.resume-upload-progress.is-error {
+  background: var(--error-50);
+  border-color: var(--error-500, rgba(255, 59, 48, 0.35));
+}
+
+.resume-upload-progress-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.resume-upload-progress-icon {
+  display: inline-flex;
+  align-items: center;
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.resume-upload-progress-title {
+  flex: 1;
+  min-width: 0;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--text-primary, var(--text-secondary));
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.resume-upload-progress.is-done .resume-upload-progress-title {
+  color: var(--success-600);
+}
+
+.resume-upload-progress.is-error .resume-upload-progress-title {
+  color: var(--error-500);
+}
+
+.resume-upload-progress-close {
+  flex-shrink: 0;
+  font-size: 12px;
+}
+
+.resume-upload-progress-hint {
+  font-size: 12px;
+  color: var(--text-tertiary);
+  line-height: 1.5;
+}
+
+.resume-upload-progress-error {
+  font-size: 12px;
+  color: var(--text-secondary);
+  background: var(--error-50);
+  border-radius: 8px;
+  padding: 6px 10px;
+  line-height: 1.6;
+  word-break: break-all;
+}
+
 .job-import-item-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;

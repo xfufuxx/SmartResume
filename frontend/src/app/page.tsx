@@ -23,6 +23,7 @@ import { useApiData } from '@/lib/useApi'
 import { formatDate } from '@/lib/utils'
 import { useResumeUpload, uploadPhaseText } from '@/hooks/useResumeUpload'
 import AppLayout from '@/components/AppLayout'
+import ResumeUploadProgress from '@/components/ResumeUploadProgress'
 import { TEMPLATE_OPTIONS, DEFAULT_TEMPLATE } from '@/lib/templates'
 import { TemplateRegistry } from '@/lib/templates-register'
 import TemplateSelector from '@/components/TemplateSelector'
@@ -77,7 +78,8 @@ export default function Home() {
   // 上传分两阶段：请求体上传（真实百分比）→ 后端 OCR/LLM 解析（诚实显示等待时长）
   const {
     phase: resumePhase, percent: resumePercent, elapsed: resumeElapsed,
-    fileName: resumeFileName, busy: uploadBusy, upload: uploadResumeFile,
+    fileName: resumeFileName, errorMsg: resumeErrorMsg, busy: uploadBusy,
+    upload: uploadResumeFile, reset: resetResumeUpload,
   } = useResumeUpload()
   // 从简历库挑选已有简历时复用同一个遮罩，但与上传阶段互不影响
   const [resumeSelecting, setResumeSelecting] = useState(false)
@@ -766,23 +768,16 @@ export default function Home() {
                   disabled={resumeLoading}
                   className="opt-dragger"
                 >
-                  {uploadBusy ? (
-                    <div
-                      data-testid="resume-upload-progress"
-                      style={{ minHeight: 80, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '8px 12px' }}
-                    >
-                      <Spin size="small" />
-                      <span style={{ fontSize: 13, color: 'var(--text-secondary)' }}>
-                        {uploadPhaseText(resumePhase, resumePercent, resumeFileName, resumeElapsed)}
-                      </span>
-                      {resumePhase === 'uploading' ? (
-                        <Progress percent={resumePercent} size="small" style={{ width: '80%', margin: 0 }} />
-                      ) : (
-                        <span style={{ fontSize: 12, color: 'var(--text-tertiary)' }}>
-                          扫描件 / 图片首次解析可能需 1–2 分钟，请勿关闭页面
-                        </span>
-                      )}
-                    </div>
+                  {resumePhase !== 'idle' ? (
+                    <ResumeUploadProgress
+                      phase={resumePhase}
+                      percent={resumePercent}
+                      elapsed={resumeElapsed}
+                      fileName={resumeFileName}
+                      errorMsg={resumeErrorMsg}
+                      onReset={resetResumeUpload}
+                      resetText="重新上传"
+                    />
                   ) : (
                     <>
                       <p className="ant-upload-drag-icon"><UploadOutlined /></p>
