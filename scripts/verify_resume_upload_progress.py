@@ -71,6 +71,14 @@ def bar_percent(page) -> int:
         return 0
 
 
+def bar_phase(page) -> str:
+    cls = page.eval_on_selector('[data-testid="resume-upload-progress"]', "el => el.className")
+    for name in ("preparing", "uploading", "parsing", "done", "error", "cancelled"):
+        if f"is-{name}" in cls:
+            return name
+    return "?"
+
+
 def active_stages(page) -> int:
     return page.locator('[data-testid="resume-upload-stages"] .is-active').count()
 
@@ -119,28 +127,38 @@ def main() -> int:
         page.wait_for_timeout(400)
         check("失败态：点击关闭回 idle（进度条消失）", prog.count() == 0)
 
-        # ── 2. /resumes：阶段化进度（挂起响应）→ 放行 → 成功 ──
+        # ── 2. /resumes：渐进式进度（挂起响应 10s，全程采样序列）→ 放行 → 成功 ──
         held: dict = {}
         page.route("**/api/resumes/upload", lambda route: held.setdefault("route", route))
         page.set_input_files("#upload-resume", {"name": "good.pdf", "mimeType": "application/pdf", "buffer": small_pdf})
         prog.wait_for(state="visible", timeout=15000)
-        # 早期（准备/上传/解析初段）：percent 必须远离终点（不跳 99/100）
-        early = bar_percent(page)
-        check("阶段化：开局 percent 远离终点（<40）", 0 < early < 40, f"early={early}")
-        page.wait_for_selector(".resume-upload-progress.is-parsing", timeout=15000)
+
+        # 全程采样：500ms × 20 ≈ 10s（覆盖 准备/上传/解析 三段）
+        seq = []
+        for _ in range(20):
+            seq.append((bar_phase(page), bar_percent(page)))
+            time.sleep(0.5)
+
+        pcts = [p for _, p in seq]
+        up_samples = [p for ph, p in seq if ph in ("preparing", "uploading")]
+        parse_samples = [p for ph, p in seq if ph == "parsing"]
+
+        check("阶段化：上传段有渐进过程（存在 <35 的样本）", any(0 < p < 35 for p in up_samples), f"up={up_samples}")
+        check("阶段化：上传段不突跳到解析区间", all(p < 35 for p in up_samples), f"up={up_samples}")
+        check("阶段化：进度全程单调不减（无回退）", all(b >= a for a, b in zip(pcts, pcts[1:])), f"pcts={pcts}")
+        check("阶段化：解析中从不出现 100%（100 只留给完成）", all(p < 100 for ph, p in seq if ph != "done"), f"seq={seq}")
+        check("阶段化：解析段样本充足（≥8）", len(parse_samples) >= 8, f"n={len(parse_samples)}")
+        if len(parse_samples) >= 8:
+            growth = parse_samples[-1] - parse_samples[0]
+            check("渐进式：解析段持续前进（10s 内增长 ≥3%）", growth >= 3, f"{parse_samples[0]} -> {parse_samples[-1]}")
+            # 不得「卡住」：解析段末尾 4 个样本里仍有可见推进（≥2%）
+            tail = parse_samples[-4:]
+            check("渐进式：解析段末尾仍在推进（无长期停滞）", max(tail) - min(tail) >= 2, f"tail={tail}")
+
         txt = (prog.text_content() or "").strip()
         check("解析中态：进入解析样式（含等待时长文案）", "AI 正在解析简历" in txt, txt[:60])
-        bar_cls = page.eval_on_selector('[data-testid="resume-upload-progress"] .ant-progress', "el => el.className")
-        check("解析中态：进度条动画态（active）", "status-active" in bar_cls, bar_cls[:150])
-        check("解析中态：显示爬升数字（show-info）", "show-info" in bar_cls, bar_cls[:150])
-        check("解析中态：提示勿关闭页面", "请勿关闭页面" in txt, txt[:120])
-        # 取消按钮在忙碌阶段可见
+        check("解析中态：提示勿关闭页面 + 预计时长", "请勿关闭页面" in txt and "预计约" in txt, txt[:160])
         check("解析中态：展示「取消上传」按钮", page.locator('[data-testid="resume-upload-cancel"]').count() == 1)
-        # 爬升采样：两次间隔 ≥1s，percent 递增且封顶 < 90
-        p1 = bar_percent(page)
-        time.sleep(1.3)
-        p2 = bar_percent(page)
-        check("解析中态：进度缓慢爬升（递增）", 0 < p1 < p2 < 90, f"p1={p1} p2={p2}")
         check("解析中态：阶段指示条高亮到「解析」段", active_stages(page) == 3, f"active={active_stages(page)}")
 
         held["route"].fulfill(
@@ -154,6 +172,9 @@ def main() -> int:
         check("成功态：进度条 success 样式", page.locator('[data-testid="resume-upload-progress"] .ant-progress-status-success').count() >= 1)
         check("成功态：阶段指示条四段全亮", active_stages(page) == 4, f"active={active_stages(page)}")
         check("成功态：无取消按钮（已完成）", page.locator('[data-testid="resume-upload-cancel"]').count() == 0)
+        # 回归「先 100 再回落」：done 后静置 3s 必须仍然是 100
+        time.sleep(3)
+        check("成功态：完成后 3s 进度仍为 100（无回落）", bar_percent(page) == 100 and bar_phase(page) == "done", f"{bar_phase(page)}|{bar_percent(page)}")
         page.get_by_role("button", name="关闭").click()
         page.wait_for_timeout(400)
         check("成功态：点击关闭回 idle", prog.count() == 0)
@@ -169,8 +190,11 @@ def main() -> int:
         txt = (prog.text_content() or "").strip()
         check("取消态：明示「已取消上传」", "已取消上传" in txt, txt[:60])
         pct = bar_percent(page)
-        check("取消态：进度条停留在中途（<90，不到终点）", 0 < pct < 90, f"pct={pct}")
+        check("取消态：进度条停留在中途（<96，不到终点）", 0 < pct < 96, f"pct={pct}")
         check("取消态：取消按钮已隐藏", page.locator('[data-testid="resume-upload-cancel"]').count() == 0)
+        # 取消后定时器必须全部清理：静置 2s 进度不得继续爬升
+        time.sleep(2)
+        check("取消态：进度已冻结（定时器已清理）", bar_percent(page) == pct, f"{pct} -> {bar_percent(page)}")
         # 挂起的 route 已被客户端中止，补 abort 清理（避免悬挂请求占坑）
         if "route" in held_cancel:
             try:

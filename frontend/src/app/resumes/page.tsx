@@ -183,7 +183,8 @@ export default function ResumeLibrary() {
   // 上传阶段化进度：准备 → 上传（真实字节进度）→ 解析（缓慢爬升）→ 完成 / 失败 / 取消
   const {
     phase: uploadPhase, percent: uploadPercent, elapsed: uploadElapsed,
-    fileName: uploadingFileName, errorMsg: uploadErrorMsg, busy: uploading, upload: uploadResumeFile,
+    fileName: uploadingFileName, errorMsg: uploadErrorMsg, estimateSec: uploadEstimateSec,
+    busy: uploading, upload: uploadResumeFile,
     cancel: cancelUpload, reset: resetUpload,
   } = useResumeUpload()
 
@@ -950,6 +951,7 @@ export default function ResumeLibrary() {
                 elapsed={uploadElapsed}
                 fileName={uploadingFileName}
                 errorMsg={uploadErrorMsg}
+                estimateSec={uploadEstimateSec}
                 onCancel={cancelUpload}
                 onReset={resetUpload}
               />

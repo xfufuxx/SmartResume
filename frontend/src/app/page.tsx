@@ -78,7 +78,8 @@ export default function Home() {
   // 上传分两阶段：请求体上传（真实百分比）→ 后端 OCR/LLM 解析（诚实显示等待时长）
   const {
     phase: resumePhase, percent: resumePercent, elapsed: resumeElapsed,
-    fileName: resumeFileName, errorMsg: resumeErrorMsg, busy: uploadBusy,
+    fileName: resumeFileName, errorMsg: resumeErrorMsg, estimateSec: resumeEstimateSec,
+    busy: uploadBusy,
     upload: uploadResumeFile, cancel: cancelResumeUpload, reset: resetResumeUpload,
   } = useResumeUpload()
   // 从简历库挑选已有简历时复用同一个遮罩，但与上传阶段互不影响
@@ -776,6 +777,7 @@ export default function Home() {
                       elapsed={resumeElapsed}
                       fileName={resumeFileName}
                       errorMsg={resumeErrorMsg}
+                      estimateSec={resumeEstimateSec}
                       onCancel={cancelResumeUpload}
                       onReset={resetResumeUpload}
                       resetText="重新上传"

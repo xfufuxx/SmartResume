@@ -23,12 +23,14 @@ function stageIndex(phase: ResumeUploadPhase): number {
 }
 
 /**
- * 简历上传进度条（阶段化：准备 → 上传 → 解析 → 完成）+ 取消上传。
+ * 简历上传进度条（渐进式：准备 → 上传 → 解析 → 完成）+ 取消上传。
  *
- * 进度观感：整条 0~100 进度轴分段推进，不再出现开局即接近终点的观感——
- *   上传中：真实字节进度映射到 5%~35%（显示数字）
- *   解析中：35%~88% 缓慢爬升（每秒 +2，88% 封顶驻留；显示数字 + 已等待时长）
- *   成功：绿色 100%；失败：红色条 + 失败原因；取消：灰色条 + 「已取消上传」
+ * 进度语义（数值全程只增不减，100% 只在真正完成时出现）：
+ *   准备：3% 起步（阶段内短暂驻留）
+ *   上传：真实字节进度映射 5%~32%；环境不回报进度时平滑自走，不会停在 0 突跳
+ *   解析：35% 起步，按本机历史耗时做指数渐近爬升，每 500ms 至少 +0.5%，
+ *        条体持续可见前进，永不「爬到某数后一动不动」
+ *   完成：100% 绿条；失败：红条 + 原因；取消：灰条 + 「已取消上传」
  *
  * 供首页上传 Dragger 与「我的简历」页顶部信息条共用；
  * data-testid 沿用 resume-upload-progress，取消按钮 resume-upload-cancel。
@@ -40,6 +42,8 @@ export interface ResumeUploadProgressProps {
   fileName: string;
   /** 失败原因（phase=error 时展示） */
   errorMsg?: string;
+  /** 解析耗时估算（秒），用于「预计约 X 秒」提示 */
+  estimateSec?: number;
   /** 上传进行中（preparing/uploading/parsing）时展示「取消上传」按钮的回调 */
   onCancel?: () => void;
   /** done/error/cancelled 态的关闭/重传回调；不传则不显示关闭按钮 */
@@ -55,6 +59,7 @@ export default function ResumeUploadProgress({
   elapsed,
   fileName,
   errorMsg,
+  estimateSec,
   onCancel,
   onReset,
   resetText,
@@ -67,13 +72,13 @@ export default function ResumeUploadProgress({
   // 各阶段主文案
   let title = '';
   if (phase === 'preparing') title = `正在准备上传 ${name}…`;
-  else if (phase === 'uploading') title = `正在上传 ${name}… ${percent}%`;
+  else if (phase === 'uploading') title = `正在上传 ${name}…`;
   else if (phase === 'parsing') title = `AI 正在解析简历 · 已等待 ${elapsed} 秒`;
   else if (phase === 'done') title = `解析完成，${name} 已就绪`;
   else if (phase === 'cancelled') title = '已取消上传';
   else if (phase === 'error') title = '上传失败';
 
-  // 进度条各阶段形态：解析中随爬升显示数字；成功绿色；失败红色；取消灰色驻留
+  // 进度条：进行中一律显示真实推进的数值（解析段也是连续爬升，不再硬编码封顶值）
   const bar =
     phase === 'done' ? (
       <Progress percent={100} status="success" size="small" />
@@ -81,8 +86,6 @@ export default function ResumeUploadProgress({
       <Progress percent={percent > 0 ? percent : 100} status="exception" size="small" />
     ) : phase === 'cancelled' ? (
       <Progress percent={percent > 0 ? percent : 1} status="normal" size="small" />
-    ) : phase === 'preparing' ? (
-      <Progress percent={percent > 0 ? percent : 2} status="active" size="small" />
     ) : (
       <Progress percent={percent} status="active" size="small" />
     );
@@ -136,7 +139,8 @@ export default function ResumeUploadProgress({
       )}
       {phase === 'parsing' && (
         <div className="resume-upload-progress-hint">
-          正在识别文字并结构化，扫描件 / 图片首次解析可能需 1–2 分钟，请勿关闭页面
+          正在识别文字并结构化，预计约 {estimateSec && estimateSec > 0 ? estimateSec : 30} 秒完成；
+          扫描件 / 图片可能更久，请勿关闭页面
         </div>
       )}
       {phase === 'error' && errorMsg ? (
