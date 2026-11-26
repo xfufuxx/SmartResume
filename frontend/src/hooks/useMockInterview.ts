@@ -173,7 +173,9 @@ export function useMockInterview() {
       setLoading(false)
       await runTurn(sid, 'start')
     } catch (e: unknown) {
-      setError((e as Error)?.message || '创建模拟会话失败，请稍后重试')
+      const msg = (e as Error)?.message || '创建模拟会话失败，请稍后重试'
+      setError(msg)
+      antdMessage.error(msg)  // 此时还没有会话，ChatStream 的错误条无处渲染
       setLoading(false)
     }
   }, [applySession, runTurn])
@@ -187,7 +189,9 @@ export function useMockInterview() {
       const res = await interview.getSession(id)
       applySession(res.data as InterviewSessionDetail)
     } catch (e: unknown) {
-      setError((e as Error)?.message || '加载会话失败')
+      const msg = (e as Error)?.message || '加载会话失败'
+      setError(msg)
+      antdMessage.error(msg)
     } finally {
       setLoading(false)
     }
@@ -239,7 +243,9 @@ export function useMockInterview() {
       })
       antdMessage.success('快速押题已生成，可逐题查看要点')
     } catch (e: unknown) {
-      setError((e as Error)?.message || '快速押题失败')
+      const msg = (e as Error)?.message || '快速押题失败'
+      setError(msg)
+      antdMessage.error(msg)
     } finally {
       stopPolling()
       setQuickGenerating(false)
