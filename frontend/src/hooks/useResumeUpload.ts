@@ -13,8 +13,8 @@ import { resumes, notifyResumesChanged } from '@/lib/api'
  *    环境不回报进度时按缓动曲线自走（先快后慢），走到上限才切解析，
  *    与解析起点 35% 只差 3%，不存在「停 0 干等后大跳」；
  * 3. **解析段渐近爬升、永不静止**：按本机历史解析耗时做指数渐近曲线
- *    （35% → 96%，30s 约到 84%），并保证每 500ms 至少 +0.5%，
- *    条永远在可见地前进，不会「爬到某个数后一动不动」；
+ *    （35% → 96%），并叠加随剩余距离衰减的下限步长（0.25~1.2/tick，永不为 0），
+ *    真实解析再慢也在前进，不会「爬到某个数后一动不动」；
  * 4. **100% 只在真正完成时出现**，解析段上限 96%，从根上杜绝「先满再回落」；
  * 5. 100% 之后不再有任何定时器能写入（clearTimers + 单调守卫双保险）。
  *
@@ -149,8 +149,10 @@ export function useResumeUpload() {
       const ratio = elapsedMsRef.current / est
       const curved = UPLOAD_PROGRESS.PARSE_START
         + (UPLOAD_PROGRESS.PARSE_CAP - UPLOAD_PROGRESS.PARSE_START) * (1 - Math.exp(-1.6 * ratio))
-      // 下限保障：即使渐近曲线走平，也保证每 tick 有可见增量，条体永不「卡住」
-      advance(Math.min(UPLOAD_PROGRESS.PARSE_CAP, Math.max(curved, percentRef.current + 0.5)))
+      // 下限保障：按剩余距离衰减（0.25~1.2/tick），越接近上限步长越小但永不为 0，
+      // 因此即使真实解析远超估算时长，条体仍在前进，不会撞到 96% 后停死
+      const floorStep = Math.max(0.25, (UPLOAD_PROGRESS.PARSE_CAP - percentRef.current) * 0.02)
+      advance(Math.max(curved, percentRef.current + floorStep))
     }, TICK_MS)
   }, [advance])
 
