@@ -3315,6 +3315,40 @@ body {
   margin: 7px 0;
 }
 
+/* ── 批量管理：整卡点选（已移除复选框）──
+   选中反馈用三重信号：主色描边 + 主色浅底 + 外环，暗色主题下 --primary-50
+   是半透明主色，天然适配深色卡片；is-selectable 只表达「可点」，
+   is-selected 才表达「已选中」，两者不混用。 */
+.selectable-card {
+  transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.selectable-card.is-selectable {
+  cursor: pointer;
+}
+
+.selectable-card.is-selectable:hover {
+  border-color: var(--primary-400) !important;
+}
+
+.selectable-card.is-selectable:focus-visible {
+  outline: 2px solid var(--primary-500);
+  outline-offset: 2px;
+}
+
+.selectable-card.is-selected,
+.selectable-card.is-selected:hover {
+  border-color: var(--primary-500) !important;
+  background: var(--primary-50) !important;
+  box-shadow: 0 0 0 3px var(--primary-100), 0 10px 26px rgba(0, 122, 255, 0.18) !important;
+}
+
+/* 选中卡的操作栏跟随卡片一起着色，避免「蓝卡片 + 灰操作栏」割裂 */
+.selectable-card.is-selected > .ant-card-actions {
+  background: var(--primary-50) !important;
+  border-top-color: var(--primary-100) !important;
+}
+
 /* 简历页左右分栏：窄屏（含平板竖屏 / 手机）时右栏堆叠到卡片列表下方，
    避免固定 280px 侧栏把卡片挤压到过窄导致内容换行错乱 */
 @media (max-width: 1180px) {

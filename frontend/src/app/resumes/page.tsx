@@ -3,7 +3,7 @@
 import React, { useEffect, useState, useCallback, useMemo } from 'react'
 import {
   Button, Card, Typography, Spin, Row, Col, message, Tag, Space,
-  Modal, Input, Empty, Tooltip, Popconfirm, Alert, Descriptions, Checkbox,
+  Modal, Input, Empty, Tooltip, Popconfirm, Alert, Descriptions,
   Progress, Dropdown, Select, Segmented, Pagination, Divider, Tree,
 } from 'antd'
 import {
@@ -579,6 +579,30 @@ export default function ResumeLibrary() {
     )
   }, [])
 
+  /* ── 批量管理：整卡点选 ────────────────────────────────────────
+   * 点击卡片任意位置即切换选中；卡片内部的按钮 / 菜单 / 输入框等控件
+   * 属于独立交互，不触发选中（否则点「删除」会顺带把这张卡选上）。 */
+  const isInteractiveTarget = useCallback((target: EventTarget | null): boolean => {
+    const el = target as HTMLElement | null
+    if (!el || typeof el.closest !== 'function') return false
+    return !!el.closest(
+      'button, a, input, textarea, select, .ant-dropdown, .ant-popover, .ant-checkbox, .ant-progress'
+    )
+  }, [])
+
+  const handleCardSelect = useCallback((e: React.MouseEvent, id: string) => {
+    if (isInteractiveTarget(e.target)) return
+    toggleSelect(id)
+  }, [isInteractiveTarget, toggleSelect])
+
+  /** 键盘可达：Enter / 空格切换选中（与鼠标点击等价） */
+  const handleCardSelectKeyDown = useCallback((e: React.KeyboardEvent, id: string) => {
+    if (e.key !== 'Enter' && e.key !== ' ') return
+    if (isInteractiveTarget(e.target)) return
+    e.preventDefault()
+    toggleSelect(id)
+  }, [isInteractiveTarget, toggleSelect])
+
   const toggleSelectAll = useCallback(() => {
     if (selectedIds.length === list.length && list.length > 0) {
       setSelectedIds([])
@@ -723,22 +747,24 @@ export default function ResumeLibrary() {
             </Tooltip>
           </Popconfirm>,
         ]
+    const selectable = selectMode && !isTrash
+    const selected = selectable && selectedIds.includes(resume.id)
     return (
       <Card
         hoverable
-        className="resume-card"
         key={resume.id}
+        className={`resume-card selectable-card${selectable ? ' is-selectable' : ''}${selected ? ' is-selected' : ''}`}
         style={{ borderRadius: 12, overflow: 'hidden', position: 'relative', height: '100%' }}
         actions={actions}
+        onClick={selectable ? (e) => handleCardSelect(e, resume.id) : undefined}
+        onKeyDown={selectable ? (e) => handleCardSelectKeyDown(e, resume.id) : undefined}
+        tabIndex={selectable ? 0 : undefined}
+        role={selectable ? 'checkbox' : undefined}
+        aria-checked={selectable ? selected : undefined}
+        aria-label={selectable ? `选择简历 ${resume.title || ''}` : undefined}
+        data-testid={`resume-card-${resume.id}`}
+        data-selected={selected ? 'true' : undefined}
       >
-        {selectMode && !isTrash && (
-          <Checkbox
-            checked={selectedIds.includes(resume.id)}
-            onChange={() => toggleSelect(resume.id)}
-            style={{ position: 'absolute', top: 12, left: 12, zIndex: 2 }}
-          />
-        )}
-
         <div style={{ display: 'flex', gap: 14, alignItems: 'stretch', flexWrap: 'wrap', rowGap: 10 }}>
           {/* 缩略图 / 图标占位 */}
           <div style={{
@@ -845,12 +871,23 @@ export default function ResumeLibrary() {
 
   const renderResumeListItem = (resume: ResumeRecord) => {
     const status = STATUS_MAP[resume.status || 'draft'] || STATUS_MAP.draft
+    const selectable = selectMode && activeTab !== 'recycle'
+    const selected = selectable && selectedIds.includes(resume.id)
     return (
-      <Card key={resume.id} style={{ borderRadius: 12, marginBottom: 12 }}>
+      <Card
+        key={resume.id}
+        className={`selectable-card${selectable ? ' is-selectable' : ''}${selected ? ' is-selected' : ''}`}
+        style={{ borderRadius: 12, marginBottom: 12 }}
+        onClick={selectable ? (e) => handleCardSelect(e, resume.id) : undefined}
+        onKeyDown={selectable ? (e) => handleCardSelectKeyDown(e, resume.id) : undefined}
+        tabIndex={selectable ? 0 : undefined}
+        role={selectable ? 'checkbox' : undefined}
+        aria-checked={selectable ? selected : undefined}
+        aria-label={selectable ? `选择简历 ${resume.title || ''}` : undefined}
+        data-testid={`resume-row-${resume.id}`}
+        data-selected={selected ? 'true' : undefined}
+      >
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          {selectMode && (
-            <Checkbox checked={selectedIds.includes(resume.id)} onChange={() => toggleSelect(resume.id)} />
-          )}
           <div style={{
             width: 40, height: 40, borderRadius: 8, flexShrink: 0,
             background: isDark ? 'linear-gradient(135deg, rgba(10, 132, 255, 0.18), rgba(10, 132, 255, 0.08))' : 'linear-gradient(135deg, #EFF6FF, #DBEAFE)',
