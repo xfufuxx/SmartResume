@@ -604,7 +604,11 @@ export interface InsightOverview {
   generated_at: string
 }
 
-// ── AI 面试预测 ──
+// ── 模拟押题（对话式）/ 旧版快速押题 ──
+export type InterviewMode = 'quick' | 'chat'
+export type InterviewStage = 'briefing' | 'asking' | 'finished'
+export type InterviewIntent = 'start' | 'answer' | 'next' | 'hint' | 'skip' | 'followup' | 'finish'
+
 export interface InterviewQuestion {
   id: string
   session_id: string
@@ -619,21 +623,64 @@ export interface InterviewQuestion {
   note?: string | null
 }
 
+export interface InterviewFeedback {
+  score: number
+  hits: string[]
+  gaps: string[]
+  advice: string
+}
+
+export interface InterviewSummary {
+  coverage: Record<string, number>
+  strong: string[]
+  weak: string[]
+  actions: string[]
+  /** 模型未给结构化块时，后端用实际出题分类计数补的最小复盘 */
+  fallback?: boolean
+}
+
+export interface InterviewMessagePayload {
+  question?: InterviewQuestion
+  feedback?: InterviewFeedback
+  summary?: InterviewSummary
+}
+
+export interface InterviewChatMessage {
+  id: string
+  session_id: string
+  role: 'user' | 'assistant'
+  kind: 'briefing' | 'question' | 'answer' | 'feedback' | 'hint' | 'summary' | 'text' | 'note'
+  content: string
+  payload: InterviewMessagePayload
+  question_id?: string | null
+  order_index: number
+  created_at?: string | null
+}
+
 export interface InterviewSessionItem {
   id: string
   resume_id?: string | null
   job_image_id?: string | null
   job_title?: string | null
   company?: string | null
+  title?: string | null
+  mode?: InterviewMode
+  stage?: InterviewStage | null
   status: 'pending' | 'processing' | 'completed' | 'failed'
   error_message?: string | null
   overall_advice?: string | null
+  summary?: InterviewSummary | null
   question_count: number
+  target_count?: number
+  turn_index?: number
+  last_message?: string
   created_at?: string | null
+  finished_at?: string | null
 }
 
 export interface InterviewSessionDetail extends InterviewSessionItem {
   questions: InterviewQuestion[]
+  messages: InterviewChatMessage[]
 }
 
 // ── 岗位匹配罗盘 ──

@@ -90,6 +90,11 @@ class Settings(BaseSettings):
     AI_PHOTO_DAILY_LIMIT: int = 20         # 每用户每日生成上限
     POLISH_DAILY_LIMIT: int = 30           # 每用户每日 AI 对话润色次数上限
 
+    # ── 模拟押题（对话式，每轮一次 LLM 调用）────────────────────────────
+    # 一次完整模拟（8 题）约 10~15 轮，30 轮可覆盖一次完整模拟 + 少量重试。
+    INTERVIEW_DAILY_TURNS: int = 30        # 每用户每日 LLM 对话轮次上限（失败/取消退还）
+    INTERVIEW_SESSION_MAX_TURNS: int = 40  # 单会话轮次硬上限（防无限对话），达到后只能结束复盘
+
     # ── QQ 登录（QQ 互联 OAuth2.0，网站应用）────────────────────────────
     # 申请入口：https://connect.qq.com  → 创建「网站应用」→ 审核通过后拿到
     # APP ID / APP Key，并把「网站回调地址」填成 QQ_REDIRECT_URI。

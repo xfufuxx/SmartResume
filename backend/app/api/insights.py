@@ -285,7 +285,7 @@ async def overview(
             "title": f"即将面试：{nearest.company} · {nearest.position}",
             "desc": (
                 f"{it_time.strftime('%m-%d %H:%M')} {nearest.stage or ''} {nearest.mode or ''}".strip()
-                + "。建议提前用 AI 面试押题演练一轮高频问题。"
+                + "。建议提前用模拟押题演练一轮高频问题。"
             ),
             "action": "去准备", "link": "/interview",
         })

@@ -268,7 +268,7 @@ export default function Dashboard() {
     applied: '收藏后投递转化偏低：别让岗位躺在收藏夹，匹配度达标就尽快定制简历投递。',
     reply: 'HR 回复率偏低：建议检查简历匹配度与关键词覆盖——低于 70 分的简历初筛容易被刷。',
     interview: '回复到面试的转化偏低：复盘投递渠道与简历针对性，优先投递高匹配岗位。',
-    offer: '面试到 Offer 的转化偏低：用 AI 面试押题提前演练高频问题与追问。',
+    offer: '面试到 Offer 的转化偏低：用模拟押题提前演练高频问题与追问。',
   }
   const weakestStage = funnelConv
     .filter((c) => c.rate !== null && c.stuck)
@@ -542,7 +542,7 @@ export default function Dashboard() {
                   <Row gutter={[12, 12]}>
                     {[
                       { key: 'match', label: '岗位匹配罗盘', desc: '一份简历对比全部岗位', icon: <AimOutlined />, path: '/match', color: 'var(--primary-500)' },
-                      { key: 'interview', label: 'AI 面试押题', desc: '预测真题 + 答题要点', icon: <TeamOutlined />, path: '/interview', color: 'var(--success-500)' },
+                      { key: 'interview', label: '模拟押题', desc: 'AI 面试官逐题发问 + 复盘', icon: <TeamOutlined />, path: '/interview', color: 'var(--success-500)' },
                       { key: 'ats', label: 'ATS 体检', desc: '机器可读性检查', icon: <SafetyCertificateOutlined />, path: '/ats', color: 'var(--warning-500)' },
                       { key: 'scoring', label: '简历评分', desc: '四维量化打分', icon: <TrophyOutlined />, path: '/scoring', color: '#8b5cf6' },
                     ].map((t) => (
@@ -661,7 +661,7 @@ export default function Dashboard() {
                           : '继续保持，多做几次针对岗位的精炼效果会更明显。'}
                     </Typography.Paragraph>
                     <Space wrap>
-                      <Button icon={<TeamOutlined />} onClick={() => router.push('/interview')}>生成面试押题</Button>
+                      <Button icon={<TeamOutlined />} onClick={() => router.push('/interview')}>开始模拟面试</Button>
                       <Button icon={<AimOutlined />} onClick={() => router.push('/match')}>看看哪个岗位更适合我</Button>
                       <Button type="link" onClick={() => router.push('/history')}>查看全部优化记录</Button>
                     </Space>

@@ -3,7 +3,7 @@
 > 上传简历 + 岗位需求 → AI 解析、匹配分析、逐段优化 → 渲染为专业排版的 PDF / Word。
 
 面向求职者的 **SaaS 化简历优化平台**：除核心的「解析 → 优化 → 导出」链路外，还包含人岗匹配度评分
-（匹配罗盘）、ATS 兼容性检测、岗位能力测评、面试押题与面试追踪、投递管理（邮件/表单/引导三通道）、
+（匹配罗盘）、ATS 兼容性检测、岗位能力测评、模拟押题（对话式）与面试追踪、投递管理（邮件/表单/引导三通道）、
 AI 对话润色、AI 职业照、二维码工具、56 套简历模板与可视化排版、批量优化、feedback 闭环，
 以及配套的管理员后台、配额套餐与工单支持。
 
@@ -24,7 +24,7 @@ AI 对话润色、AI 职业照、二维码工具、56 套简历模板与可视�
 | ATS 兼容性检测 | `api/ats.py` | 已接入 |
 | 简历评分 / 岗位趋势 | `api/scoring.py` | 已接入 |
 | 优化前后的规则聚合分析 | `api/analysis.py` | 已接入（纯规则，不消耗 AI 额度） |
-| 面试押题（题目生成 / 收藏 / 笔记） | `api/interview.py` | 已接入 |
+| 模拟押题（对话式问答 / 点评 / 复盘 / 收藏 / 笔记） | `api/interview.py` + `services/interview_chat.py` | 已接入（chat 走 SSE；旧快速押题兼容） |
 | 面试追踪（三 Tab 看板，独立于站内消息） | `api/interview_tracks.py` | 已接入 |
 | 投递管理（邮件 / 表单 / 引导三通道） | `api/applications.py` + `services/delivery_email.py` `form_delivery.py` `guide_pack.py` | 已接入（email 通道 Redis 日额 20；**表单通道合规红线 = 无自动提交**） |
 | 站内通信 / 邮件模板 | `api/communications.py` `api/email_templates.py` + `services/email_service.py` `imap_poller.py` `email_suppression.py` | 已接入 |
@@ -271,7 +271,7 @@ middleware 只判 cookie 有无票 → 前端 AuthGatekeeper 全局门 + 单飞�
 | `/api/ats` | `POST /check` | ATS 兼容性检测 |
 | `/api/resume/{id}/score` · `/api/jobs/trending` | — | 评分与趋势 |
 | `/api/optimization/{id}/refine` | — | 精炼改写 |
-| `/api/interview` | `POST /generate` `GET /sessions` `GET /bookmarks` | 面试押题 |
+| `/api/interview` | `POST /sessions` `POST /sessions/{id}/chat`(SSE) `GET /sessions` `GET /bookmarks` | 模拟押题（对话式；`POST /generate` 为旧快速押题） |
 | `/api/capability` | `GET /jobs` `POST /jobs/{id}/assessments` `GET /ranking` | 岗位能力测评 |
 | `/api/templates` | — | 56 套简历模板（元数据 / 预览） |
 | `/api/ai-photo` | `POST /generate` | AI 职业照 |

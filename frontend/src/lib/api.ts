@@ -1,15 +1,18 @@
 import axios from 'axios'
 
-import type { InterviewTrackPayload, ApplicationPayload, CommunicationPayload, AssessmentSubmit } from '@/types'
+import type {
+  InterviewTrackPayload, ApplicationPayload, CommunicationPayload, AssessmentSubmit,
+  InterviewChatMessage, InterviewStage, InterviewIntent,
+} from '@/types'
 import { getToken, setAuthTokens, clearAuth } from '@/lib/auth'
-
-const API_BASE = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000'
+import { API_BASE_URL } from '@/lib/api-base'
+import { streamPostSSE } from '@/lib/sse'
 
 /** 暴露 base URL：可视化排版编辑器预览要拉取后端中文字体（与 PDF 同一份 Noto Sans SC） */
-export const API_BASE_URL = API_BASE
+export { API_BASE_URL }
 
 const api = axios.create({
-  baseURL: API_BASE,
+  baseURL: API_BASE_URL,
   timeout: 20000,
 })
 
@@ -17,7 +20,7 @@ const api = axios.create({
 export function toBackendUrl(url: string | undefined | null): string {
   if (!url) return ''
   if (url.startsWith('http')) return url
-  return `${API_BASE}/${url}`
+  return `${API_BASE_URL}/${url}`
 }
 
 /** 简历数据发生变更（上传/删除/恢复等）时广播，列表页据此即时刷新，无需手动 F5。
@@ -36,7 +39,7 @@ let refreshPromise: Promise<boolean> | null = null
 // 关键修复：刷新请求若再次经过带鉴权的拦截器会自陷死锁
 // （刷新请求在自身的请求拦截器里 await 正在发送中的自己），因此必须用“干净”实例发起。
 const refreshApi = axios.create({
-  baseURL: API_BASE,
+  baseURL: API_BASE_URL,
   timeout: 20000,
 })
 
@@ -547,8 +550,55 @@ export const insights = {
   overview: (days = 30) => api.get('/api/insights/overview', { params: { days } }),
 }
 
-/** AI 面试预测：押题 + 答题指导 */
+/** 模拟押题：对话式（chat）+ 旧版快速押题（generate，保留兼容） */
 export const interview = {
+  /** 创建模拟会话（首轮对话由 chat 的 intent=start 触发） */
+  createSession: (body: {
+    resume_id?: string | null
+    job_image_id?: string | null
+    question_count?: number
+    title?: string
+  }) => api.post('/api/interview/sessions', {
+    resume_id: body.resume_id || null,
+    job_image_id: body.job_image_id || null,
+    question_count: body.question_count ?? 8,
+    title: body.title || undefined,
+  }),
+  /**
+   * 发送一轮对话并消费 SSE。
+   * 事件：meta / delta / turn / done / error（见后端 app/api/interview.py 模块注释）。
+   */
+  chat: (
+    sessionId: string,
+    body: { message?: string; intent: InterviewIntent },
+    handlers: {
+      onMeta?: (info: { stage?: string; turn?: number; asked_count?: number; target_count?: number }) => void
+      onDelta?: (text: string) => void
+      onTurn?: (info: {
+        message: InterviewChatMessage
+        stage: InterviewStage
+        asked_count: number
+        target_count: number
+      }) => void
+      onDone?: (info: { quota_used?: number }) => void
+      onError?: (message: string) => void
+    },
+    signal?: AbortSignal,
+  ) =>
+    streamPostSSE(
+      `/api/interview/sessions/${sessionId}/chat`,
+      { message: body.message || '', intent: body.intent },
+      (payload) => {
+        if (payload.type === 'meta') handlers.onMeta?.(payload as never)
+        else if (payload.type === 'delta') handlers.onDelta?.((payload.text as string) || '')
+        else if (payload.type === 'turn') handlers.onTurn?.(payload as never)
+        else if (payload.type === 'done') handlers.onDone?.(payload as { quota_used?: number })
+        else if (payload.type === 'error') handlers.onError?.((payload.message as string) || '对话失败')
+      },
+      signal,
+      '模拟对话失败',
+    ),
+  /** 旧版一次性押题（快速押题入口/演示数据） */
   generate: (resumeId: string | null, jobId: string | null, questionCount = 8) =>
     api.post('/api/interview/generate', {
       resume_id: resumeId || null,
@@ -769,48 +819,18 @@ export const polish = {
     signal?: AbortSignal,
     /** 编辑器当前草稿（optimized_json）：随消息刷新 AI 上下文快照，感知未保存的编辑 */
     context?: Record<string, unknown> | null,
-  ) => {
-    const token = getToken()
-    return fetch(`${API_BASE_URL}/api/polish/chat`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  ) =>
+    streamPostSSE(
+      '/api/polish/chat',
+      { session_id: sessionId, message, context: context ?? null },
+      (payload) => {
+        if (payload.type === 'delta') handlers.onDelta?.((payload.text as string) || '')
+        else if (payload.type === 'suggestions') handlers.onSuggestions?.((payload.items as PolishSuggestion[]) || [])
+        else if (payload.type === 'done') handlers.onDone?.(payload as { quota_used?: number })
+        else if (payload.type === 'error') handlers.onError?.((payload.message as string) || '对话失败')
       },
-      body: JSON.stringify({ session_id: sessionId, message, context: context ?? null }),
       signal,
-    }).then(async (res) => {
-      if (!res.ok || !res.body) {
-        const text = await res.text().catch(() => '')
-        throw new Error(`对话请求失败（${res.status}）${text.slice(0, 120)}`)
-      }
-      const reader = res.body.getReader()
-      const decoder = new TextDecoder()
-      let buffer = ''
-      for (;;) {
-        const { done, value } = await reader.read()
-        if (done) break
-        buffer += decoder.decode(value, { stream: true })
-        // SSE 以空行分帧
-        let sep: number
-        while ((sep = buffer.indexOf('\n\n')) !== -1) {
-          const frame = buffer.slice(0, sep)
-          buffer = buffer.slice(sep + 2)
-          const line = frame.split('\n').find((l) => l.startsWith('data:'))
-          if (!line) continue
-          try {
-            const payload = JSON.parse(line.slice(5).trim())
-            if (payload.type === 'delta') handlers.onDelta?.(payload.text || '')
-            else if (payload.type === 'suggestions') handlers.onSuggestions?.(payload.items || [])
-            else if (payload.type === 'done') handlers.onDone?.(payload)
-            else if (payload.type === 'error') handlers.onError?.(payload.message || '对话失败')
-          } catch {
-            /* 单帧损坏不阻断流 */
-          }
-        }
-      }
-    })
-  },
+    ),
 }
 
 export interface PolishSuggestion {

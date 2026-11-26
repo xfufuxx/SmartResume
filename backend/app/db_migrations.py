@@ -30,6 +30,15 @@ MIGRATIONS: list[tuple[str, str, str]] = [
     ("optimized_resumes", "template", "VARCHAR(50)"),
     # 主题定制：用户对模板的主题覆盖（NULL=模板默认，与 template 正交）
     ("optimized_resumes", "theme_config", "JSONB"),
+    # 模拟押题：会话模式 / 生命周期 / 标题 / 并发轮次 / 复盘
+    ("interview_sessions", "mode", "VARCHAR(20) DEFAULT 'quick'"),
+    ("interview_sessions", "stage", "VARCHAR(20)"),
+    ("interview_sessions", "title", "VARCHAR(255)"),
+    ("interview_sessions", "turn_index", "INTEGER DEFAULT 0"),
+    ("interview_sessions", "target_count", "INTEGER DEFAULT 0"),
+    ("interview_sessions", "summary_json", "JSONB"),
+    ("interview_sessions", "updated_at", "TIMESTAMP WITH TIME ZONE DEFAULT now()"),
+    ("interview_sessions", "finished_at", "TIMESTAMP WITH TIME ZONE"),
 ]
 
 # 存量数据回填（幂等：只补 NULL 行，不覆盖用户已选值）
@@ -37,6 +46,15 @@ BACKFILLS: list[tuple[str, str]] = [
     (
         "optimized_resumes 模板回填",
         "UPDATE optimized_resumes SET template = 'professional' WHERE template IS NULL",
+    ),
+    # 旧押题会话统一标记为 quick + 已结束，前端走「只读回放」分支
+    (
+        "interview_sessions 旧会话模式回填",
+        "UPDATE interview_sessions SET mode = 'quick' WHERE mode IS NULL",
+    ),
+    (
+        "interview_sessions 旧会话阶段回填",
+        "UPDATE interview_sessions SET stage = 'finished' WHERE mode = 'quick' AND stage IS NULL",
     ),
 ]
 
