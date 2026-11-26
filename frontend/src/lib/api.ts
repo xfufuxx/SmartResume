@@ -359,11 +359,13 @@ export const resumes = {
    * 「提示上传失败，但刷新后简历又出现了」。故此处单独放宽超时。
    * onProgress 回调 0-100 为请求体上传进度；之后的解析阶段无进度事件。
    */
-  upload: (file: File, onProgress?: (percent: number) => void) => {
+  /** signal: 上传取消用（AbortController.signal），中止在途请求 */
+  upload: (file: File, onProgress?: (percent: number) => void, signal?: AbortSignal) => {
     const form = new FormData()
     form.append('file', file)
     return api.post('/api/resumes/upload', form, {
       timeout: 180000,
+      signal,
       onUploadProgress: (e) => {
         if (!onProgress || !e.total) return
         onProgress(Math.round((e.loaded / e.total) * 100))

@@ -79,7 +79,7 @@ export default function Home() {
   const {
     phase: resumePhase, percent: resumePercent, elapsed: resumeElapsed,
     fileName: resumeFileName, errorMsg: resumeErrorMsg, busy: uploadBusy,
-    upload: uploadResumeFile, reset: resetResumeUpload,
+    upload: uploadResumeFile, cancel: cancelResumeUpload, reset: resetResumeUpload,
   } = useResumeUpload()
   // 从简历库挑选已有简历时复用同一个遮罩，但与上传阶段互不影响
   const [resumeSelecting, setResumeSelecting] = useState(false)
@@ -184,6 +184,7 @@ export default function Home() {
   const handleResumeUpload = useCallback(async (file: File) => {
     try {
       const res = await uploadResumeFile(file)
+      if (!res) return // 用户取消：进度条已展示「已取消」，不打断为错误
       setResumeId(res.id)
       setResumeData(res.parsed_json)
       setResumeFileUrl(res.original_file_url || null)
@@ -775,6 +776,7 @@ export default function Home() {
                       elapsed={resumeElapsed}
                       fileName={resumeFileName}
                       errorMsg={resumeErrorMsg}
+                      onCancel={cancelResumeUpload}
                       onReset={resetResumeUpload}
                       resetText="重新上传"
                     />

@@ -180,11 +180,11 @@ export default function ResumeLibrary() {
   const [previewReason, setPreviewReason] = useState<'docx' | 'missing' | 'unsupported' | null>(null)
   const [downloadingId, setDownloadingId] = useState<string | null>(null)
 
-  // 上传分两阶段：请求体上传（真实百分比）→ 后端 OCR/LLM 解析（诚实显示等待时长）
+  // 上传阶段化进度：准备 → 上传（真实字节进度）→ 解析（缓慢爬升）→ 完成 / 失败 / 取消
   const {
     phase: uploadPhase, percent: uploadPercent, elapsed: uploadElapsed,
     fileName: uploadingFileName, errorMsg: uploadErrorMsg, busy: uploading, upload: uploadResumeFile,
-    reset: resetUpload,
+    cancel: cancelUpload, reset: resetUpload,
   } = useResumeUpload()
 
   // 回收站
@@ -470,7 +470,8 @@ export default function ResumeLibrary() {
 
   const handleUpload = useCallback(async (file: File) => {
     try {
-      await uploadResumeFile(file)
+      const res = await uploadResumeFile(file)
+      if (!res) return // 用户取消：进度条已展示「已取消」，不打断为错误
       message.success('简历上传成功')
       // 新简历可能被当前 Tab / 搜索词 / 类型状态筛选 / 分页挡住，
       // 重置到「全部」第 1 页，保证上传完立刻可见，而不是让用户以为没成功。
@@ -941,7 +942,7 @@ export default function ResumeLibrary() {
         <div className="resume-layout" style={{ display: 'flex', gap: 24, alignItems: 'flex-start' }}>
           {/* 左侧主内容 */}
           <div style={{ flex: 1, minWidth: 0 }}>
-            {/* 上传进度条：上传中实时百分比 → 解析中（诚实等待时长）→ 成功 / 失败四态 */}
+            {/* 上传阶段化进度条：准备 → 上传（真实进度）→ 解析（爬升）→ 成功 / 失败 / 取消 */}
             {uploadPhase !== 'idle' && (
               <ResumeUploadProgress
                 phase={uploadPhase}
@@ -949,6 +950,7 @@ export default function ResumeLibrary() {
                 elapsed={uploadElapsed}
                 fileName={uploadingFileName}
                 errorMsg={uploadErrorMsg}
+                onCancel={cancelUpload}
                 onReset={resetUpload}
               />
             )}

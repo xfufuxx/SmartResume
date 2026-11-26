@@ -3003,6 +3003,48 @@ body {
   color: var(--error-500);
 }
 
+.resume-upload-progress.is-cancelled .resume-upload-progress-title {
+  color: var(--text-tertiary);
+}
+
+/* 阶段指示条：准备 → 上传 → 解析 → 完成；已到达的段高亮主色 */
+.resume-upload-progress-stages {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.resume-upload-progress-stage {
+  color: var(--text-tertiary);
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: transparent;
+  transition: color 0.2s ease, background 0.2s ease;
+}
+
+.resume-upload-progress-stage.is-active {
+  color: var(--primary-600);
+  background: var(--primary-100, rgba(0, 122, 255, 0.12));
+  font-weight: 500;
+}
+
+.resume-upload-progress.is-done .resume-upload-progress-stage.is-active {
+  color: var(--success-600);
+  background: var(--success-50, rgba(82, 196, 26, 0.12));
+}
+
+.resume-upload-progress.is-error .resume-upload-progress-stage.is-active {
+  color: var(--error-500);
+  background: var(--error-50);
+}
+
+.resume-upload-progress.is-cancelled .resume-upload-progress-stage.is-active {
+  color: var(--text-tertiary);
+  background: var(--hover-bg, rgba(0, 0, 0, 0.06));
+}
+
 .resume-upload-progress-close {
   flex-shrink: 0;
   font-size: 12px;
