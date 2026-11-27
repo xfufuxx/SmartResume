@@ -40,6 +40,8 @@ export function useMockInterview() {
   const [error, setError] = useState<string | null>(null)
   const [quickGenerating, setQuickGenerating] = useState(false)
   const [quickHint, setQuickHint] = useState('')
+  /** 每完成一轮 stage=finished 的轮次自增：页面用它精确触发历史列表刷新 */
+  const [finishedTick, setFinishedTick] = useState(0)
 
   const abortRef = useRef<AbortController | null>(null)
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
@@ -102,7 +104,9 @@ export function useMockInterview() {
           onMeta: (info) => {
             setSession((prev) => (prev ? {
               ...prev,
-              stage: (info.stage as InterviewStage) || prev.stage,
+              // 注意：这里不更新 stage。meta 在 LLM 开跑前就到达，此时后端还未提交；
+              // 若提前置 finished，页面会拿旧库数据刷新列表，且轮次结束后值不再变化、永不重刷。
+              // stage 只认 turn 事件（后端 commit 之后才发出，是权威值）。
               stage_key: (info.stage_key as InterviewStageKey) || prev.stage_key,
               plan: (info.plan as InterviewPlanItem[]) || prev.plan,
               turn_index: info.turn ?? prev.turn_index,
@@ -133,6 +137,8 @@ export function useMockInterview() {
                 finished_at: info.stage === 'finished' ? new Date().toISOString() : prev.finished_at,
               }
             })
+            // turn 事件在 db.commit() 之后发出，此时历史列表才能拉到已复盘状态
+            if (info.stage === 'finished') setFinishedTick((t) => t + 1)
           },
           onError: (msg) => {
             // SSE error = 请求已被受理（作答已落库），只丢助手回复，不撤回用户气泡
@@ -299,6 +305,8 @@ export function useMockInterview() {
     error,
     quickGenerating,
     quickHint,
+    /** 完成复盘轮次的次数：历史列表刷新的精确触发器 */
+    finishedTick,
     start,
     answer,
     control,

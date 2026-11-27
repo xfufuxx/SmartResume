@@ -56,7 +56,7 @@ export default function MockInterviewPage() {
   const mock = useMockInterview()
   const {
     session, messages, streamText, streaming, loading, error,
-    quickGenerating, start, answer, control, openSession, generateQuick,
+    quickGenerating, finishedTick, start, answer, control, openSession, generateQuick,
     updateQuestion, remove, reset, stop,
   } = mock
 
@@ -98,10 +98,13 @@ export default function MockInterviewPage() {
     loadSessions()
   }, [token, loadSessions])
 
-  // 复盘完成 / 旧任务生成完成时刷新历史列表（标题、题数、最近消息）
+  // 复盘轮次完成时刷新历史列表（标题、状态、题数、最近消息）。
+  // 注意不能依赖 session.stage：meta 事件会提前把本地 stage 置成 finished，
+  // 那时后端尚未提交，拉到的还是「进行中」；而轮次结束后 stage 值不再变化、永不重刷。
+  // finishedTick 只在后端 commit 之后的 turn 事件里自增，是精确触发器。
   useEffect(() => {
-    if (session?.stage === 'finished') loadSessions()
-  }, [session?.stage, loadSessions])
+    if (finishedTick) loadSessions()
+  }, [finishedTick, loadSessions])
 
   const handleStart = async () => {
     if (!resumeId && !jobId) {
