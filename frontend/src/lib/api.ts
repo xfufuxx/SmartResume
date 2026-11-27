@@ -621,6 +621,8 @@ export const interview = {
   listSessions: () => api.get('/api/interview/sessions'),
   getSession: (sessionId: string) => api.get(`/api/interview/sessions/${sessionId}`),
   deleteSession: (sessionId: string) => api.delete(`/api/interview/sessions/${sessionId}`),
+  batchDeleteSessions: (ids: string[]) =>
+    api.post<{ deleted: number; skipped: number }>('/api/interview/sessions/batch-delete', { ids }),
   toggleBookmark: (questionId: string) => api.post(`/api/interview/questions/${questionId}/bookmark`),
   saveNote: (questionId: string, note: string) =>
     api.put(`/api/interview/questions/${questionId}/note`, { note }),

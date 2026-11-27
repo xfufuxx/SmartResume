@@ -266,6 +266,45 @@ def main() -> int:
             else:
                 check("跳过真实 LLM 链路（--no-live）", True)
 
+            # ── 6. 历史记录批量管理（不依赖 LLM，两种模式都覆盖） ──
+            n_items = page.locator('[data-testid="mock-session-item"]').count()
+            check("历史列表有条目可供批量操作", n_items >= 1, f"{n_items} 条")
+            if n_items >= 1:
+                page.locator('[data-testid="mock-batch-toggle"]').click()
+                page.locator('[data-testid="mock-batch-bar"]').wait_for(timeout=10_000)
+                check("进入批量管理模式（条目出现复选框）",
+                      page.locator('.mock-side-item.selectable').count() == n_items,
+                      f"{page.locator('.mock-side-item.selectable').count()}/{n_items}")
+                page.locator('[data-testid="mock-batch-all"]').click()
+                page.wait_for_timeout(300)
+                check("全选后所有条目选中", page.locator('.mock-side-item.checked').count() == n_items)
+                page.locator('[data-testid="mock-batch-all"]').click()
+                page.wait_for_timeout(300)
+                check("取消全选后清空选择", page.locator('.mock-side-item.checked').count() == 0)
+                to_delete = min(2, n_items)
+                for i in range(to_delete):
+                    page.locator('[data-testid="mock-session-item"]').nth(i).click()
+                page.wait_for_timeout(200)
+                check("工具栏显示已选数量",
+                      page.locator('.mock-side-toolbar-count').inner_text().strip() == f"已选 {to_delete} 条",
+                      page.locator('.mock-side-toolbar-count').inner_text().strip())
+                # 在点确认前采集选中 ID：删除成功会退出批量模式，checked 类随消失
+                checked_ids = page.evaluate(
+                    "() => Array.from(document.querySelectorAll('.mock-side-item.checked'))"
+                    ".map(e => e.getAttribute('data-session-id'))"
+                )
+                page.locator('[data-testid="mock-batch-delete"]').click()
+                page.locator('.ant-popover button.ant-btn-dangerous').click()
+                # 不比对列表总数：此时可能有新会话正落进列表（如开场进行中），
+                # 总数竞态不稳定；按「选中的 ID 删除后从列表消失」判定（确定性）。
+                page.wait_for_timeout(2000)
+                remaining = sum(page.locator(f'[data-session-id="{cid}"]').count() for cid in checked_ids)
+                check("批量删除的条目从列表消失", len(checked_ids) == to_delete and remaining == 0,
+                      f"选中 {len(checked_ids)} 条，残留 {remaining}")
+                check("删除成功后自动退出批量模式",
+                      page.locator('[data-testid="mock-batch-bar"]').count() == 0
+                      and page.locator('[data-testid="mock-batch-toggle"]').count() == 1)
+
             # ── 控制台 ──
             hydration = [t for t in console_errors if "hydrat" in t.lower() or "did not match" in t.lower()]
             check("无水合错误", len(hydration) == 0, f"{len(hydration)} 条")

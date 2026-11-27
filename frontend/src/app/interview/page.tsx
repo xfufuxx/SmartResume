@@ -139,6 +139,22 @@ export default function MockInterviewPage() {
     }
   }
 
+  /** 批量删除历史记录；返回实际删除数给侧栏（>0 时其自动退出批量模式） */
+  const handleBatchDelete = async (ids: string[]): Promise<number> => {
+    try {
+      const res = await interview.batchDeleteSessions(ids)
+      const { deleted, skipped } = res.data
+      message.success(skipped ? `已删除 ${deleted} 条，${skipped} 条不存在已跳过` : `已删除 ${deleted} 条记录`)
+      loadSessions()
+      // 当前正在查看的会话被删掉时，清空主区域回到配置面板
+      if (session && ids.includes(session.id)) reset()
+      return deleted
+    } catch {
+      message.error('批量删除失败，请稍后重试')
+      return 0
+    }
+  }
+
   const handleBookmark = async (q: InterviewQuestion) => {
     try {
       const res = await interview.toggleBookmark(q.id)
@@ -226,6 +242,7 @@ export default function MockInterviewPage() {
               loading={loadingList}
               onOpen={handleOpen}
               onDelete={handleDelete}
+              onBatchDelete={handleBatchDelete}
             />
           </Col>
 

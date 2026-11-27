@@ -93,6 +93,10 @@ class NoteRequest(BaseModel):
     note: str = Field(default="", max_length=4000)
 
 
+class BatchDeleteRequest(BaseModel):
+    ids: list[str] = Field(min_length=1, max_length=200)
+
+
 # ── 序列化 ───────────────────────────────────────────────────────
 
 
@@ -787,6 +791,34 @@ async def delete_session(
     await db.delete(session)
     await db.commit()
     return {"detail": "已删除"}
+
+
+@router.post("/sessions/batch-delete")
+async def batch_delete_sessions(
+    body: BatchDeleteRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    """批量删除历史模拟会话。逐条校验归属，别人的 / 不存在的 ID 静默跳过。
+
+    返回 deleted 数量，前端据此提示「成功 N 条 / 跳过 M 条」。
+    """
+    deleted = 0
+    skipped = 0
+    for sid in dict.fromkeys(body.ids):  # 去重，保持顺序
+        result = await db.execute(
+            select(InterviewSession).where(
+                InterviewSession.id == sid, InterviewSession.user_id == user.id
+            )
+        )
+        session = result.scalars().unique().one_or_none()
+        if session:
+            await db.delete(session)
+            deleted += 1
+        else:
+            skipped += 1
+    await db.commit()
+    return {"deleted": deleted, "skipped": skipped}
 
 
 # ── 题目资产：收藏 / 笔记 / 收藏夹 ───────────────────────────────

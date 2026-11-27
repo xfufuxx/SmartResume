@@ -3618,6 +3618,18 @@ body {
   margin-top: 4px; font-size: 11px; color: var(--text-quaternary);
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
+/* 批量管理 */
+.mock-side-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+.mock-side-toolbar {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  padding: 8px 10px; margin-bottom: 10px;
+  background: var(--primary-50); border: 1px solid var(--primary-200); border-radius: 10px;
+}
+.mock-side-toolbar-count { font-size: 12px; color: var(--text-tertiary); }
+.mock-side-item.selectable { display: flex; align-items: flex-start; gap: 8px; }
+.mock-side-item.checked { background: var(--primary-50); border-color: var(--primary-300); }
+.mock-side-check { display: flex; align-items: center; padding-top: 3px; }
+.mock-side-main { flex: 1; min-width: 0; }
 
 /* 对话主区 */
 .mock-chat { display: flex; flex-direction: column; padding: 0 !important; overflow: hidden; min-height: 660px; }
