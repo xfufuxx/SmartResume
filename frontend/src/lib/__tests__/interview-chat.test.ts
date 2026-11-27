@@ -175,3 +175,24 @@ describe('dedupeQuestionText', () => {
     assert.equal(dedupeQuestionText('为什么？', '为什么？'), '为什么？');
   });
 });
+
+describe('stripStreamingBlocks 兼容 ```json 包裹块（回归：复盘裸 JSON）', () => {
+  it('剥掉 ```json 包裹的 summary 块', () => {
+    const text = '本次模拟到这里。\n```json\n{"summary": {"coverage": {"自我介绍": 1}}}\n```\n谢谢。';
+    const out = stripStreamingBlocks(text);
+    assert.equal(out, '本次模拟到这里。\n\n谢谢。');
+  });
+
+  it('保留普通代码块（python / 无键提示的 json）', () => {
+    const text = '看这段：\n```python\nprint("hello")\n```\n完。';
+    assert.equal(stripStreamingBlocks(text), '看这段：\n```python\nprint("hello")\n```\n完。');
+    const plain = '数据：\n```json\n{"foo": 1}\n```\n用。';
+    assert.ok(stripStreamingBlocks(plain).includes('"foo"'));
+  });
+
+  it('未闭合的 ```json 结构化块被截断', () => {
+    const text = '复盘如下：\n```json\n{"summary": {"coverage": {';
+    const out = stripStreamingBlocks(text);
+    assert.equal(out, '复盘如下：');
+  });
+});

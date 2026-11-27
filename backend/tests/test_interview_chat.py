@@ -317,3 +317,39 @@ def test_prompt_progress_ignores_followup_rows():
     assert "已出 2 / 目标 8 题" in prompt
     assert "本环节还有 1 题" in prompt  # 简历深挖（第 2-3 题）还剩第 3 题
     assert "【当前环节】简历深挖" in prompt
+
+
+# ── ```json 包裹块兼容（回归：复盘被渲染成裸 JSON）──────────────
+
+def test_parse_blocks_json_tagged_summary():
+    """模型写 ```json {"summary": {...}} 也能解析出 summary（取内层）。"""
+    text = '本次模拟到这里。\n```json\n{"summary": {"coverage": {"自我介绍": 1}, "strong": ["表达清晰"], "weak": [], "actions": []}}\n```\n谢谢。'
+    blocks = parse_blocks(text)
+    assert blocks["summary"] == {"coverage": {"自我介绍": 1}, "strong": ["表达清晰"], "weak": [], "actions": []}
+
+
+def test_parse_blocks_json_tagged_question():
+    text = '```json\n{"question": {"question": "介绍一下你自己", "category": "自我介绍"}}\n```'
+    blocks = parse_blocks(text)
+    assert blocks["question"]["question"] == "介绍一下你自己"
+
+
+def test_strip_blocks_removes_json_wrapped_blocks():
+    text = '本次模拟到这里。\n```json\n{"summary": {"coverage": {}}}\n```\n谢谢。'
+    assert "summary" not in strip_blocks(text)
+    assert "coverage" not in strip_blocks(text)
+
+
+def test_strip_blocks_keeps_plain_code_fence():
+    """普通代码块（python / 无键提示的 json）不属于结构化块，不剥离。"""
+    text = '看这段：\n```python\nprint("hello")\n```\n完。'
+    assert "print" in strip_blocks(text)
+    plain = '这是数据：\n```json\n{"foo": 1}\n```\n用。'
+    assert '"foo"' in strip_blocks(plain)
+
+
+def test_strip_blocks_truncates_unclosed_json_block():
+    """未闭合的尾部 json 结构化块要截断，不能残留半截 JSON。"""
+    text = '复盘如下：\n```json\n{"summary": {"coverage": {'
+    assert "{" not in strip_blocks(text)
+    assert "复盘如下" in strip_blocks(text)

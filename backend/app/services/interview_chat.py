@@ -66,7 +66,27 @@ _FINISHED_RULE = (
     "（后续流程、多久给反馈），不要再输出 question 块。"
 )
 
-_BLOCK_RE = re.compile(r"```(question|feedback|summary)\s*\n(.*?)```", re.DOTALL)
+_BLOCK_KINDS = ("question", "feedback", "summary")
+# fenced 块的语言标注不保证是块名：实测模型会写 ```json 包 {"summary": ...}。
+# 因此匹配任意 fenced 块，再按「标注 + 块体键名」判定是否三类结构化块。
+_FENCE_RE = re.compile(r"```([\w-]*)[ \t]*\n(.*?)```", re.DOTALL)
+_KEY_HINT_RE = re.compile(r"""["']\s*(question|feedback|summary)\s*["']""")
+_AMBIGUOUS_LANGS = ("", "json", "yaml", "json5")
+
+
+def _sniff_kind(lang: str, body: str) -> str | None:
+    """判定 fenced 块是否三类结构化块之一；普通代码块返回 None（不解析不剥离）。
+
+    标注直接是块名 → 认；标注缺失或为 json 类 → 看块体前段有没有结构化键名；
+    其它语言（python 等）一律视为普通代码块。
+    """
+    tag = (lang or "").strip().lower()
+    if tag in _BLOCK_KINDS:
+        return tag
+    if tag not in _AMBIGUOUS_LANGS:
+        return None
+    hint = _KEY_HINT_RE.search(body[:2000])
+    return hint.group(1) if hint else None
 
 
 def _truncate_json(data: dict | None, limit: int) -> str:
@@ -149,25 +169,49 @@ def _loads_tolerant(raw: str) -> dict | None:
 
 
 def parse_blocks(text: str) -> dict:
-    """提取三类结构化块；同名多块时取第一个有效块。"""
+    """提取三类结构化块；同名多块时取第一个有效块。
+
+    兼容两种模型行为：```summary {...} 与 ```json {"summary": {...}}（外层单键
+    包裹时自动取内层，让 sanitize_* 拿到的就是块内容本身）。
+    """
     out: dict = {"question": None, "feedback": None, "summary": None}
-    for match in _BLOCK_RE.finditer(text or ""):
-        kind = match.group(1)
-        if out.get(kind):
+    for match in _FENCE_RE.finditer(text or ""):
+        kind = _sniff_kind(match.group(1), match.group(2))
+        if not kind or out.get(kind):
             continue
         data = _loads_tolerant(match.group(2))
-        if data:
-            out[kind] = data
-        else:
+        if not data:
             logger.warning("模拟押题：%s 块 JSON 解析失败，已跳过", kind)
+            continue
+        if len(data) == 1 and kind in data:
+            # 外层单键包裹：{"summary": {...}} → 取内层；
+            # 内层不是 dict（如 {"question": "伪装的"}）则视为无效块，让位给后续真块
+            inner = data[kind]
+            if not isinstance(inner, dict):
+                logger.warning("模拟押题：%s 块键值类型不符（非对象），已跳过", kind)
+                continue
+            data = inner
+        out[kind] = data
     return out
 
 
 def strip_blocks(text: str) -> str:
-    """剥离结构化块，返回纯展示正文（压缩多余空行）。"""
+    """剥离结构化块，返回纯展示正文（压缩多余空行）。
+
+    普通代码块（如 ```python）原样保留；未闭合的尾部结构化块一并截断，
+    避免半截 JSON 残留在气泡里。
+    """
     if not text:
         return ""
-    stripped = _BLOCK_RE.sub("", text)
+
+    def _drop(match: "re.Match[str]") -> str:
+        return "" if _sniff_kind(match.group(1), match.group(2)) else match.group(0)
+
+    stripped = _FENCE_RE.sub(_drop, text)
+    # 未闭合的尾部 fence：若其内容提示是结构化块，截断（模型偶尔不闭合）
+    last = stripped.rfind("```")
+    if last != -1 and _KEY_HINT_RE.search(stripped[last:last + 2000]):
+        stripped = stripped[:last]
     stripped = re.sub(r"\n{3,}", "\n\n", stripped)
     return stripped.strip()
 

@@ -119,12 +119,17 @@ def _question_to_dict(q: InterviewQuestion) -> dict:
 def _message_to_dict(m: InterviewMessage | dict) -> dict:
     if isinstance(m, dict):
         return m
+    content = m.content
+    if m.role == "assistant" and content:
+        # 读时清洗：历史消息可能带未被识别的 ```json 包裹块（旧解析只认块名标注），
+        # 展示层统一剥一遍，幂等且不影响正常正文
+        content = interview_chat.strip_blocks(content)
     return {
         "id": m.id,
         "session_id": m.session_id,
         "role": m.role,
         "kind": m.kind,
-        "content": m.content,
+        "content": content,
         "payload": m.payload or {},
         "question_id": m.question_id,
         "order_index": m.order_index,

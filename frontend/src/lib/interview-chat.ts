@@ -10,19 +10,44 @@ import type {
   InterviewChatMessage, InterviewIntent, InterviewPlanItem, InterviewStage, InterviewStageKey,
 } from '@/types'
 
-const BLOCK_RE = /```(?:question|feedback|summary)\s*\n[\s\S]*?```/g
+// fenced 块的语言标注不保证是块名：实测模型会写 ```json 包 {"summary": ...}。
+// 匹配任意 fenced 块，再按「标注 + 块体键名」判定是否三类结构化块。
+const FENCE_RE = /```([\w-]*)[ \t]*\n([\s\S]*?)```/g
+const STRUCT_HINT_RE = /["']\s*(?:question|feedback|summary)\s*["']/
+const BLOCK_KINDS = ['question', 'feedback', 'summary']
+const AMBIGUOUS_LANGS = ['', 'json', 'yaml', 'json5']
+// 明确的普通代码语言：即使未闭合也不截断（流式期间显示半截代码，完成后完整）
+const COMMON_CODE_LANGS = new Set([
+  'python', 'js', 'javascript', 'ts', 'typescript', 'java', 'go', 'rust',
+  'c', 'cpp', 'csharp', 'sql', 'bash', 'sh', 'shell', 'html', 'css',
+])
+
+function isStructuredBlock(lang: string, body: string): boolean {
+  const tag = (lang || '').toLowerCase()
+  if (BLOCK_KINDS.includes(tag)) return true
+  if (!AMBIGUOUS_LANGS.includes(tag)) return false
+  return STRUCT_HINT_RE.test(body.slice(0, 2000))
+}
 
 /**
- * 流式展示文本：剥掉已闭合的结构化块，并截断尚未闭合的块。
+ * 流式展示文本：剥掉已闭合的结构化块（兼容 ```json 包裹），并截断尚未闭合的块。
  *
  * 例：`点评…\n```question\n{"category": "技术` → `点评…`
+ * 普通代码块（如 ```python）原样保留。
  */
 export function stripStreamingBlocks(text: string): string {
   if (!text) return ''
-  let out = text.replace(BLOCK_RE, '')
-  // 块可能只吐出了开头（含 ``` 但还没有闭合），从这里截断
-  const open = out.lastIndexOf('```')
-  if (open !== -1) out = out.slice(0, open)
+  let out = text.replace(FENCE_RE, (m, lang: string, body: string) =>
+    isStructuredBlock(lang, body) ? '' : m)
+  // 块可能只吐出了开头（``` 已出现但还没闭合）：存在未闭合 fence 且语言标注
+  // 不是明确普通代码语言时截断，防止半截 JSON 漏进气泡。
+  // （fence 标记成对出现，奇数个说明有未闭合的）
+  const fences = out.match(/```[\w-]*/g) || []
+  if (fences.length % 2 === 1) {
+    const open = out.lastIndexOf('```')
+    const tag = ( /^```([\w-]*)/.exec(out.slice(open))?.[1] || '' ).toLowerCase()
+    if (!COMMON_CODE_LANGS.has(tag)) out = out.slice(0, open)
+  }
   out = out.replace(/\n{3,}/g, '\n\n')
   return out.trim()
 }
