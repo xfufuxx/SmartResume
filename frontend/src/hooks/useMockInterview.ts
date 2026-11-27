@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * useMockInterview —— 模拟押题的会话状态机。
+ * useMockInterview —— 模拟面试的会话状态机。
  *
  * 职责边界：
  * - 只处理「创建/打开/对话/停止/删除」与消息合并，不碰任何渲染；

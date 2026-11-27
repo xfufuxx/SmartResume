@@ -604,7 +604,7 @@ export interface InsightOverview {
   generated_at: string
 }
 
-// ── 模拟押题（对话式）/ 旧版快速押题 ──
+// ── 模拟面试（对话式）/ 旧版快速押题 ──
 export type InterviewMode = 'quick' | 'chat'
 /** 会话生命周期：开场 / 进行中 / 已复盘 */
 export type InterviewStage = 'briefing' | 'asking' | 'finished'

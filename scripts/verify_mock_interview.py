@@ -71,9 +71,9 @@ def main() -> int:
 
             # ── 1. 页面骨架 ──
             page.goto(f"{FRONT}/interview", wait_until="domcontentloaded")
-            page.get_by_text("模拟押题", exact=True).first.wait_for(timeout=180_000)
+            page.get_by_text("模拟面试", exact=True).first.wait_for(timeout=180_000)
             page.locator('[data-testid="mock-start"]').wait_for(timeout=60_000)
-            check("模拟押题页渲染（标题 + 配置面板）", True)
+            check("模拟面试页渲染（标题 + 配置面板）", True)
             check("空态引导可见", page.get_by_text("模拟一场，比背十道题有用").count() == 1)
             check("历史模拟列表可见", page.get_by_text("历史模拟", exact=True).count() >= 1)
             check("保留一次性快速押题入口", page.locator('[data-testid="mock-quick"]').count() == 1)
@@ -238,7 +238,7 @@ def main() -> int:
 
                     # ── 4. 刷新恢复 ──
                     page.reload(wait_until="domcontentloaded")
-                    page.get_by_text("模拟押题", exact=True).first.wait_for(timeout=120_000)
+                    page.get_by_text("模拟面试", exact=True).first.wait_for(timeout=120_000)
                     saved = page.locator(f'[data-session-id="{created_id}"]')
                     saved.wait_for(timeout=30_000)
                     saved.click()

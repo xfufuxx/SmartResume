@@ -1,6 +1,6 @@
 'use client'
 
-/** 模拟押题的结构化卡片：题目 / 点评 / 复盘。纯展示，动作由页面回传。 */
+/** 模拟面试的结构化卡片：题目 / 点评 / 复盘。纯展示，动作由页面回传。 */
 import React, { useState } from 'react'
 import { Button, Tag, Tooltip } from 'antd'
 import {

@@ -550,7 +550,7 @@ export const insights = {
   overview: (days = 30) => api.get('/api/insights/overview', { params: { days } }),
 }
 
-/** 模拟押题：对话式（chat）+ 旧版快速押题（generate，保留兼容） */
+/** 模拟面试：对话式（chat）+ 旧版快速押题（generate，保留兼容） */
 export const interview = {
   /** 创建模拟会话（首轮对话由 chat 的 intent=start 触发） */
   createSession: (body: {

@@ -1,7 +1,7 @@
 'use client'
 
 /**
- * 模拟押题（原「AI 面试押题」）：对话式模拟面试官。
+ * 模拟面试（原「AI 面试押题」/「模拟押题」）：对话式模拟面试官。
  *
  * 交互：选简历/岗位 → AI 开场并逐题发问 → 用户作答 → 点评 + 追问/下一题 → 复盘。
  * 旧版「快速押题」会话以只读形式回放；接口 /api/interview 保持兼容。
@@ -154,7 +154,7 @@ export default function MockInterviewPage() {
   return (
     <AppLayout
       activeKey="interview"
-      title="模拟押题"
+      title="模拟面试"
       subtitle="AI 面试官按你的简历与目标岗位逐题发问，答完即点评，最后给复盘"
     >
       <div className="app-page-enter mock-interview">
