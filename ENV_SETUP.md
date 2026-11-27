@@ -114,6 +114,7 @@ curl -X POST http://127.0.0.1:8000/api/auth/login \
 | **IMAP 授权码** 🔐 | `backend/.env` → `IMAP_PASSWORD` | 可选 | 投递回执轮询。留空则 `/email/sync` 返回 `enabled:false`。 |
 | **S3 / OSS 密钥** 🔐 | `AWS_ACCESS_KEY_ID` / `AWS_SECRET_ACCESS_KEY` | 可选 | 本地开发留空即可，文件走本地磁盘 + 签名代理。 |
 | **QQ 互联 APP ID / APP Key** 🔐 | `backend/.env` → `QQ_APP_ID` / `QQ_APP_KEY` | 可选（QQ 登录必需） | 均留空 = 不展示 QQ 登录入口。申请流程见下方「QQ 登录配置指南」。 |
+| **岗位检索 Key（可选）** 🔐 | `backend/.env` → `TAVILY_API_KEY` 或 `SERPER_API_KEY` | 可选 | 岗位匹配罗盘默认走「AI 岗位画像」（公司匿名、无外链），不伪造真实企业；配置任一 Key 后自动切换到**公开网络实网检索**（`JOB_SEARCH_PROVIDER=auto`，也可显式设为 `tavily` / `serper` / `ai`）。每个 Key 均有免费额度。 |
 
 **已自动生成、无需你操作**：`SECRET_KEY`（随机 48 字节）。
 ⚠️ 它用于加密敏感字段，**轮换会导致历史密文无法解密**，请勿随意更改或外泄。

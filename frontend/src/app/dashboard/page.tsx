@@ -302,7 +302,7 @@ export default function Dashboard() {
       subtitle={`${new Date().toLocaleDateString('zh-CN', { year: 'numeric', month: 'long', day: 'numeric' })} · 数据实时来自你的使用记录`}
       headerExtra={
         <Space>
-          <Button icon={<AimOutlined />} onClick={() => router.push('/match')}>匹配罗盘</Button>
+          <Button icon={<AimOutlined />} onClick={() => router.push('/match')}>AI 找岗位</Button>
           <Button type="primary" icon={<PlusOutlined />} onClick={() => router.push('/resumes')}>
             上传简历
           </Button>
@@ -541,7 +541,7 @@ export default function Dashboard() {
                   </div>
                   <Row gutter={[12, 12]}>
                     {[
-                      { key: 'match', label: '岗位匹配罗盘', desc: '一份简历对比全部岗位', icon: <AimOutlined />, path: '/match', color: 'var(--primary-500)' },
+                      { key: 'match', label: '岗位匹配罗盘', desc: 'AI 检索岗位并算适配度', icon: <AimOutlined />, path: '/match', color: 'var(--primary-500)' },
                       { key: 'interview', label: '模拟面试', desc: 'AI 面试官逐题发问 + 复盘', icon: <TeamOutlined />, path: '/interview', color: 'var(--success-500)' },
                       { key: 'ats', label: 'ATS 体检', desc: '机器可读性检查', icon: <SafetyCertificateOutlined />, path: '/ats', color: 'var(--warning-500)' },
                       { key: 'scoring', label: '简历评分', desc: '四维量化打分', icon: <TrophyOutlined />, path: '/scoring', color: '#8b5cf6' },
@@ -662,7 +662,7 @@ export default function Dashboard() {
                     </Typography.Paragraph>
                     <Space wrap>
                       <Button icon={<TeamOutlined />} onClick={() => router.push('/interview')}>开始模拟面试</Button>
-                      <Button icon={<AimOutlined />} onClick={() => router.push('/match')}>看看哪个岗位更适合我</Button>
+                      <Button icon={<AimOutlined />} onClick={() => router.push('/match')}>让 AI 帮我找工作</Button>
                       <Button type="link" onClick={() => router.push('/history')}>查看全部优化记录</Button>
                     </Space>
                   </Col>

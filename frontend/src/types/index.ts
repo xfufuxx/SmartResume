@@ -714,7 +714,91 @@ export interface InterviewSessionDetail extends InterviewSessionItem {
   messages: InterviewChatMessage[]
 }
 
-// ── 岗位匹配罗盘 ──
+// ── 岗位匹配罗盘：AI 岗位检索 ──
+export type MatchDimensionKey = 'skills' | 'experience' | 'education' | 'location' | 'salary'
+
+export interface MatchDimension {
+  score: number
+  reason: string
+}
+
+export interface DiscoveredJob {
+  id: string
+  title: string
+  company: string
+  /** 招聘渠道 / 站点名；AI 画像模式为「AI 岗位画像」 */
+  source: string
+  source_type: 'ai' | 'web'
+  channel: string
+  location: string
+  salary: string
+  job_type: string
+  experience_required: string
+  education_required: string
+  summary: string
+  skills: string[]
+  highlights: string[]
+  dimensions: Record<MatchDimensionKey, MatchDimension>
+  /** 后端按五维固定权重合成的适配度 */
+  match_rate: number
+  match_reasons: string[]
+  mismatches: string[]
+  suggestions: string[]
+  jd_text: string
+  /** 实网检索时保留原始岗位链接；AI 画像模式为 null */
+  url: string | null
+}
+
+export interface MatchCandidateProfile {
+  name: string
+  latest_title: string
+  latest_company: string
+  years_experience: number
+  education: { degree: string; school: string; major: string }
+  skills: string[]
+  target_titles: string[]
+  cities: string[]
+  salary_expectation: string
+  industries: string[]
+  achievements: string[]
+  summary: string
+  certificates: string[]
+}
+
+export interface MatchDiscoveryResult {
+  mode: 'ai' | 'web'
+  mode_label: string
+  /** 数据口径说明：AI 画像模式会明确标注不是实时在招岗位 */
+  notice: string
+  provider: string
+  model: string
+  generated_at: string
+  resume_id?: string
+  resume_title?: string
+  profile: MatchCandidateProfile
+  market_summary: string
+  search_keywords: string[]
+  total: number
+  best_rate: number
+  avg_rate: number
+  strong_count: number
+  items: DiscoveredJob[]
+  fallback_note?: string
+}
+
+export type MatchDiscoveryStatus = 'pending' | 'processing' | 'completed' | 'failed'
+
+export interface MatchDiscoveryTask {
+  task_id: string
+  status: MatchDiscoveryStatus
+  progress: string
+  resume_id?: string
+  result?: MatchDiscoveryResult
+  created_at?: string
+  updated_at?: string
+}
+
+/** @deprecated 旧版「简历 × 已上传岗位」规则排序，主流程已不再使用 */
 export interface MatchRankItem {
   job_id: string
   title: string
@@ -725,6 +809,7 @@ export interface MatchRankItem {
   is_favorite: boolean
 }
 
+/** @deprecated 同上；保留类型供历史兼容 */
 export interface MatchRankResult {
   resume_id: string
   resume_title: string

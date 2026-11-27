@@ -504,11 +504,28 @@ export const scoring = {
 }
 
 export const matching = {
+  /** @deprecated 旧版单岗位规则匹配，主流程已改为 AI 岗位检索 */
   calculate: (resumeId: string, jobId: string) =>
     api.post('/api/match/', { resume_id: resumeId, job_id: jobId }),
-  /** 一份简历 × 全部岗位：批量算匹配度并排序（规则引擎，不消耗额度） */
+  /** @deprecated 旧版「一份简历 × 全部已上传岗位」排序，仅供兼容调用 */
   rank: (resumeId: string, limit?: number) =>
     api.post('/api/match/rank', { resume_id: resumeId, limit: limit ?? null }),
+  /** 提交 AI 岗位检索任务（异步，返回 task_id 后轮询进度） */
+  discover: (body: {
+    resume_id: string
+    job_count?: number
+    city?: string | null
+    direction?: string | null
+    salary?: string | null
+    industries?: string[] | null
+  }) => api.post('/api/match/discover', body),
+  /** 查询检索进度 / 结果 */
+  getDiscoverStatus: (taskId: string) => api.get(`/api/match/discover/${taskId}`),
+  /** 取该简历最近一次检索结果（刷新页面恢复，不重新花额度） */
+  getLatestDiscovery: (resumeId: string) =>
+    api.get('/api/match/discover/latest', { params: { resume_id: resumeId } }),
+  /** 今日剩余检索次数 */
+  getDiscoverQuota: () => api.get('/api/match/discover/quota'),
 }
 
 /** 证书与学习方向推荐（LLM，按人岗差距生成，链接经白名单校验）；生成较慢，超时放宽到 10.5 分钟 */

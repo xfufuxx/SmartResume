@@ -44,7 +44,7 @@
 | 简历解析（PDF/图片/文档 → 结构化文本） | `app/services/resume_parser.py` | 已接入（视觉模型 + PaddleOCR 兜底） |
 | 简历智能优化 | `app/api/optimization.py` + `app/services/agent_optimizer.py` | 已接入 |
 | 岗位 JD 解析 | `app/services/job_parser.py` | 已接入 |
-| 人岗匹配度分析 | `app/api/matching.py` | 已接入（前端 `match/page.tsx` 调用） |
+| 人岗匹配度分析 | `app/api/matching.py` + `app/services/job_discovery.py` | 已接入（`/match` 走 AI 岗位检索：检索 → 五维评分 → 理由/差距/建议） |
 | ATS 兼容性检测 | `app/api/ats.py` | 已接入 |
 | 面试模拟 | `app/api/interview.py` | 已接入 |
 | 批量优化 | `app/api/batch.py` | 已接入（前端 `batch/page.tsx` 调用） |
@@ -454,7 +454,7 @@ sequenceDiagram
 | | `/optimization/{id}/feedback` | POST | 反馈 | `api/optimization.py` |
 | | `/optimization/{id}/reexport` | POST | 重新导出 | `api/optimization.py` |
 | | `/optimization/test-template` | POST | Mock 模板(测试) | `api/optimization.py` |
-| `matching` | `/matching/...` | POST | 人岗匹配度 | `api/matching.py` |
+| `matching` | `/match/discover`、`/match/discover/{task_id}`、`/match/discover/latest` | POST/GET | AI 岗位检索（主流程）；`/match`、`/match/rank` 为旧版兼容 | `api/matching.py` |
 | `batch` | `/batch/optimize` | POST | 批量优化 | `api/batch.py` |
 | `ats` | `/ats/...` | POST | ATS 兼容性检测 | `api/ats.py` |
 | `scoring` | `/scoring/...` | POST | 评分 | `api/scoring.py` |

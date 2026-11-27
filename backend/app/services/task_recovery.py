@@ -72,28 +72,32 @@ def batch_stale_seconds(total_jobs: int) -> int:
 
 async def recover_interrupted_tasks() -> dict:
     """启动时清理三类任务的中断遗留（幂等，可重复调用）。返回恢复统计用于日志。"""
-    stats = {"optimize": 0, "interview": 0, "batch": 0, "batch_tasks": 0}
+    stats = {"optimize": 0, "interview": 0, "batch": 0, "batch_tasks": 0, "match_discover": 0}
     now = _now()
 
-    # ── AI 优化任务（Redis）──
+    # ── AI 优化任务 + AI 岗位检索任务（Redis）──
     try:
         redis: aioredis.Redis = _get_redis_client()
-        keys = [k async for k in redis.scan_iter(match="optimize_task:*", count=100)]
-        for key in keys:
-            try:
-                raw = await redis.get(key)
-                if not raw:
-                    continue
-                info = json.loads(raw)
-                if info.get("status") in ("pending", "processing"):
-                    info["status"] = "failed"
-                    info["progress"] = RETRY_HINT
-                    info["updated_at"] = now.isoformat()
-                    ttl = await redis.ttl(key)
-                    await redis.set(key, json.dumps(info), ex=ttl if ttl and ttl > 0 else 3600)
-                    stats["optimize"] += 1
-            except Exception:  # noqa: BLE001 单 key 异常不影响其它任务
-                logger.warning("[任务恢复] 处理 Redis key 失败: %s", key, exc_info=True)
+        for pattern, stat_key in (
+            ("optimize_task:*", "optimize"),
+            ("match_discover_task:*", "match_discover"),
+        ):
+            keys = [k async for k in redis.scan_iter(match=pattern, count=100)]
+            for key in keys:
+                try:
+                    raw = await redis.get(key)
+                    if not raw:
+                        continue
+                    info = json.loads(raw)
+                    if info.get("status") in ("pending", "processing"):
+                        info["status"] = "failed"
+                        info["progress"] = RETRY_HINT
+                        info["updated_at"] = now.isoformat()
+                        ttl = await redis.ttl(key)
+                        await redis.set(key, json.dumps(info, ensure_ascii=False), ex=ttl if ttl and ttl > 0 else 3600)
+                        stats[stat_key] += 1
+                except Exception:  # noqa: BLE001 单 key 异常不影响其它任务
+                    logger.warning("[任务恢复] 处理 Redis key 失败: %s", key, exc_info=True)
     except Exception:  # noqa: BLE001 Redis 不可用时跳过（登录等流程会显式报错）
         logger.warning("[任务恢复] Redis 不可用，跳过优化任务恢复", exc_info=True)
 

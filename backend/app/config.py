@@ -95,6 +95,15 @@ class Settings(BaseSettings):
     INTERVIEW_DAILY_TURNS: int = 30        # 每用户每日 LLM 对话轮次上限（失败/取消退还）
     INTERVIEW_SESSION_MAX_TURNS: int = 40  # 单会话轮次硬上限（防无限对话），达到后只能结束复盘
 
+    # ── AI 岗位检索（岗位匹配罗盘）────────────────────────────────────
+    # auto：有检索 Key 走实网检索，否则用 AI 岗位画像；也可显式指定 ai / tavily / serper。
+    # ⚠️ 未配置 Key 时只会生成「代表性岗位画像」（公司匿名、无外链），
+    #    不会伪造真实企业名称与岗位链接，前端会明确标注数据口径。
+    JOB_SEARCH_PROVIDER: str = "auto"
+    TAVILY_API_KEY: str = ""
+    SERPER_API_KEY: str = ""
+    JOB_DISCOVERY_DAILY_LIMIT: int = 20   # 每用户每日 AI 检索次数（Asia/Shanghai 自然日）
+
     # ── QQ 登录（QQ 互联 OAuth2.0，网站应用）────────────────────────────
     # 申请入口：https://connect.qq.com  → 创建「网站应用」→ 审核通过后拿到
     # APP ID / APP Key，并把「网站回调地址」填成 QQ_REDIRECT_URI。

@@ -184,7 +184,7 @@ export default function JobLibrary() {
   const [selectedIds, setSelectedIds] = useState<React.Key[]>([])
   const [batchLoading, setBatchLoading] = useState(false)
 
-  // 深链支持：/jobs?q=xxx（搜索词）、/jobs?focus=<job_id>（匹配罗盘「未解析岗位 → 去处理」
+  // 深链支持：/jobs?q=xxx（搜索词）、/jobs?focus=<job_id>（外部系统按岗位 ID 直达预览
   // 直达具体岗位：打开该岗位的预览弹窗 + 翻到所在页 + 高亮该行）。
   // 不用 useSearchParams，避免 Next.js 预渲染要求 Suspense 边界。
   const [highlightId, setHighlightId] = useState<string | null>(null)
@@ -380,7 +380,7 @@ export default function JobLibrary() {
     [filtered, page, pageSize],
   )
 
-  // 深链定位（/jobs?focus=<job_id>，匹配罗盘「去处理」）：等数据加载后按 id 找到目标岗位
+  // 深链定位（/jobs?focus=<job_id>，外部按岗位 ID 直达）：等数据加载后按 id 找到目标岗位
   // → 打开该岗位预览弹窗 + 翻到所在页 + 滚动到高亮行。
   // focusHandledRef 保证同一次跳转只处理一次（后续 loadData 刷新不会重复弹窗）。
   useEffect(() => {
