@@ -55,7 +55,7 @@ export function stripStreamingBlocks(text: string): string {
 export const STAGE_TEXT: Record<InterviewStage, string> = {
   briefing: '开场',
   asking: '面试中',
-  finished: '已复盘',
+  finished: '已结束',
 }
 
 export function stageText(stage?: InterviewStage | null): string {

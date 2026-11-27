@@ -87,7 +87,7 @@ describe('quickReplies / stageText', () => {
     assert.ok(chips.some((c) => c.label.includes('挑战')));
   });
 
-  it('已复盘不再给任何快捷操作', () => {
+  it('已结束不再给任何快捷操作', () => {
     assert.deepEqual(quickReplies('finished', 5), []);
   });
 

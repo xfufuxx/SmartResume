@@ -184,7 +184,7 @@ export default function MockInterviewPage() {
                 <div className="mock-current-meta">
                   <Tag color={current.stage === 'finished' ? 'default' : 'blue'}>
                     {current.stage === 'finished'
-                      ? '已复盘'
+                      ? '已结束'
                       : stageKeyLabel(current.stage_key) || '面试中'}
                   </Tag>
                   {current.mode === 'quick' && <Tag>快速押题 · 只读</Tag>}

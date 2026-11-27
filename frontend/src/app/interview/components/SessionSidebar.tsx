@@ -69,7 +69,7 @@ export default function SessionSidebar({
                   {s.mode === 'quick' && <Tag>快速</Tag>}
                   {s.mode !== 'quick' && (
                     <Tag color={s.stage === 'finished' ? 'default' : 'blue'}>
-                      {s.stage === 'finished' ? '已复盘' : '进行中'}
+                      {s.stage === 'finished' ? '已结束' : '进行中'}
                     </Tag>
                   )}
                   {s.status === 'failed' && <Tag color="red">失败</Tag>}

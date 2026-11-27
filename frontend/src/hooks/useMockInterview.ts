@@ -137,7 +137,7 @@ export function useMockInterview() {
                 finished_at: info.stage === 'finished' ? new Date().toISOString() : prev.finished_at,
               }
             })
-            // turn 事件在 db.commit() 之后发出，此时历史列表才能拉到已复盘状态
+            // turn 事件在 db.commit() 之后发出，此时历史列表才能拉到已结束状态
             if (info.stage === 'finished') setFinishedTick((t) => t + 1)
           },
           onError: (msg) => {

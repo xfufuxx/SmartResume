@@ -232,10 +232,10 @@ def main() -> int:
                           page.locator('.mock-rail-item[data-state="skipped"] .mock-rail-count').first.inner_text() == "未进行")
                     shot(page, "06-report")
 
-                    # 复盘完成后左侧历史记录必须同步为「已复盘」（回归：列表停留在「进行中」）
+                    # 复盘完成后左侧历史记录状态必须同步为「已结束」（回归：列表停留在「进行中」）
                     page.wait_for_timeout(1200)  # 等 finishedTick 触发的列表刷新完成
                     side_tag = page.locator(".mock-side-item.active .ant-tag").first
-                    check("左侧历史记录状态同步为已复盘", side_tag.inner_text().strip() == "已复盘",
+                    check("左侧历史记录状态同步为已结束", side_tag.inner_text().strip() == "已结束",
                           side_tag.inner_text().strip())
 
                     # 记住会话 ID 用于刷新与删除（标题可能重复，ID 唯一）

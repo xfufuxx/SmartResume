@@ -606,7 +606,7 @@ export interface InsightOverview {
 
 // ── 模拟面试（对话式）/ 旧版快速押题 ──
 export type InterviewMode = 'quick' | 'chat'
-/** 会话生命周期：开场 / 进行中 / 已复盘 */
+/** 会话生命周期：开场 / 进行中 / 已结束 */
 export type InterviewStage = 'briefing' | 'asking' | 'finished'
 /** 真实面试环节（顺序由后端 interview_flow 决定，前端只按返回值渲染） */
 export type InterviewStageKey =
