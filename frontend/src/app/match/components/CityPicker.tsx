@@ -42,6 +42,20 @@ export default function CityPicker({ value, onChange }: CityPickerProps) {
     setOpen(false)
   }
 
+  /** 打开某个城市：有区县数据 → 进入第三级并同步左侧省份高亮；否则直接选中 */
+  const openCity = (city: string) => {
+    if (districtsOfCity(city)) {
+      setBrowseCity(city)
+      setProvince(findProvinceOfCity(city))
+    } else {
+      select(city)
+    }
+  }
+
+  /** chip 高亮：值等于该城市，或是「城市·区县」组合 */
+  const isActiveCity = (city: string) =>
+    value === city || (value?.startsWith(`${city}${CITY_DISTRICT_SEPARATOR}`) ?? false)
+
   const clear = (e: React.MouseEvent) => {
     e.stopPropagation()
     onChange(undefined)
@@ -77,13 +91,9 @@ export default function CityPicker({ value, onChange }: CityPickerProps) {
         <button
           key={c}
           type="button"
-          className={`match-city-chip${c === value ? ' active' : ''}`}
+          className={`match-city-chip${isActiveCity(c) ? ' active' : ''}`}
           data-testid="match-city-option"
-          onClick={() => {
-            const ds = districtsOfCity(c)
-            if (ds) setBrowseCity(c) // 有区县数据 → 进入第三级
-            else select(c)
-          }}
+          onClick={() => openCity(c)}
         >
           {c}
         </button>
@@ -136,12 +146,8 @@ export default function CityPicker({ value, onChange }: CityPickerProps) {
             <button
               key={c}
               type="button"
-              className={`match-city-chip${c === value ? ' active' : ''}`}
-              onClick={() => {
-                const ds = districtsOfCity(c)
-                if (ds) setBrowseCity(c)
-                else select(c)
-              }}
+              className={`match-city-chip${isActiveCity(c) || browseCity === c ? ' active' : ''}`}
+              onClick={() => openCity(c)}
             >
               {c}
             </button>
@@ -160,9 +166,16 @@ export default function CityPicker({ value, onChange }: CityPickerProps) {
               type="button"
               className={`match-city-province${p.province === province ? ' active' : ''}`}
               onClick={() => {
-                // 直辖市：点击省份即完成选择
-                if (p.cities.length === 1) select(p.cities[0])
-                else {
+                // 直辖市：有区县数据 → 进入区县面板；没有 → 点击省份即完成选择
+                if (p.cities.length === 1) {
+                  const c = p.cities[0]
+                  if (districtsOfCity(c)) {
+                    setProvince(p.province)
+                    setBrowseCity(c)
+                  } else {
+                    select(c)
+                  }
+                } else {
                   setProvince(p.province)
                   setBrowseCity(null)
                 }

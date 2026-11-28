@@ -92,8 +92,21 @@ def main() -> int:
         page.locator('[data-testid="match-city-district"]', has_text="滨江区").first.click()
         page.wait_for_timeout(300)
         check("选区县写回「城市·区县」", "杭州·滨江区" in page.locator('[data-testid="match-city-trigger"]').inner_text())
-        # 无区县数据的城市：点击直接选中（山东 → 烟台）
+        # 热门城市点击后高亮转移 + 左侧省份同步
         page.locator('[data-testid="match-city-trigger"]').click()
+        page.wait_for_timeout(400)
+        hot_sh = page.locator('.match-city-hot .match-city-chip', has_text="上海").first
+        hot_sh.click()
+        page.wait_for_timeout(300)
+        check("热门城市（有区县）进入区县面板", page.locator('[data-testid="match-city-districts"]').count() == 1)
+        check("热门 chip 高亮转移到所点城市", "active" in (hot_sh.get_attribute("class") or ""))
+        check("左侧省份高亮同步到该城市", "active" in (page.locator('.match-city-province', has_text="上海").first.get_attribute("class") or ""))
+        # 直辖市（北京）：点击省份应出现区县面板
+        page.locator('.match-city-province', has_text="北京").first.click()
+        page.wait_for_timeout(300)
+        check("直辖市点击出现区县面板", page.locator('[data-testid="match-city-districts"]').count() == 1)
+        check("直辖市区县面板有「全市」", page.locator('[data-testid="match-city-district-all"]').count() == 1)
+        # 无区县数据的城市：点击直接选中（山东 → 烟台）；面板此刻仍是打开的，无需再点触发按钮
         page.wait_for_timeout(400)
         page.locator('.match-city-province', has_text="山东").first.click()
         page.wait_for_timeout(300)
