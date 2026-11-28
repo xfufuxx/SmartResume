@@ -16,6 +16,7 @@ import AuthGate from '@/components/AuthGate'
 import { matching, optimize, resumes, user } from '@/lib/api'
 import { getToken } from '@/lib/auth'
 import JobCard from './components/JobCard'
+import CityPicker from './components/CityPicker'
 import {
   DISCOVERY_STEPS, formatYears, jobMatchesQuery, progressStepIndex, summarizeRates,
 } from '@/lib/job-discovery'
@@ -23,7 +24,6 @@ import type {
   DiscoveredJob, MatchDiscoveryResult, MatchDiscoveryTask, ResumeRecord,
 } from '@/types'
 
-const CITY_OPTIONS = ['北京', '上海', '深圳', '杭州', '广州', '成都', '武汉', '南京', '苏州', '西安']
 const JOB_COUNT_OPTIONS = [3, 5, 6]
 
 type FilterKey = 'all' | 'strong' | 'good' | 'weak'
@@ -290,16 +290,9 @@ export default function MatchBoardPage() {
               onChange={(e) => setDirection(e.target.value)}
               allowClear
             />
-            <Select
-              style={{ width: 130 }}
-              placeholder="期望城市"
-              value={city}
-              onChange={setCity}
-              allowClear
-              options={CITY_OPTIONS.map((c) => ({ value: c, label: c }))}
-            />
+            <CityPicker value={city} onChange={setCity} />
             <Input
-              style={{ width: 140 }}
+              style={{ width: 190 }}
               placeholder="期望薪资，如 25-35K"
               value={salary}
               onChange={(e) => setSalary(e.target.value)}

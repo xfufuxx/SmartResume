@@ -74,6 +74,25 @@ def main() -> int:
         for label in ("目标方向（可留空）", "期望薪资"):
             check(f"筛选控件：{label}", page.get_by_placeholder(label).count() == 1)
 
+        # ── 1b. 城市级联选择卡片 ──
+        check("城市触发按钮存在", page.locator('[data-testid="match-city-trigger"]').count() == 1)
+        page.locator('[data-testid="match-city-trigger"]').click()
+        page.wait_for_timeout(500)
+        check("点击后出现城市选择卡片", page.locator('[data-testid="match-city-popover"]').count() == 1)
+        check("省份列表完整（31 省级区划）", page.locator('.match-city-province').count() == 31)
+        check("热门城市快捷区存在", page.locator('.match-city-hot .match-city-chip').count() >= 8)
+        page.locator('.match-city-province', has_text="广东").first.click()
+        page.wait_for_timeout(300)
+        check("选省后出现城市列表", page.locator('[data-testid="match-city-option"]').count() >= 5)
+        page.locator('[data-testid="match-city-option"]', has_text="深圳").first.click()
+        page.wait_for_timeout(300)
+        check("选市后写回触发按钮", "深圳" in page.locator('[data-testid="match-city-trigger"]').inner_text())
+        page.locator('[data-testid="match-city-trigger"]').click()
+        page.wait_for_timeout(400)
+        page.locator('.match-city-clear-all').click()
+        page.wait_for_timeout(300)
+        check("清除后回到占位文案", "期望城市" in page.locator('[data-testid="match-city-trigger"]').inner_text())
+
         # ── 2. 触发检索（可选）──
         if live:
             page.locator('[data-testid="match-start"]').click()
