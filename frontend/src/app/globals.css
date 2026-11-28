@@ -4067,3 +4067,21 @@ body {
   .match-city-provinces { width: 96px; }
   .match-city-cascade { height: 200px; }
 }
+
+/* 城市级联第三级：区县 */
+.match-city-districts { display: flex; flex-direction: column; gap: 8px; }
+.match-city-district-head { display: flex; align-items: center; }
+.match-city-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px 2px 6px;
+  border-radius: 6px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--primary-600);
+  cursor: pointer;
+}
+.match-city-back:hover { background: var(--gray-50); }

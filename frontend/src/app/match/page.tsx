@@ -87,9 +87,9 @@ export default function MatchBoardPage() {
       try {
         const p = await user.getProfile()
         const exp = p.data?.expectation || {}
-        // 只预填城市与薪资：期望岗位是账号级设置，换一份简历后未必适用，留空交给简历自动推断
+        // 只预填城市：期望岗位/薪资是账号级设置，换一份简历后未必适用；
+        // 薪资留空由用户自行填入，留空时后端按简历内容自动推断
         if (Array.isArray(exp.cities) && exp.cities.length) setCity((prev) => prev || exp.cities[0])
-        if (exp.salary_range) setSalary((prev) => prev || exp.salary_range)
       } catch {
         /* 意向只是预填，取不到不影响检索 */
       }
@@ -120,7 +120,7 @@ export default function MatchBoardPage() {
           setResult(latest)
           const latestCity = latest.profile?.cities?.[0]
           if (latestCity) setCity(latestCity)
-          if (latest.profile?.salary_expectation) setSalary(latest.profile.salary_expectation)
+          // 薪资不回填：用户自行填入，避免「上次随手填的数字」变成默认值
         }
       } catch {
         /* 没有历史结果就是空态，不报错 */

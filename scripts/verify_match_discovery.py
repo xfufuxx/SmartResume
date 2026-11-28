@@ -81,17 +81,34 @@ def main() -> int:
         check("点击后出现城市选择卡片", page.locator('[data-testid="match-city-popover"]').count() == 1)
         check("省份列表完整（31 省级区划）", page.locator('.match-city-province').count() == 31)
         check("热门城市快捷区存在", page.locator('.match-city-hot .match-city-chip').count() >= 8)
-        page.locator('.match-city-province', has_text="广东").first.click()
+        # 区县级联：杭州有区县数据
+        page.locator('.match-city-province', has_text="浙江").first.click()
         page.wait_for_timeout(300)
         check("选省后出现城市列表", page.locator('[data-testid="match-city-option"]').count() >= 5)
-        page.locator('[data-testid="match-city-option"]', has_text="深圳").first.click()
+        page.locator('[data-testid="match-city-option"]', has_text="杭州").first.click()
         page.wait_for_timeout(300)
-        check("选市后写回触发按钮", "深圳" in page.locator('[data-testid="match-city-trigger"]').inner_text())
+        check("有数据的城市进入区县面板", page.locator('[data-testid="match-city-districts"]').count() == 1)
+        check("区县面板首项为「全市」", page.locator('[data-testid="match-city-district-all"]').count() == 1)
+        page.locator('[data-testid="match-city-district"]', has_text="滨江区").first.click()
+        page.wait_for_timeout(300)
+        check("选区县写回「城市·区县」", "杭州·滨江区" in page.locator('[data-testid="match-city-trigger"]').inner_text())
+        # 无区县数据的城市：点击直接选中（山东 → 烟台）
+        page.locator('[data-testid="match-city-trigger"]').click()
+        page.wait_for_timeout(400)
+        page.locator('.match-city-province', has_text="山东").first.click()
+        page.wait_for_timeout(300)
+        page.locator('[data-testid="match-city-option"]', has_text="烟台").first.click()
+        page.wait_for_timeout(300)
+        check("无区县数据城市直接选中", "烟台" in page.locator('[data-testid="match-city-trigger"]').inner_text())
+        # 清除
         page.locator('[data-testid="match-city-trigger"]').click()
         page.wait_for_timeout(400)
         page.locator('.match-city-clear-all').click()
         page.wait_for_timeout(300)
         check("清除后回到占位文案", "期望城市" in page.locator('[data-testid="match-city-trigger"]').inner_text())
+        # 薪资不默认填数字
+        sal_val = page.get_by_placeholder("期望薪资").input_value()
+        check("薪资输入框默认为空", sal_val.strip() == "")
 
         # ── 2. 触发检索（可选）──
         if live:
