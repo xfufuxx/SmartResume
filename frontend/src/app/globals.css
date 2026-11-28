@@ -3874,6 +3874,9 @@ body {
   flex-direction: column;
   gap: 10px;
   height: 100%;
+  /* 必须：全局无 box-sizing 规则，缺了它 height:100% 按 content-box 解析，
+     padding+border 的 42px 会溢出格子、压住下一行卡片（表现为两面板无间隔相连） */
+  box-sizing: border-box;
 }
 .match-job-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
 .match-rank {
@@ -3937,4 +3940,14 @@ body {
   .match-empty-steps { grid-template-columns: 1fr; }
   .match-dim-weight { display: none; }
   .match-score { font-size: 26px; }
+}
+
+/* 检索结果栅格：CSS Grid 保证行间距稳定（Row/Col + display:flex 会溢出压行） */
+.match-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+}
+@media (max-width: 1199px) {
+  .match-grid { grid-template-columns: 1fr; }
 }

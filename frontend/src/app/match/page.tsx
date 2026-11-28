@@ -557,18 +557,20 @@ export default function MatchBoardPage() {
             </div>
 
             {visibleItems.length ? (
-              <Row gutter={[16, 16]}>
+              // 注意：这里必须用 CSS Grid 而不是 Row/Col + display:flex。
+              // Col 上叠自定义 style 会让 antd 的纵向 gutter 失效，且 height:100%
+              // 在内容型高度的 flex 链上解析不稳定，卡片会溢出所属列、压到下一行。
+              <div className="match-grid" data-testid="match-grid">
                 {visibleItems.map((job, idx) => (
-                  <Col xs={24} xl={12} key={job.id} style={{ display: 'flex' }}>
-                    <JobCard
-                      job={job}
-                      index={idx}
-                      optimizing={optimizingId === job.id}
-                      onOptimize={goOptimize}
-                    />
-                  </Col>
+                  <JobCard
+                    key={job.id}
+                    job={job}
+                    index={idx}
+                    optimizing={optimizingId === job.id}
+                    onOptimize={goOptimize}
+                  />
                 ))}
-              </Row>
+              </div>
             ) : (
               <Empty description="当前筛选条件下没有岗位，换个关键词或切回「全部」">
                 <Button onClick={() => { setQuery(''); setFilter('all') }}>清除筛选</Button>
